@@ -1,4 +1,4 @@
-# $Id: Scalar.pm,v 1.6 2001/04/26 21:37:37 matt Exp $
+# $Id: Scalar.pm,v 1.1 2002/01/13 20:45:12 matts Exp $
 
 package Apache::AxKit::Provider::Scalar;
 use strict;

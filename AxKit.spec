@@ -1,5 +1,5 @@
 Name: AxKit
-Version: 1.5
+Version: 1.5.1
 Release: 1
 Copyright: Artistic or GPL (copyright AxKit.com Ltd)
 Group: System Environment/Daemons

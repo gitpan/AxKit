@@ -1,4 +1,4 @@
-/* $Id: axconfig.h,v 1.11 2001/11/20 16:27:02 matt Exp $ */
+/* $Id: axconfig.h,v 1.1 2002/01/13 20:45:08 matts Exp $ */
 
 #ifdef WIN32
 #define _INC_DIRENT

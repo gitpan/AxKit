@@ -1,9 +1,9 @@
-# $Id: WAPCheck.pm,v 1.2 2000/05/02 10:32:07 matt Exp $
+# $Id: WAPCheck.pm,v 1.2 2002/02/01 14:47:21 matts Exp $
 
 package Apache::AxKit::MediaChooser::WAPCheck;
 
 use strict;
-use Apache::Constants;
+use Apache::Constants qw(OK);
 
 sub handler {
 	my $r = shift;

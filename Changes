@@ -1,3 +1,35 @@
+AxKit Changes
+
+1.5.1
+ - Allow XSP pages to return a result code to make redirects and other
+   HTTP status codes easier.
+ - Allow form/querystring params to *not* be passed to XSLT
+ - Many XSP bug fixes
+ - Fixed all Plugins to return OK, as needed
+ - All plugins renamed to Apache::AxKit::Plugin namespace (old installs
+   should continue to work by virtue of the old file remaining)
+ - added SimpleTaglib, a powerful TaglibHelper replacement
+ - added beginnings of a demo site, not yet fully functional, but already
+   contains some useful example code
+
+1.5
+ - Allow AddHandler/SetHandler axkit instead of PerlHandler
+ - Added AxDependencyChecks On/Off for performance on live sites
+ - Implemented resolution of xml-stylesheet PI and root element
+   stuff using libxml2 in C, allowing you to use AxKit totally
+   without expat/XML::Parser.
+ - Ported XSP to XML::LibXML
+ - Added a PassiveTeX renderer, so you can do on-the-fly PDFs
+ - Fixed some relative URI bugs in LibXSLT module
+ - Fixes for compilation on MacOSX and SUNPRO C.
+ - TaglibHelper updates to improve flexibility etc.
+ - Added AxAddPlugin option
+ - Cache changed to use 2 directories below cache file. Should speed
+   things up on Linux/ext2
+ - Facility to add stylesheets mid-processing, so you can control the
+   execution path via XSP and other scripting.
+ - Some AxPoint updates.
+
 1.4
  - Config directives no longer implemented by Apache::ExtUtils
  - New TaglibHelper module, makes writing XSP taglibs almost trivial.

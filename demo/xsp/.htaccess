@@ -1,0 +1,50 @@
+
+## Load the module mapping:
+AxAddStyleMap application/x-xsp Apache::AxKit::Language::XSP
+
+## Set the error document
+ErrorDocument 500 /axkit/xsp/error.html
+
+AxAddRootProcessor application/x-xsp NULL {http://www.apache.org/1999/XSP/Core}page
+AxAddRootProcessor application/x-xsp NULL {http://apache.org/xsp/core/v1}page
+
+<Files esql.xsp>
+AxAddXSPTaglib AxKit::XSP::ESQL
+</Files>
+
+<Files simpletaglib-simple.xsp>
+AxAddXSPTaglib AxKit::XSP::Demo::Simple
+</Files>
+
+# Note: these require additional setup. Not sure how/if that
+# can be handled automagically
+<Files session.xsp>
+	AxAddPlugin Apache::AxKit::Plugin::Session
+	AxAddXSPTaglib AxKit::XSP::Session
+</Files>
+
+<Files globals.xsp>
+	AxAddPlugin Apache::AxKit::Plugin::Session
+	AxAddXSPTaglib AxKit::XSP::Session
+	AxAddXSPTaglib AxKit::XSP::Global
+</Files>
+
+<Files auth.xsp>
+	AxAddPlugin Apache::AxKit::Plugin::Session
+	AxAddXSPTaglib AxKit::XSP::Session
+	AxAddXSPTaglib AxKit::XSP::Auth
+
+	AuthType Apache::AxKit::Plugin::Session
+	AuthName AxKitSession
+	require valid-user
+</Files>
+
+<Files auth.xsp#view>
+	AxAddPlugin Apache::AxKit::Plugin::Session
+	AxAddXSPTaglib AxKit::XSP::Session
+	AxAddXSPTaglib AxKit::XSP::Auth
+
+	AuthType Apache::AxKit::Plugin::Session
+	AuthName AxKitSession
+	require group admin
+</Files>

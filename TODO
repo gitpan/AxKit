@@ -1,0 +1,118 @@
+
+This is the TODO file for AxKit. Thank you for wanting to contribute! The
+first thing you probably want to do if you haven't already is to check out
+the xml-axkit module from the cvs.apache.org CVS in order to get the latest
+code, and to read the CONTRIB file.
+
+IMPORTANT: please do note that a feature being listed here does NOT mean that
+it has been endorsed by the AxKit community as something that must happen, as
+a good idea, or as something that if it happens should happen in the way that
+is described here. So before you jump on an item and hack it into AxKit you
+always want to ask the axkit-devel list about it and tell us what you think
+you'll be doing in that area. Paying a visit to #axkit can certainly help as
+well. In any case, the cumulated experience of the folks that dwell there
+will certainly be of great help to you as you try to add something to AxKit.
+Remember that this is a community thing, we need consensus ;-)
+
+
+  . Eliminate dependency on Apache / mod_perl
+
+    This is a rather large undertaking. It is not technically hard though.
+    The current AxKit relies heavily on Apache and mod_perl, which means that
+    it can't be used as a generic publishing system or as a CGI module. The
+    Apache handler that drives the code needs to be abstracted away so that
+    AxKit can be driven by any kind of request, the Configuration needs to
+    have an alternate format to work outside of Apache, Apache::Fake needs to
+    be used to emulate $r and other such things.
+
+
+  . Documentation
+
+    This is the job of the axkit-docs project. It really needs to be done and
+    can use all the help that it gets. This would be a nice way to learn
+    AxKit's internals if you are not familiar with them. Ask the
+    axkit-docs@axkit.org list.
+
+
+  . Make the configuration fully XML
+
+    The configuration as it is now is ok overall, but it's hard to extend
+    without writing some C code, which is a pain. Switching to an XML syntax
+    would be a big win, though we don't want to make the mistakes the Cocoon
+    folks made. We probably also want to make the syntax extensible with
+    namespaces.
+
+
+  . XSP executed twice when using the '.' href
+
+    It has been reported that when using '.' as the href for the XSP
+    stylesheet the XSP is executed twice. This has to be investigated, in the
+    meantime one should use the preferred 'NULL' instead of '.'.
+
+
+  . Splitting XSP out
+
+    Currently XSP is tied into AxKit but it would make a marvellous
+    standalone module for XML processing.
+
+
+  . Better error messages here and there
+
+    There are cases when the error messages aren't all that good. These need
+    to be addressed. A good example is AxKit::XSP::Util that apparently
+    doesn't warn properly when it fails to grab content, as well as
+    XML::LibXML that happily blows up when it's fed an empty string.
+
+
+  . SAX Language module
+
+    There ought to be a module that can take SAX Machines descriptions (which
+    probably need a language of some sort) and use those as any other part in
+    the pipeline.
+
+
+  . Provider Extensions for write access
+
+    There are cases in which it could be useful to have a pipeline similar to
+    the one AxKit has on the way out, but working in the opposite direction,
+    say for instance to transform form input into storable XML.
+
+
+  . New providers
+
+    New plugin providers would surely help. A good example could be a
+    provider that uses an XML DB on the backend.
+
+
+  . More control on the interaction between the configuration and PIs
+
+    Some would like it to be possible to use both the configuration and PIs
+    simultaneously, either by having the possibility of ignoring PIs
+    completely, or by allowing one to append/prepend/insert the PIs into the
+    style list.
+
+
+  . Relative URIs in XSLT
+
+    This is a long standing issue that needs to be addressed as it confuses
+    many people (and bothers the ones that aren't confused).
+
+
+  . A good test suite
+
+    Testing modperl apps is notoriously hard. Thankfully a framework has been
+    created for that and it has to be adapted to AxKit. Also, eliminating the
+    dependency on modperl might make that a lot easier.
+
+  
+  . Make Taint safe
+
+    I believe AxKit doesn't run under PerlTaintCheck. This needs to be fixed.
+
+
+  . i18n support
+
+    AxKit should provide a global policy for xml:lang support. The way it is now,
+    a user must either do processing of that element himself or rely on a particular
+	module's implementation. Moreover, in XSP difficulties can arise. Having a
+	global xml:lang policy would make multi-language support easier.

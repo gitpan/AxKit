@@ -1,12 +1,16 @@
-# $Id: Makefile.PL,v 1.50 2001/12/11 13:02:58 matt Exp $
+# $Id: Makefile.PL,v 1.4 2002/03/17 11:17:25 matts Exp $
 
 package AxKit;
 # file Makefile.PL
+use strict;
 
 use ExtUtils::MakeMaker;
 
 use Text::Wrap ();
 use Cwd;
+use Config;
+
+use vars qw($DEBUG $is_Win32 $DEVNULL);
 
 require 5.005;
 
@@ -18,9 +22,8 @@ sub wrap ($)
     Text::Wrap::wrap('', '', $text) . "\n\n";
 }
 
-my @DIRS = ('./lib/Apache/AxKit', './Apache-MimeXML');
+my @DIRS = ('./lib/Apache/AxKit');
 my $from_dir = cwd;
-my $expat_dir = "expat-1.95.1";
 
 ######################################################
 # Standard bits required for have_library and friends
@@ -48,51 +51,60 @@ DEATH
 
 require Apache::src;
 
-my $install_expat = 0;
+my $xml_parser_found = 0;
 
-unless (have_module('XML::Parser', '2.27')) {
-    # XML::Parser not installed
-    if (!have_library("expat")) {
-        print "compiling expat... ";
-        eval {
-            my $expat_opts = delete $config{EXPAT_OPTS};
-            xsystem("cd $expat_dir && ./configure $expat_opts && make");
-            $install_expat = 1;
-            $config{"EXPATINCPATH"} = MM->catdir($from_dir, $expat_dir, 'lib');
-            $config{"EXPATLIBPATH"} = MM->catdir($from_dir, $expat_dir, 'lib', '.libs');
-            print "ok\n";
-        };
-        if ($@) {
-            print "failed\n";
-            die "Compilation of expat failed. Re-run with DEBUG=1 to see why.\n";
-        }
-    }
-    push @DIRS, 'XML-Parser-2.30';
-}
+test_module('Digest::MD5', '2.09', <<"REASON") || die;
+***** ERROR *****
 
-unless (have_module('Digest::MD5', '2.09')) {
-    push @DIRS, 'Digest-MD5-2.12';
-}
+Digest::MD5 2.09 or higher required. This module is used 
+to create hash entries for the AxKit cache, and
+in a number of other parts of the code for MD5 hashing. You will
+need to install that module before installing AxKit.
+REASON
 
-unless (have_module('Compress::Zlib')) {
-    push @DIRS, 'Compress-Zlib-1.09';
-}
+test_module('Compress::Zlib', 0, <<"REASON") || die;
+***** ERROR *****
 
-unless (have_module('Error', '0.13')) {
-    push @DIRS, 'Error-0.13';
-}
+Compress::Zlib (any version) required. This module is required
+for AxKit's facility for gzipping the
+output before delivery to the browser. You will need to install
+that module before installing AxKit.
+REASON
 
-unless (have_module('Apache::Request', '0.31_03')) {
-    push @DIRS, 'libapreq-0.31_03';
-}
+test_module('Error', '0.13', <<"REASON") || die;
+***** ERROR *****
+
+Error 0.13 or higher required. This module is required for 
+AxKit's internal exception handling
+routines. You will need to install that module before installing
+AxKit.
+REASON
+
+test_module('Apache::Request', '0.31_03', <<"REASON") || die;
+***** ERROR *****
+
+Apache::Request 0.32 or higher required. This module is used 
+throughout AxKit for querystring and form value
+parsing. You will need to install that module before installing AxKit.
+REASON
+
+test_module('XML::Parser', '2.27', <<"REASON") and ($xml_parser_found++);
+[Warning]
+XML::Parser 2.27 may be required if we cannot find libxml2 installed
+below, or if you intend to use XML::Parser based modules from
+within AxKit. It is not required that you install this module, but
+it is sometimes advisable.
+REASON
 
 test_module('XML::XPath', '1.00', <<"REASON");
+[Warning]
 XML::XPath 1.00 or higher is required for XPathScript
 to work. You don't have to install it, but you won't be able
 to use XPathScript stylesheets without it.
 REASON
 
 test_module('HTTP::GHTTP', '1.00', <<"REASON");
+[Warning]
 HTTP::GHTTP is used for retrieving remote URIs within AxKit.
 We use HTTP::GHTTP because it is significantly faster and lighter
 than LWP, however AxKit will use LWP if it cannot locate
@@ -101,18 +113,21 @@ REASON
 
 
 test_module('XML::Sablotron', '0.40', <<"REASON");
+[Warning]
 XML::Sablotron 0.40 or higher is required for our Sablotron 
 XSLT processor to work. You don't have to install it, 
 but you won't be able to use Apache::AxKit::Language::Sablot without it.
 REASON
 
 test_module('XML::LibXML', '1.31', <<"REASON");
+[Warning]
 XML::LibXML 1.31 or higher is required for the XSP engine
 to work. You don't have to install it, but you won't
 be able to use XSP pages without it.
 REASON
         
 test_module('XML::LibXSLT', '1.31', <<"REASON");
+[Warning]
 XML::LibXSLT 1.31 or higher is required for our LibXSLT 
 XSLT processor to work. You don't have to install it, 
 but you won't be able to use Apache::AxKit::Language::LibXSLT without it.
@@ -134,6 +149,7 @@ if ($@) {
 if (have_library('xml2')) {
     $config{DEFINE} .= ' -DHAVE_LIBXML2';
     $config{LIBS} .= ' -lxml2 -lz';
+    $xml_parser_found++;
 }
 elsif (!$is_Win32) {
     my $apache;
@@ -191,6 +207,17 @@ DEATH
         qq{ -L"$Apache::MyConfig::Setup{MODPERL_LIB}" -lmod_perl};
 }
 
+if (!$xml_parser_found) {
+    die <<"REASON";
+
+***** ERROR *****
+
+No XML Parser library found (tried XML::Parser and libxml2). You
+will need to install one of these before AxKit can function properly.
+
+REASON
+}
+
 $config{INC} .= ' ' . Apache::src->new->inc;
 
 if ($DEBUG) {
@@ -209,7 +236,7 @@ rm_f($DEVNULL) if $is_Win32;
 
 WriteMakefile(
         'NAME' => __PACKAGE__,
-        'VERSION_FROM' => 'AxKit.pm',
+        'VERSION_FROM' => 'lib/AxKit.pm',
         'AUTHOR' => 'AxKit.com Limited - http://axkit.com/',
         'ABSTRACT' => 'AxKit is an XML Application Server for mod_perl',
         'DIR' => [ @DIRS ],
@@ -226,7 +253,7 @@ use Cwd;
 use Symbol;
 use File::Spec;
 
-use vars qw/$DEVNULL $is_Win32/;
+use vars qw/$DEVNULL $is_Win32 $RUNNING_UNDER_CPAN/;
 
 BEGIN {
     $is_Win32 = ($^O =~ /Win32/);
@@ -236,6 +263,13 @@ BEGIN {
     else {
         $DEVNULL = eval { File::Spec->devnull };
         if ($@) { $DEVNULL = '/dev/null' }
+    }
+    my $cwd = cwd();
+    if ($cwd =~ /\.cpan/) {
+        $RUNNING_UNDER_CPAN = 1;
+    }
+    else {
+        $RUNNING_UNDER_CPAN = 0;
     }
 }
 
@@ -458,36 +492,18 @@ sub have_module {
 sub test_module {
     my ($module, $version, $reason) = @_;
     unless (have_module($module, $version)) {
-        if ($INC{'CPAN.pm'}) {
+        if ($RUNNING_UNDER_CPAN) {
             if (prompt("Add $module to list of modules to install?", 'Y') =~ /^y/i) {
                 $config{PREREQ_PM}{$module} = $version;
+                return 1;
             }
         }
         else {
             print wrap($reason);
+            return 0;
         }
-        return 0;
     }
     return 1;
-}
-
-sub MY::install {
-    package MY;
-    my $self = shift;
-
-    my $install = $self->SUPER::install(@_);
-    
-    if ($install_expat) {
-        $install =~ s/(install :: .*)$/$1 expat_install/m;
-        $install .= <<INSTALL;
-
-expat_install :
-\t\@cd $expat_dir && \$(SHELL) -c \$(MAKE) install
-
-INSTALL
-    }
-    
-    return $install;
 }
 
 sub is_apache {

@@ -1,4 +1,4 @@
-# $Id: ConfigReader.pm,v 1.37 2001/11/20 16:27:06 matt Exp $
+# $Id: ConfigReader.pm,v 1.1 2002/01/13 20:45:11 matts Exp $
 
 package Apache::AxKit::ConfigReader;
 

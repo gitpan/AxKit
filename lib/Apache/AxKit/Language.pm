@@ -1,4 +1,4 @@
-# $Id: Language.pm,v 1.4 2000/06/02 13:41:48 matt Exp $
+# $Id: Language.pm,v 1.3 2002/02/21 15:56:37 darobin Exp $
 
 package Apache::AxKit::Language;
 
@@ -19,6 +19,27 @@ sub get_mtime {
 }
 
 sub stylesheet_exists { 1; }
+
+sub get_params {
+    my $class = shift;
+    my $r = shift;
+
+    my @xslt_params;
+    if (!$r->notes('disable_xslt_params')) {
+        my $cgi = Apache::Request->instance($r);
+        @xslt_params = map { $_ => ($cgi->param($_))[0] } $cgi->param;
+        if (ref($r->pnotes('extra_xslt_params')) eq 'ARRAY') {
+            push @xslt_params, @{$r->pnotes('extra_xslt_params')};
+        }
+        elsif (ref($r->pnotes('extra_xslt_params')) eq 'CODE') {
+            $r->pnotes('extra_xslt_params')->($r, $cgi, \@xslt_params);
+        }
+        elsif (ref($r->pnotes('extra_xslt_params')) eq 'HASH') {
+            push @xslt_params, %{$r->pnotes('extra_xslt_params')};
+        }
+    }
+    return @xslt_params;
+}
 
 1;
 __END__

@@ -1,4 +1,4 @@
-# $Id: UserAgent.pm,v 1.3 2001/04/30 21:13:48 matt Exp $
+# $Id: UserAgent.pm,v 1.2 2002/02/01 14:45:07 matts Exp $
 
 package Apache::AxKit::StyleChooser::UserAgent;
 
@@ -7,7 +7,7 @@ use vars qw($VERSION);
 
 $VERSION = '0.01';
 
-use Apache::Constants;
+use Apache::Constants qw(OK);
 
 sub handler {
     my $r = shift;
@@ -27,7 +27,7 @@ sub handler {
         }
     }
 
-    return DECLINED;
+    return OK;
 }
 
 1;

@@ -1,4 +1,4 @@
-# $Id: XSP.pm,v 1.59 2001/11/14 15:40:58 matt Exp $
+# $Id: XSP.pm,v 1.8 2002/03/10 16:16:59 matts Exp $
 
 package Apache::AxKit::Language::XSP;
 
@@ -107,13 +107,15 @@ sub handler {
         AxKit::Debug(5, 'Recompiling XSP script');
         AxKit::Debug(10, $to_eval);
         eval $to_eval;
-        AxKit::Debug(5, 'XSP Compilation finished');
         if ($@) {
             my $line = 1;
             $to_eval =~ s/\n/"\n".++$line." "/eg;
             warn("Script:\n1 $to_eval\n");
-            die "Failed to parse: $@";
+	        throw Apache::AxKit::Exception::Error(
+                -text => "Compilation failed: $@"
+            );
         }
+        AxKit::Debug(5, 'XSP Compilation finished');
     }
     
     no strict 'refs';
@@ -132,11 +134,24 @@ sub handler {
         return;
     }
     
-    my $dom = $cv->($r, $cgi);
+    my $dom = XML::LibXML::Document->createDocument("1.0", "UTF-8");
+    my $rc = eval { $cv->($r, $cgi, $dom); };
+    if ($@) {
+    	die $@ if (ref($@));
+	    if ($to_eval) {
+        	my $line = 1;
+        	$to_eval =~ s/\n/"\n".++$line." "/eg;
+        	warn("Script:\n1 $to_eval\n");
+	    }
+	    throw Apache::AxKit::Exception::Error(
+        	-text => "Execution failed: $@"
+	    );
+    }
     $r->pnotes('dom_tree', $dom);
     $r->print($dom->toString) if $last_in_chain;
 
     $xsp_cache->write( $dom->toString );
+    return $rc;
 }
 
 sub register {
@@ -193,6 +208,12 @@ sub get_package_name {
                   ]egx;
 
     return "Apache::AxKit::Language::XSP::ROOT$filename";
+}
+
+sub makeSingleQuoted($) {
+    my $value = shift;
+    $value =~ s/([\\|])/\\$1/g;
+    return 'q|'.$value.'|';
 }
 
 ############################################################
@@ -277,8 +298,10 @@ sub start_document {
     
     $e->{XSP_Script} = join("\n", 
                 "package $e->{XSP_Package}; \@$e->{XSP_Package}::ISA = ('Apache::AxKit::Language::XSP::Page');",
-                "#line 2 ".$e->{XSP_Line}."\n",
+                # "#line 2 ".$e->{XSP_Line}."\n", # This is wrong. Currently, line numbers are unrelated to the source file's lines.
+                                                  # Better leave it out, it makes debug output confusing.
                 "use Apache;",
+                "use Apache::Constants qw(:common);",
                 "use XML::LibXML;",
                 );
     
@@ -308,7 +331,7 @@ sub end_document {
         }
     }
 
-    $e->{XSP_Script} .= "return \$document\n}\n";
+    $e->{XSP_Script} .= "return OK;\n}\n";
     
     return $e->{XSP_Script};
 }
@@ -486,6 +509,8 @@ package AxKit::XSP::Core;
 
 use vars qw/@ISA $NS/;
 
+*makeSingleQuoted = \&Apache::AxKit::Language::XSP::makeSingleQuoted;
+
 @ISA = ('Apache::AxKit::Language::XSP');
 
 $NS = 'http://apache.org/xsp/core/v1';
@@ -527,11 +552,11 @@ sub characters {
 # output through a characters SAX event."
 
     if ($e->current_element() =~ /^(content)$/) {
-        $text =~ s/\|/\\\|/g;
+        $text = makeSingleQuoted($text);
 
         return <<"EOT";
 {
-    my \$text = \$document->createTextNode(q|$text|);
+    my \$text = \$document->createTextNode($text);
     \$parent->appendChild(\$text); 
 }
 EOT
@@ -539,8 +564,8 @@ EOT
     elsif ($e->current_element() =~ /^(attribute|comment|name)$/) {
         return '' if ($e->current_element() eq 'attribute' && !$e->{attrib_seen_name});
         $text =~ s/^\s*//; $text =~ s/\s*$//;
-        $text =~ s/\|/\\\|/g;    
-        return ". q|$text|";
+        $text = makeSingleQuoted($text);
+        return ". $text";
     }
     
 #    return '' unless $e->{XSP_User_Root};
@@ -585,14 +610,14 @@ sub start_element {
     elsif ($tag eq 'element') {
         if (my $name = $attribs{name}) {
             $e->manage_text(0);
-            return '{ my $elem = $document->createElement(q(' . $name . '));' .
+            return '{ my $elem = $document->createElement(' . makeSingleQuoted($name) . ');' .
                     '$parent->appendChild($elem); $parent = $elem; }' . "\n";
         }
     }
     elsif ($tag eq 'attribute') {
         if (my $name = $attribs{name}) {
             $e->{attrib_seen_name} = 1;
-            return '$parent->setAttribute(q|' . $name . '|, ""';
+            return '$parent->setAttribute('.makeSingleQuoted($name).', ""';
         }
         $e->{attrib_seen_name} = 0;
     }
@@ -718,6 +743,8 @@ EOT
 
 package AxKit::XSP::DefaultHandler;
 
+*makeSingleQuoted = \&Apache::AxKit::Language::XSP::makeSingleQuoted;
+
 sub start_element {
     my ($e, $node) = @_;
     
@@ -725,30 +752,78 @@ sub start_element {
     if (!$e->{XSP_User_Root}) {
         $e->{XSP_Script} .= join("\n",
                 'sub handler {',
-                'my ($r, $cgi) = @_;',
-                'my $document = XML::LibXML::Document->createDocument("1.0", "UTF-8");',
+                'my ($r, $cgi, $document) = @_;',
                 'my ($parent);',
                 "\n",
                 );
         $e->{XSP_User_Root} = 1;
-        $code = '{ my $elem = $document->createElement(q(' . $node->{Name} . '));' .
+#        $code = '{ my $elem = $document->createElement(q(' . $node->{Name} . '));' .
 #        $code = '{ my $elem = $document->createElementNS(q(' . ($node->{NamespaceURI} || "") . '), q(' . $node->{Name} . '));' .
+
+        $e->{XSP_Random_Prefix} = join("",map { ('a'..'z','A'..'Z','0'..'9','-','_')[rand(64)] } 1..5 );
+        $e->{XSP_Random_Sequence} = "aaaa";
+        $e->{XSP_Random_Map} = {};
+        if ($node->{NamespaceURI}) {
+	    	if ($node->{Name} !~ m/:/) {
+	    		if (exists $e->{XSP_Random_Map}{$node->{NamespaceURI}}) {
+				    $node->{Name} = $e->{XSP_Random_Map}{$node->{NamespaceURI}}.$e->{XSP_Random_Prefix}.':'.$node->{Name};
+	    		} 
+                else {
+				    $node->{Name} = $e->{XSP_Random_Sequence}.$e->{XSP_Random_Prefix}.':'.$node->{Name};
+				    $e->{XSP_Random_Map}{$node->{NamespaceURI}} = $e->{XSP_Random_Sequence};
+				    $e->{XSP_Random_Sequence}++;
+			    }
+	    	}
+		$code = '{ my $elem = $document->createElementNS('.makeSingleQuoted($node->{NamespaceURI}).','.makeSingleQuoted($node->{Name}).');' .
                 '$document->setDocumentElement($elem); $parent = $elem; }' . "\n";
+	    }
+        else {
+            $code = '{ my $elem = $document->createElement('.makeSingleQuoted($node->{Name}).');' .
+        	        '$document->setDocumentElement($elem); $parent = $elem; }' . "\n";
+	    }
     }
     else {
-        $code = '{ my $elem = $document->createElement(q(' . $node->{Name} . '));' .
+#        $code = '{ my $elem = $document->createElement(q(' . $node->{Name} . '));' .
+        if ($node->{NamespaceURI}) {
+	    	if ($node->{Name} !~ m/:/) {
+	    		if (exists $e->{XSP_Random_Map}{$node->{NamespaceURI}}) {
+				    $node->{Name} = $e->{XSP_Random_Map}{$node->{NamespaceURI}}.$e->{XSP_Random_Prefix}.':'.$node->{Name};
+	    		} 
+                else {
+				    $node->{Name} = $e->{XSP_Random_Sequence}.$e->{XSP_Random_Prefix}.':'.$node->{Name};
+    				$e->{XSP_Random_Map}{$node->{NamespaceURI}} = $e->{XSP_Random_Sequence};
+	    			$e->{XSP_Random_Sequence}++;
+		    	}
+	    	}
+        	$code = '{ my $elem = $document->createElementNS('.makeSingleQuoted($node->{NamespaceURI}).','.makeSingleQuoted($node->{Name}).');' .
                 '$parent->appendChild($elem); $parent = $elem; }' . "\n";
+	    } 
+        else {
+        	$code = '{ my $elem = $document->createElement('.makeSingleQuoted($node->{Name}).');' .
+                '$parent->appendChild($elem); $parent = $elem; }' . "\n";
+        }
     }
     
     for my $attr (@{$node->{Attributes}}) {
-        $code .= '$parent->setAttribute(q(' . $attr->{Name} . 
-                '), q(' . $attr->{Value} . 
-                '));' . "\n";
+#        $code .= '$parent->setAttribute(q(' . $attr->{Name} . 
+#                '), q(' . $attr->{Value} . 
+#                '));' . "\n";
+        $code .= '$parent->setAttribute('.makeSingleQuoted($attr->{Name}).
+                ','.makeSingleQuoted($attr->{Value}).');' . "\n";
     }
 
     for my $ns (keys %{$e->{Current_NS}}) {
-        $code .= '$parent->setAttribute("xmlns:" . q(' . $ns .'), q(' .
-                $e->{Current_NS}{$ns} . '));';
+#        $code .= '$parent->setAttribute("xmlns:" . q(' . $ns .'), q(' .
+#                $e->{Current_NS}{$ns} . '));';
+    	if ($ns eq '#default') {
+	        $code .= '$parent->setAttribute("xmlns",' .
+        	        makeSingleQuoted($e->{Current_NS}{$ns}) . ');';
+      	} 
+        else {
+	        $code .= '$parent->setAttribute("xmlns:" . '.makeSingleQuoted($ns).',' .
+        	        makeSingleQuoted($e->{Current_NS}{$ns}) . ');';
+      	}
+
     }
     
     push @{ $e->{NS_Stack} },
@@ -780,7 +855,7 @@ sub characters {
     
     $text =~ s/\|/\\\|/g;
     
-    return '{ my $text = $document->createTextNode(q|' . $text . '|);' .
+    return '{ my $text = $document->createTextNode('.makeSingleQuoted($text).');' .
             '$parent->appendChild($text); }' . "\n";
 }
 
@@ -823,19 +898,21 @@ sub parse {
     }
     $doc->process_xinclude;
     
+    my $encoding = $doc->getEncoding() || 'UTF-8';
     my $document = { Parent => undef };
     $self->{Handler}->start_document($document);
     
     my $root = $doc->getDocumentElement;
     if ($root) {
-        process_node($self->{Handler}, $root);
+        process_node($self->{Handler}, $root, $encoding);
     }
     
     $self->{Handler}->end_document($document);
 }
 
 sub process_node {
-    my ($handler, $node) = @_;
+    my ($handler, $node, $encoding) = @_;
+
     
     my $node_type = $node->getType();
     if ($node_type == XML_COMMENT_NODE) {
@@ -843,24 +920,24 @@ sub process_node {
     }
     elsif ($node_type == XML_TEXT_NODE || $node_type == XML_CDATA_SECTION_NODE) {
         # warn($node->getData . "\n");
-        $handler->characters( { Data => $node->getData } );
+	    $handler->characters( { Data => encodeToUTF8($encoding,$node->getData()) } );
     }
     elsif ($node_type == XML_ELEMENT_NODE) {
         # warn("<" . $node->getName . ">\n");
-        process_element($handler, $node);
+        process_element($handler, $node, $encoding);
         # warn("</" . $node->getName . ">\n");
     }
     elsif ($node_type == XML_ENTITY_REF_NODE) {
         foreach my $kid ($node->getChildnodes) {
             # warn("child of entity ref: " . $kid->getType() . " called: " . $kid->getName . "\n");
-            process_node($handler, $kid);
+            process_node($handler, $kid, $encoding);
         }
     }
     elsif ($node_type == XML_DOCUMENT_NODE) {
         # just get root element. Ignore other cruft.
         foreach my $kid ($node->getChildnodes) {
             if ($kid->getType() == XML_ELEMENT_NODE) {
-                process_element($handler, $kid);
+                process_element($handler, $kid, $encoding);
                 last;
             }
         }
@@ -871,32 +948,32 @@ sub process_node {
 }
 
 sub process_element {
-    my ($handler, $element) = @_;
+    my ($handler, $element, $encoding) = @_;
     
     my @attr;
     
     foreach my $attr ($element->getAttributes) {
         push @attr, {
-            Name => $attr->getName,
-            Value => $attr->getData,
-            NamespaceURI => $attr->getNamespaceURI,
-            Prefix => $attr->getPrefix,
-            LocalName => $attr->getLocalName,
+            Name => encodeToUTF8($encoding,$attr->getName),
+            Value => encodeToUTF8($encoding,$attr->getData),
+            NamespaceURI => encodeToUTF8($encoding,$attr->getNamespaceURI),
+            Prefix => encodeToUTF8($encoding,$attr->getPrefix),
+            LocalName => encodeToUTF8($encoding,$attr->getLocalName),
         };
     }
     
     my $node = {
-        Name => $element->getName,
+        Name => encodeToUTF8($encoding,$element->getName),
         Attributes => \@attr,
-        NamespaceURI => $element->getNamespaceURI,
-        Prefix => $element->getPrefix,
-        LocalName => $element->getLocalName,
+        NamespaceURI => encodeToUTF8($encoding,$element->getNamespaceURI),
+        Prefix => encodeToUTF8($encoding,$element->getPrefix),
+        LocalName => encodeToUTF8($encoding,$element->getLocalName),
     };
     
     $handler->start_element($node);
     
     foreach my $child ($element->getChildnodes) {
-        process_node($handler, $child);
+        process_node($handler, $child, $encoding);
     }
     
     $handler->end_element($node);
@@ -965,6 +1042,29 @@ your own tags, examples include sendmail and sql taglibs. It is AxKit's
 way of providing an environment for dynamic pages. XSP is originally part
 of the Apache Cocoon project, and so you will see some Apache namespaces
 used in XSP.
+
+A warning to namespace users: Do not expect your namespace _prefixes_ to
+come out of an XSP transformation as they were fed in. But since you are using
+namespaces, this doesn't really matter. You just have to make sure that
+each and every step in your transformation process is namespaces aware
+and uses the correct namespace declarations.
+
+=head2 Result Code
+
+You can specify the result code of the request in two ways. Both actions
+go inside a <xsp:logic> tag.
+
+If you want to completely abort the current request, throw an exception:
+
+	throw Apache::AxKit::Exception::Retval(return_code => FORBIDDEN);
+
+If you want to send your page but have a custom result code, return it:
+
+	return FORBIDDEN;
+
+In that case, only the part of the document that was processed so far gets
+sent/processed further.
+
 
 =head1 Tag Reference
 
@@ -1113,18 +1213,31 @@ Needless to say, in every case, C<<xsp:expr>> should just "do the right
 thing". If it doesn't, then something (either a taglib or XSP.pm itself)
 is broken and you should report a bug.
 
-=head1 DESIGN PATTERNS
+=head1 Writing Taglibs
 
 Writing your own taglibs can be tricky, because you're using an event
 based API to write out Perl code. You may want to take a look at the
 Apache::AxKit::Language::XSP::TaglibHelper module, which comes with
 AxKit and allows you to easily publish a taglib without writing
-XML event code.
+XML event code. Recently, another taglib helper has been developed,
+Apache::AxKit::Language::XSP::SimpleTaglib. The latter manages all the
+details described under 'Design Patterns' for you, so you don't really
+need to bother with them anymore.
+
+A warning about character sets: All string values are passed in and
+expected back as UTF-8 encoded strings. So you cannot use national characters
+in a different encoding, like the widespread ISO-8859-1. This applies to
+Taglib source code only. The XSP XML-source is of course interpreted according
+to the XML rules. Your taglib module may want to 'use utf8;' as well, see
+L<perlunicode> and L<utf8> for more information.
+
+=head1 Design Patterns
+
 
 These patterns represent the things you may want to achieve when 
 authoring a tag library "from scratch".
 
-B<1. Your tag is a wrapper around other things.>
+=head2 1. Your tag is a wrapper around other things.
 
 Example:
 
@@ -1156,7 +1269,7 @@ in parse_end:
 
 Note there the closing of that original opening block.
 
-B<2. Your tag indicates a parameter for a surrounding taglib.>
+=head2 2. Your tag indicates a parameter for a surrounding taglib.
 
 Example:
 
@@ -1182,8 +1295,8 @@ sub parse_char {
 
   return '' unless $text;
 
-  $text =~ s/\|/\\\|/g;
-  return ". q|$text|";
+  $text = Apache::AxKit::Language::XSP::makeSingleQuoted($text);
+  return ". $text";
 }
 
 Note there's no semi-colon at the end of all this, so we add that:
@@ -1197,9 +1310,11 @@ in parse_end:
 All of this black magic allows other taglibs to set the thing in that
 variable using expressions.
 
-B<3. You want your tag to return a scalar (string) that does the right thing
-depending on context. For example, generates a Text node in one place or
-generates a scalar in another context.>
+=head2 3. You want your tag to return a scalar (string) that does the right thing
+depending on context. 
+
+For example, generates a Text node in one place or generates a scalar in another 
+context.
 
 Solution:
 
@@ -1284,7 +1399,7 @@ by default, so you need to do:
   use Apache::AxKit::Language::XSP 
         qw(start_expr end_expr append_to_script);
 
-B<4. Your tag can take as an option either an attribute, or a child tag.>
+=head2 4. Your tag can take as an option either an attribute, or a child tag.
 
 Example:
 
@@ -1339,8 +1454,7 @@ in parse_end:
     ';
   }
 
-B<5. You want to return a scalar that does the right thing in context, but
-also can take a parameter as an attribute I<or> a child tag.>
+=head2 5. You want to return a scalar that does the right thing in context, but also can take a parameter as an attribute I<or> a child tag.
 
 Example:
 
@@ -1382,7 +1496,7 @@ in parse_end:
     return '';
   }
 
-B<6. You have a conditional tag>
+=head2 6. You have a conditional tag
 
 Example:
 
@@ -1407,7 +1521,7 @@ text nodes of this tag don't fire text events to the tag library, but
 instead get handled by XSP core, thus creating text nodes (and doing
 the right thing, generally).
 
-=head1 <xsp:expr> (and start_expr, end_expr) Notes
+=head2 <xsp:expr> (and start_expr, end_expr) Notes
 
 B<Do not> consider adding in the 'do {' ... '}' bits yourself. Always
 leave this to the start_expr, and end_expr functions. This is because the

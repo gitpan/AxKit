@@ -1,4 +1,4 @@
-# $Id: Exception.pm,v 1.18 2001/06/07 17:02:12 matt Exp $
+# $Id: Exception.pm,v 1.1 2002/01/13 20:45:11 matts Exp $
 
 package Apache::AxKit::Exception;
 use Error;

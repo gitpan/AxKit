@@ -1,4 +1,4 @@
-# $Id: Provider.pm,v 1.35 2001/06/29 21:27:50 matt Exp $
+# $Id: Provider.pm,v 1.3 2002/03/15 13:35:04 matts Exp $
 
 package Apache::AxKit::Provider;
 use strict;
@@ -112,7 +112,7 @@ sub get_styles {
     # use three element array @$vals
     
     if (defined &Apache::AxKit::Provider::xs_get_styles_fh) {
-        AxKit::Debug(2, "using XS get_styles (libxml2)\n");
+        AxKit::Debug(2, "using XS get_styles (libxml2)");
         my ($xs_styles, $doctype, $dtd, $root) = 
                 $self->xs_get_styles($media, $pref_style);
         @$xml_styles = @$xs_styles;
@@ -152,6 +152,10 @@ sub get_styles {
                 );
             
         AxKit::Debug(4, "get_styles: parse returned successfully");
+    }
+    
+    foreach my $style (@$xml_styles) {
+        $style->{title} ||= '#default';
     }
     
     # Let GetMatchingProcessors to process the @$styles array
@@ -201,12 +205,12 @@ sub xs_get_styles {
     my $bits;
     eval {
         my $fh = $self->get_fh();
-        AxKit::Debug(4, "calling xs_get_styles_fh()\n");
+        AxKit::Debug(4, "calling xs_get_styles_fh()");
         $bits = xs_get_styles_fh($self->apache_request, $fh);
     };
     if ($@) {
         my $strref = $self->get_strref();
-        AxKit::Debug(4, "calling xs_get_styles_str()\n");
+        AxKit::Debug(4, "calling xs_get_styles_str()");
         $bits = xs_get_styles_str($self->apache_request, $$strref);
     }
     
@@ -247,7 +251,7 @@ sub xs_get_styles {
         unshift @{$e->{XMLStyle_style}}, @{$e->{XMLStyle_style_persistant}};
     }
     
-    AxKit::Debug(4, "xs_get_styles returned: $bits->[3], $bits->[4], $element\n");
+    AxKit::Debug(4, "xs_get_styles returned: $bits->[3], $bits->[4], $element");
     
     return ($e->{XMLStyle_style}, $bits->[3], $bits->[4], $element);
 }

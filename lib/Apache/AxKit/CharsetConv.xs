@@ -1,4 +1,4 @@
-/* $Id: CharsetConv.xs,v 1.6 2001/11/14 13:32:21 matt Exp $ */
+/* $Id: CharsetConv.xs,v 1.1 2002/01/13 20:45:11 matts Exp $ */
 /* XSUB for Perl module Apache::AxKit::CharsetConv  */
 /* Originally from Text::Iconv distribution, */
 /* all credits to Michael Piotrowski - this is a verbatim copy */

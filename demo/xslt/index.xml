@@ -1,0 +1,13 @@
+<page>
+    <head>
+        <title>XSLT Examples</title>
+    </head>
+    <body>
+        <section>
+            <title>XSLT Examples (XML::LibXML)</title>
+            <para>
+                These pages contain XSLT examples.
+            </para>
+        </section>
+    </body>
+</page>

@@ -1,4 +1,4 @@
-# $Id: Cache.pm,v 1.30 2001/12/30 16:09:56 matt Exp $
+# $Id: Cache.pm,v 1.3 2002/02/18 18:36:20 darobin Exp $
 
 package Apache::AxKit::Cache;
 use strict;
@@ -17,7 +17,7 @@ sub new {
     my ($r, $xmlfile, @extras) = @_;
     
     my $gzip = 0;
-    if ($xmlfile =~ /.gzip/) {
+    if ($xmlfile =~ /\.gzip/) {
         $gzip++;
 #        @extras = grep(!/gzip/, @extras);
     }
@@ -92,6 +92,9 @@ sub _get_stats {
     return if $self->{mtime};
     my @stats = stat($self->{file});
     my $exists = -e _ && -r _;
+    if ($exists and $self->{gzip}) {
+        $exists = -e $self->{file} . '.gz' and -r _;
+    }
     $self->{file_exists} = $exists;
     $self->{mtime} = $stats[9];
 }

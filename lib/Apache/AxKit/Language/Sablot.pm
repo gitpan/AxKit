@@ -1,4 +1,4 @@
-# $Id: Sablot.pm,v 1.25 2001/06/04 16:00:35 matt Exp $
+# $Id: Sablot.pm,v 1.2 2002/01/30 18:17:21 darobin Exp $
 
 package Apache::AxKit::Language::Sablot;
 
@@ -40,12 +40,8 @@ sub handler {
     my $retcode;
 
     # get request form/querystring parameters
-    my $cgi = Apache::Request->instance($r);
-    my @xslt_params;
-    foreach my $param ($cgi->param) {
-        push @xslt_params, $param, $cgi->param($param);
-    }
-    
+    my @xslt_params = $class->get_params($r);
+
     # get and register handler object
     $handler->set_apache($r);
     $handler->set_ext_ent_handler($xml->get_ext_ent_handler());

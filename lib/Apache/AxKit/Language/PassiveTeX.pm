@@ -1,4 +1,4 @@
-# $Id: PassiveTeX.pm,v 1.2 2001/11/20 20:31:49 matt Exp $
+# $Id: PassiveTeX.pm,v 1.1 2002/01/13 20:45:11 matts Exp $
 
 package Apache::AxKit::Language::PassiveTeX;
 

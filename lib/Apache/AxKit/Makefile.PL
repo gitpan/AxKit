@@ -1,4 +1,4 @@
-# $Id: Makefile.PL,v 1.18 2001/07/19 19:10:39 matt Exp $
+# $Id: Makefile.PL,v 1.1 2002/01/13 20:45:11 matts Exp $
 
 package Apache::AxKit::CharsetConv;
 

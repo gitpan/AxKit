@@ -1,4 +1,4 @@
-# $Id: AxPoint.pm,v 1.12 2001/12/29 08:45:59 matt Exp $
+# $Id: AxPoint.pm,v 1.2 2002/02/21 19:54:10 matts Exp $
 
 package Apache::AxKit::Language::AxPoint;
 
@@ -172,6 +172,8 @@ sub handler {
     }
 
     AxKit::Debug(7, "AxPoint: outputting pdf");
+
+    $AxKit::Cfg->AllowOutputCharset(0);
     
     $r->content_type("application/pdf");
 

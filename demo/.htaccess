@@ -1,0 +1,50 @@
+
+DirectoryIndex index.xml index.html
+
+## AxKit handles .xml, .xsp, .axp (axpoint) and .dkb (docbook) files
+AddHandler axkit .xml
+AddHandler axkit .xsp
+AddHandler axkit .axp
+AddHandler axkit .dkb
+
+## Text files handled by default-handler (I forget why I need this)
+AddHandler default-handler .txt
+AddHandler default-handler .html
+
+#####################################################################
+## Debugging Options
+
+## Maximum debugging
+AxLogDeclines On
+AxDebugLevel 10
+
+## Specify the stylesheet to be executed on errors
+AxAddStyleMap text/xsl Apache::AxKit::Language::LibXSLT
+AxErrorStylesheet text/xsl /axkit/stylesheets/error.xsl
+
+#####################################################################
+
+#####################################################################
+## Output Translation Options
+
+## Do we apply output translations (after all XML processing)?
+## - this includes things like gzipping, encoding translation,
+##   and user defined translations (e.g. for adding banner ads)
+AxTranslateOutput On
+
+## Do we gzip the output? (makes things v.fast, you want this)
+AxGzipOutput On
+
+#####################################################################
+
+#####################################################################
+## Caching Options
+
+## CHANGEME if you want caching elsewhere
+AxCacheDir /tmp/axkit.demo.cache
+
+## We turn caching OFF for this demo because user may not have write
+## access to the server
+AxNoCache On
+
+######################################################################

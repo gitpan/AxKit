@@ -1,4 +1,4 @@
-# $Id: CharsetConv.pm,v 1.1 2000/12/12 12:25:11 matt Exp $
+# $Id: CharsetConv.pm,v 1.1 2002/01/13 20:45:11 matts Exp $
 
 package Apache::AxKit::CharsetConv;
 # Copyright (c) 2000 Michael Piotrowski

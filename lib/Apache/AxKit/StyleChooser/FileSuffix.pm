@@ -1,9 +1,9 @@
-# $Id: FileSuffix.pm,v 1.7 2001/04/30 21:13:48 matt Exp $
+# $Id: FileSuffix.pm,v 1.2 2002/02/01 14:45:07 matts Exp $
 
 package Apache::AxKit::StyleChooser::FileSuffix;
 
 use strict;
-use Apache::Constants;
+use Apache::Constants qw(OK);
 use Apache::URI;
 
 sub handler {
@@ -17,7 +17,7 @@ sub handler {
 #		warn "setting notes: $style\n";
 		$r->notes('preferred_style', $style);
 	}
-	return DECLINED;
+	return OK;
 }
 
 1;

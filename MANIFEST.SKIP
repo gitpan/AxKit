@@ -1,0 +1,15 @@
+CVS/.*
+\.bak$
+\.sw[a-z]$
+\.tar$
+\.tgz$
+\.tar\.gz$
+\.#
+^mess/
+^tmp/
+^blib/
+Makefile$
+\.old$
+^Makefile\.[a-z]+$
+^pm_to_blib$
+~$

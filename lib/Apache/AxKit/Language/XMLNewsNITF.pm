@@ -1,4 +1,4 @@
-# $Id: XMLNewsNITF.pm,v 1.5 2000/08/06 12:15:18 matt Exp $
+# $Id: XMLNewsNITF.pm,v 1.1 2002/01/13 20:45:11 matts Exp $
 
 package Apache::AxKit::Language::XMLNewsNITF;
 

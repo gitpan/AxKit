@@ -1,4 +1,4 @@
-# $Id: LibXSLT.pm,v 1.25 2001/12/30 16:09:41 matt Exp $
+# $Id: LibXSLT.pm,v 1.3 2002/02/18 18:36:20 darobin Exp $
 
 package Apache::AxKit::Language::LibXSLT;
 
@@ -109,10 +109,8 @@ sub handler {
     }
 
     # get request form/querystring parameters
-    my @params;
-    my $cgi = Apache::Request->instance($r);
-    @params = fixup_params(map { $_ => $cgi->param($_) } $cgi->param);
-    
+    my @params = fixup_params($class->get_params($r));
+
     AxKit::Debug(7, "[LibXSLT] performing transformation");
 
     my $results = $stylesheet->transform($xml_doc, @params);
@@ -144,14 +142,13 @@ sub fixup_params {
 
 sub match_uri {
     my $uri = shift;
-#    warn("match: $uri\n");
     AxKit::Debug(8, "LibXSLT match_uri: $uri");
     return $uri !~ /^\w+:/; # only handle URI's without a scheme
 }
 
 sub open_uri {
-    my $uri = shift;
-#    warn("open: $uri\n");
+    my $uri = shift || './';
+    AxKit::Debug(8, "LibXSLT open_uri: $uri");
     my $provider = Apache::AxKit::Provider->new(
         AxKit::Apache->request(),
         uri => $uri,

@@ -1,0 +1,219 @@
+<?xml version="1.0"?>
+<xsp:page xmlns:xsp="http://www.apache.org/1999/XSP/Core">
+
+<xsp:logic>
+my @errors;
+</xsp:logic>
+
+<html>
+    <head>
+        <title>XSP Examples</title>
+        <link rel="stylesheet" href="/axkit/stylesheets/style.css"/>
+    </head>
+    <body>
+        <h1>XSP Examples</h1>
+        <p>
+        This page contains some XSP examples. This page is an example in itself,
+        and lists the example pages that will work on your installation.
+        </p>
+        <p>
+        Please note that all of these examples purely use only XSP, whereas normally
+        you would use XSP in conjunction with some stylesheet language such as XSLT,
+        in order to maintain a separation of content from presentation. Therefore
+        these examples should be used as a technology demonstration, not a guideline.
+        </p>
+        <p>
+            <ul>
+                
+            <xsp:logic>
+            @errors = ();
+            
+            eval {
+                require AxKit::XSP::ESQL;
+                require DBD::SQLite;
+            };
+            if (!$@) {
+                <li><a href="esql.xsp">ESQL Example</a></li>
+            }
+            else {
+                AxKit::Debug(1, "ESQL failed to load: $@");
+                push @errors, $@;
+                <li>ESQL Example unavailable (see below for details)</li>
+            }
+
+            eval {
+                require AxKit::XSP::Cookie;
+            };
+            if (!$@) {
+                <li><a href="cookie.xsp">Cookie Example</a></li>
+            }
+            else {
+                AxKit::Debug(1, "Cookie Taglib failed to load: $@");
+                push @errors, $@;
+                <li>Cookie Example unavailable (see below for details)</li>
+            }
+
+            eval {
+                require AxKit::XSP::Exception;
+            };
+            if (!$@) {
+                <li><a href="exception.xsp">Exceptions Example</a></li>
+            }
+            else {
+                AxKit::Debug(1, "Exceptions Taglib failed to load: $@");
+                push @errors, $@;
+                <li>Exceptions Example unavailable (see below for details)</li>
+            }
+
+            eval {
+                require AxKit::XSP::IfParam;
+            };
+            if (!$@) {
+                <li><a href="ifparam.xsp">IfParam Taglib Example</a></li>
+            }
+            else {
+                AxKit::Debug(1, "IfParam Taglib failed to load: $@");
+                push @errors, $@;
+                <li>IfParam Taglib Example unavailable (see below for details)</li>
+            }
+
+            eval {
+                require AxKit::XSP::Param;
+            };
+            if (!$@) {
+                <li><a href="param.xsp">Param Example</a></li>
+            }
+            else {
+                AxKit::Debug(1, "Param Taglib failed to load: $@");
+                push @errors, $@;
+                <li>Param Example unavailable (see below for details)</li>
+            }
+
+            eval {
+                require AxKit::XSP::PerForm;
+                require XML::LibXSLT;
+            };
+            if (!$@) {
+                <li><a href="perform.xsp">PerForm Example</a></li>
+            }
+            else {
+                AxKit::Debug(1, "PerForm Taglib failed to load: $@");
+                push @errors, $@;
+                <li>PerForm Example unavailable (see below for details)</li>
+            }
+
+            eval {
+                require AxKit::XSP::Sendmail;
+            };
+            if (!$@) {
+                <li><a href="sendmail.xsp">Sending Email Example</a></li>
+            }
+            else {
+                AxKit::Debug(1, "Sendmail Taglib failed to load: $@");
+                push @errors, $@;
+                <li>Sending Email Example unavailable (see below for details)</li>
+            }
+
+            eval {
+                require AxKit::XSP::Util;
+            };
+            if (!$@) {
+                <li><a href="util.xsp">Util Taglib Example</a></li>
+            }
+            else {
+                AxKit::Debug(1, "Util Taglib failed to load: $@");
+                push @errors, $@;
+                <li>Util Taglib Example unavailable (see below for details)</li>
+            }
+
+            eval {
+                require AxKit::XSP::WebUtils;
+            };
+            if (!$@) {
+                <li><a href="webutils.xsp">WebUtils Taglib Example</a></li>
+            }
+            else {
+                AxKit::Debug(1, "WebUtils Taglib failed to load: $@");
+                push @errors, $@;
+                <li>WebUtils Taglib Example unavailable (see below for details)</li>
+            }
+
+            eval {
+                require AxKit::XSP::Session;
+            };
+            if (!$@) {
+                <li><a href="session.xsp">Session Taglib Example</a></li>
+            }
+            else {
+                AxKit::Debug(1, "Session Taglib failed to load: $@");
+                push @errors, $@;
+                <li>Session Taglib Example unavailable (see below for details)</li>
+            }
+
+            eval {
+                require AxKit::XSP::Global;
+            };
+            if (!$@) {
+                <li><a href="global.xsp">Globals Taglib Example</a></li>
+            }
+            else {
+                AxKit::Debug(1, "Globals Taglib failed to load: $@");
+                push @errors, $@;
+                <li>Globals Taglib Example unavailable (see below for details)</li>
+            }
+
+            eval {
+                require AxKit::XSP::Auth;
+            };
+            if (!$@) {
+                <li><a href="auth.xsp">Authorization Taglib Example</a></li>
+            }
+            else {
+                AxKit::Debug(1, "Authorization Taglib failed to load: $@");
+                push @errors, $@;
+                <li>Authorization Taglib Example unavailable (see below for details)</li>
+            }
+
+            eval {
+                require Apache::AxKit::Language::XSP::SimpleTaglib;
+            };
+            if (!$@) {
+                <li><a href="simpletaglib-simple.xsp">SimpleTaglib Taglib Example</a></li>
+            }
+            else {
+                AxKit::Debug(1, "SimpleTaglib failed to load: $@");
+                push @errors, $@;
+                <li>SimpleTaglib Taglib Example unavailable (see below for details)</li>
+            }
+
+            </xsp:logic>
+            </ul>
+        </p>
+        <p>
+        If no examples appear other than the core XSP example, then you may
+        need to install some of the XSP taglibs from CPAN. To find those, either
+        load up the CPAN shell and type: <tt>i /XSP/</tt> to see all the taglibs
+        available, or go to
+        <a href="http://theoryx5.uwinnipeg.ca/mod_perl/cpan-search?search=AxKit%3A%3AXSP"
+        >this link</a>
+        to find all the XSP taglibs on CPAN.
+        </p>
+        <p>
+        Please also note that this file itself is an example of XSP without using
+        any tag libraries. You can see it by clicking on <a href="showsource.xsp?index.xml">View Source</a>
+        </p>
+        <!--
+        <p>
+        The errors that occured checking if the above demos would work are, in order:
+        <ul>
+        <xsp:logic>
+            foreach my $err (@errors) {
+                <li><tt><xsp:expr>$err</xsp:expr></tt></li>
+            }
+        </xsp:logic>
+        </ul>
+        </p>
+        -->
+    </body>
+</html>
+</xsp:page>

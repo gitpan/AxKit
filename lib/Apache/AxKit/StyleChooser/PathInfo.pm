@@ -1,9 +1,9 @@
-# $Id: PathInfo.pm,v 1.6 2001/04/30 21:13:48 matt Exp $
+# $Id: PathInfo.pm,v 1.2 2002/02/01 14:45:07 matts Exp $
 
 package Apache::AxKit::StyleChooser::PathInfo;
 
 use strict;
-use Apache::Constants;
+use Apache::Constants qw(OK);
 use Apache::URI;
 
 sub handler {
@@ -29,7 +29,7 @@ sub handler {
 #		warn "setting notes: $style\n";
 		$r->notes('preferred_style', $style);
 	}
-	return DECLINED;
+	return OK;
 }
 
 1;

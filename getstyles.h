@@ -1,4 +1,4 @@
-/* $Id: getstyles.h,v 1.10 2001/10/29 14:35:15 matt Exp $ */
+/* $Id: getstyles.h,v 1.1 2002/01/13 20:45:08 matts Exp $ */
 
 #ifndef WIN32
 #include <modules/perl/mod_perl.h>

@@ -1,4 +1,4 @@
-/* $Id: getstyles.c,v 1.15 2001/12/11 11:20:43 matt Exp $ */
+/* $Id: getstyles.c,v 1.1 2002/01/13 20:45:08 matts Exp $ */
 
 #ifdef HAVE_LIBXML2
 #include "getstyles.h"

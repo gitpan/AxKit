@@ -1,9 +1,9 @@
-# $Id: Cookie.pm,v 1.1 2000/09/21 12:20:01 matt Exp $
+# $Id: Cookie.pm,v 1.2 2002/02/01 14:45:07 matts Exp $
 
 package Apache::AxKit::StyleChooser::Cookie;
 
 use strict;
-use Apache::Constants;
+use Apache::Constants qw(OK);
 use Apache::Cookie;
 
 use vars qw($VERSION);
@@ -17,7 +17,7 @@ sub handler {
         $r->notes('preferred_style', $oreo->{'axkit_preferred_style'}->value);
     }
 
-    return DECLINED;
+    return OK;
 }
 
 1;

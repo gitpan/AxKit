@@ -1,0 +1,8 @@
+
+## Load the module mapping:
+AxAddStyleMap text/xsl Apache::AxKit::Language::LibXSLT
+
+## Set the error document
+ErrorDocument 500 /axkit/xslt/error.html
+
+AxAddRootProcessor text/xsl stylesheet.xsl page

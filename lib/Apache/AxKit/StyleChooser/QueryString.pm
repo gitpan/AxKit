@@ -1,9 +1,9 @@
-# $Id: QueryString.pm,v 1.7 2001/04/30 21:13:48 matt Exp $
+# $Id: QueryString.pm,v 1.2 2002/02/01 14:45:07 matts Exp $
 
 package Apache::AxKit::StyleChooser::QueryString;
 
 use strict;
-use Apache::Constants;
+use Apache::Constants qw(OK);
 
 sub handler {
 	my $r = shift;
@@ -12,7 +12,7 @@ sub handler {
 	if ($in{style}) {
 		$r->notes('preferred_style', $in{style});
 	}
-	return DECLINED;
+	return OK;
 }
 
 1;

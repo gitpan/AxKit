@@ -1,4 +1,4 @@
-# $Id: File.pm,v 1.31 2001/11/15 12:17:01 matt Exp $
+# $Id: File.pm,v 1.2 2002/03/17 11:13:22 matts Exp $
 
 package Apache::AxKit::Provider::File;
 use strict;
@@ -10,7 +10,6 @@ use Apache::Log;
 use Apache::Constants qw(HTTP_OK);
 use Apache::AxKit::Exception;
 use Apache::AxKit::Provider;
-use Apache::MimeXML;
 use AxKit;
 use File::Basename;
 use Fcntl qw(O_RDONLY LOCK_SH);
@@ -138,8 +137,7 @@ sub process {
     local $^W;
     if (($xmlfile =~ /\.xml$/i) ||
         ($self->{apache}->content_type() =~ /^(text|application)\/xml/) ||
-        $self->{apache}->pnotes('xml_string') ||
-        Apache::MimeXML::check_for_xml(eval {$self->get_fh} || ${ $self->get_strref } )
+        $self->{apache}->pnotes('xml_string')
         ) {
             # chdir(dirname($xmlfile));
             return 1;
