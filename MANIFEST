@@ -2,6 +2,7 @@ MANIFEST
 README
 Makefile.PL
 AxKit.pm
+AxKit.xs
 CONTRIB
 INSTALL
 Changes
@@ -38,8 +39,6 @@ lib/Apache/AxKit/Language/Sablot.pm
 lib/Apache/AxKit/Language/XMLNewsRDF.pm
 lib/Apache/AxKit/Language/XMLNewsNITF.pm
 lib/Apache/AxKit/Language/XSP.pm
-lib/Apache/AxKit/Language/XSP/SQL.pm
-lib/Apache/AxKit/Language/XSP/Util.pm
 lib/Apache/AxKit/ConfigReader.pm
 lib/Apache/AxKit/Cache.pm
 lib/Apache/AxKit/Exception.pm

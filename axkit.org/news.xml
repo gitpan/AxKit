@@ -22,51 +22,53 @@
       </image>
 
 <item>
-<title>CSS3 moves forward</title>
-<link>http://www.xmlhack.com/read.php?item=1012</link>
-<description>The W3C released a new draft of Introduction to CSS, along with a 
-new version of CSS3 Module: Multi-column Layout.</description>
-<category>CSS</category>
+<title>Avalanche of XML Query drafts</title>
+<link>http://www.xmlhack.com/read.php?item=1072</link>
+<description>Jonathan Robie announced the release of five W3C Working Drafts related to XML Query/XQuery work.</description>
+<category>Databases</category>
 <category>W3C</category>
 </item>
 <item>
-<title>Publication day arrives for XML Media Types protocol</title>
-<link>http://www.xmlhack.com/read.php?item=1011</link>
-<description>A document describing the handling of XML Media Types, first
-      reported in xmlhack in a September 1999 story, has been officially
-    released by the Internet
-    Engineering Task Force as a new Request
-      for Comments, RFC 3023.</description>
-<category>IETF</category>
-<category>Encodings</category>
+<title>Requirements for XSLT, XPath 2.0</title>
+<link>http://www.xmlhack.com/read.php?item=1071</link>
+<description>While battles rage over the future of XSLT 1.1, the W3C has moved ahead with requirements documents for XSLT 2.0 and XPath 2.0.</description>
+<category>XSLT</category>
+<category>W3C</category>
 </item>
 <item>
-<title>Managing voluminous RDF description bases</title>
-<link>http://www.xmlhack.com/read.php?item=1010</link>
-<description>Greg Karvounarakis has announced a paper describing RDFSuite,
-a set of tools for parsing, storng and querying RDF metadata.</description>
-<category>RDF</category>
-</item>
-<item>
-<title>Visual drag and drop SVG/DHTML editor</title>
-<link>http://www.xmlhack.com/read.php?item=1009</link>
-<description>Steve White has announced an update to Virtual Mechanics' WEB ENGINE, a drag and drop editor for creating content in DHTML and SVG.</description>
-<category>SVG</category>
-<category>XHTML</category>
-</item>
-<item>
-<title>Apache Cocoon 1.8.1 released</title>
-<link>http://www.xmlhack.com/read.php?item=1008</link>
-<description>Robin Green has announced Cocoon 1.8.1, which fixes a large number of outstanding bugs with Cocoon 1 and adds several new features.</description>
-<category>Java</category>
+<title>James Clark updates TREX sample implementation</title>
+<link>http://www.xmlhack.com/read.php?item=1070</link>
+<description>James Clark has 
+        announced an update to the sample
+        Java implementation he created for his TREX
+        validation language.</description>
+<category>Schemas</category>
 <category>Tools</category>
 </item>
 <item>
-<title>SOAP::Lite v.45 improves interoperability</title>
-<link>http://www.xmlhack.com/read.php?item=1007</link>
-<description>Paul Kulchenko has released version 0.45 of his popular Perl SOAP module, SOAP::Lite, improving Apache SOAP interoperability and adding new features.</description>
-<category>Protocols</category>
-<category>Perl</category>
+<title>PSGML mode for Emacs: v1.2.2 released</title>
+<link>http://www.xmlhack.com/read.php?item=1069</link>
+<description>Lennart Staflin has announced the release of v1.2.2 of
+        PSGML,
+        an Emacs major mode for editing XML and SGML documents.</description>
+<category>Tools</category>
+<category>SGML/XML</category>
+</item>
+<item>
+<title>XML Data Management Benchmark Unveiled</title>
+<link>http://www.xmlhack.com/read.php?item=1068</link>
+<description>Timo Boehme of the database group at the University of Leipzig has announced XMach-1,
+a scaleable, multi-user benchmark for XML data management systems.
+</description>
+<category>Databases</category>
+<category>Tools</category>
+</item>
+<item>
+<title>XML Fragment Interchange resurrected as CR</title>
+<link>http://www.xmlhack.com/read.php?item=1067</link>
+<description>Over nineteen months since its previous inception as a Working Draft, XML Fragment Interchange has become a W3C Candidate Recommendation.</description>
+<category>XML</category>
+<category>W3C</category>
 </item>
 
 </channel>

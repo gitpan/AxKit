@@ -1,4 +1,4 @@
-# $Id: Filter.pm,v 1.8 2001/01/02 11:25:59 matt Exp $
+# $Id: Filter.pm,v 1.10 2001/02/16 13:39:17 matt Exp $
 
 package Apache::AxKit::Provider::Filter;
 use strict;
@@ -13,49 +13,15 @@ use Apache::AxKit::Provider;
 use Apache::AxKit::Provider::File;
 use Apache::MimeXML;
 use Apache::Constants;
+use File::Basename;
 
 # copied mostly from File provider...
 sub init {
     my $self = shift;
     my (%p) = @_;
     
-    if ($p{uri} and $p{uri} =~ s|^file:(//)?||) {
-        $p{file} = delete $p{uri};
-    }
-    
-    if ($p{uri}) {
-        my $r = $p{rel} ? $p{rel}->apache_request() : $self->apache_request();
-        
-        AxKit::Debug(8, "Filter Provider looking up uri $p{uri}");
-        
-        $self->{apache} = $r->lookup_uri($p{uri});
-        $self->{file} = $self->{apache}->filename();
-        
-        AxKit::Debug(8, "Filter Provider set filename to $self->{file}");
-        
-        my $fh = Apache->gensym();
-        open($fh, $self->{file}) || throw Apache::AxKit::Exception::Declined(
-                reason => "Cannot open file: $self->{file}"
-                );
-        flock $fh, 1; # shared (read) lock
-        $self->{fh} = $fh;
-    }
-    elsif ($p{file}) {
-        my $r = $p{rel} ? $p{rel}->apache_request() : $self->apache_request();
-        
-        AxKit::Debug(8, "Filter Provider looking up file $p{file}");
-
-        $self->{apache} = $r->lookup_file($p{file});
-        $self->{file} = $self->{apache}->filename();
-        
-        AxKit::Debug(8, "Filter Provider set filename to $self->{file}");
-        
-        my $fh = Apache->gensym();
-        open($fh, $self->{file}) || throw Apache::AxKit::Exception::Declined(
-                reason => "Cannot open file: $self->{file}"
-                );
-        flock $fh, 1; # shared (read) lock
-        $self->{fh} = $fh;
+    if ($p{key} || $p{uri} || $p{file}) {
+        return $self->SUPER::init(%p);
     }
     else {
         $self->{file} = $self->{apache}->filename();
@@ -63,29 +29,38 @@ sub init {
         throw Apache::AxKit::Exception::Error(
                 -text => "Bad filter_input status"
                 ) unless $status == OK;
-        $self->{fh} = $fh;
-        $self->{data} = join('', <$fh>);
+        $self->{filter_data} = join('', <$fh>);
     }
 }
 
 sub get_fh {
-    throw Apache::AxKit::Exception::IO( 
-            -text => "Can't get fh for Filter filehandle"
-            );
+    my $self = shift;
+    if ($self->{filter_data}) {
+        throw Apache::AxKit::Exception::IO( 
+                -text => "Can't get fh for Filter filehandle"
+                );
+    }
 }
 
 sub get_strref {
     my $self = shift;
-    if (my $data = $self->{data}) {
+    if (exists $self->{filter_data}) {
+        my $data = $self->{filter_data};
         return \$data;
     }
-    my $fh = $self->{fh};
-#    warn "About to read from fh: $fh\n";
-#    seek($fh, 0, 0);
-    my $str = join('', <$fh>);
-#    warn "Got: $str\n";
-    return \$str;
+    return $self->SUPER::get_strref();
 }
+
+sub process {
+    my $self = shift;
+    
+    my $xmlfile = $self->{file};
+
+    local $^W;
+    # always process this resource.
+    chdir(dirname($xmlfile));
+    return 1;
+}      
 
 use vars qw/$mtime/;
 

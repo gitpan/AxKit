@@ -1,4 +1,4 @@
-# $Id: ConfigReader.pm,v 1.23 2001/01/13 20:13:51 matt Exp $
+# $Id: ConfigReader.pm,v 1.24 2001/01/31 14:51:30 matt Exp $
 
 package Apache::AxKit::ConfigReader;
 
@@ -230,7 +230,7 @@ sub DoGzip {
 
 sub GetMatchingProcessors {
     my $self = shift;
-    my ($media, $style, $doctype, $dtd, $root, $styles) = @_;
+    my ($media, $style, $doctype, $dtd, $root, $styles, $provider) = @_;
     return @$styles if @$styles;
     
     $style ||= '#default';
@@ -276,6 +276,18 @@ sub GetMatchingProcessors {
             warn "Unrecognised directive type: $type";
         }
     }
+    
+    # list any dynamically chosen stylesheets here
+    $list = $self->{cfg}{DynamicProcessors};
+    foreach my $package (@$list) {
+      my($filename)=$package;
+      $filename=~s|::|/|g;
+      require "$filename.pm";
+      no strict 'refs';
+      my($handler) = $package.'::handler';
+      push @results, &$handler($provider,$media, $style, 
+                               $doctype, $dtd, $root);
+    }   
     
     return @results;
 }

@@ -1,4 +1,4 @@
-# $Id: File.pm,v 1.22 2001/01/19 13:50:38 matt Exp $
+# $Id: File.pm,v 1.24 2001/02/16 13:39:17 matt Exp $
 
 package Apache::AxKit::Provider::File;
 use strict;
@@ -7,6 +7,7 @@ use vars qw/@ISA/;
 
 use Apache;
 use Apache::Log;
+use Apache::Constants qw(HTTP_OK);
 use Apache::AxKit::Exception ':try';
 use Apache::AxKit::Provider;
 use Apache::MimeXML;
@@ -18,6 +19,11 @@ sub init {
     my $self = shift;
     my (%p) = @_;
 
+    if ($p{key}) {
+        $self->{file} = $p{key};
+        return;
+    }
+    
     if ($p{uri} and $p{uri} =~ s|^file:(//)?||) {
         $p{file} = delete $p{uri};
     }
@@ -25,9 +31,13 @@ sub init {
     if ($p{uri}) {
         my $r = $p{rel} ? $p{rel}->apache_request() : $self->apache_request();
         
-        AxKit::Debug(8, "File Provider looking up uri $p{uri}");
+        AxKit::Debug(8, "File Provider looking up " . ($p{rel} ? "relative" : "") . " uri $p{uri}");
 
         $self->{apache} = $r->lookup_uri($p{uri});
+        my $status = $self->{apache}->status();
+        if ($status != HTTP_OK) {
+            throw Apache::AxKit::Exception::Error(-text => "Subrequest failed with status: " . $status);
+        }
         $self->{file} = $self->{apache}->filename();
         
         AxKit::Debug(8, "File Provider set filename to $self->{file}");
@@ -37,7 +47,7 @@ sub init {
         
         AxKit::Debug(8, "File Provider looking up file $p{file}");
 
-        $self->{apache} = $r->lookup_file($p{file});
+        $self->{apache} = $r->lookup_uri($p{file});
         $self->{file} = $self->{apache}->filename();
         
         AxKit::Debug(8, "File Provider set filename to $self->{file}");

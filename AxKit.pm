@@ -1,8 +1,8 @@
-# $Id: AxKit.pm,v 1.58 2001/01/19 14:49:59 matt Exp $
+# $Id: AxKit.pm,v 1.68 2001/02/16 15:27:00 matt Exp $
 
 package AxKit;
 use strict;
-use vars qw/$VERSION $REQUESTS/;
+use vars qw/$VERSION/;
 
 use DynaLoader ();
 use UNIVERSAL ();
@@ -18,7 +18,7 @@ use Apache::AxKit::Provider::File;
 use Apache::AxKit::Provider::Scalar;
 use Apache::AxKit::CharsetConv;
 
-$VERSION = "1.2";
+$VERSION = "1.3";
 
 if ($ENV{MOD_PERL}) {
     no strict;
@@ -37,6 +37,8 @@ sub AxResetStyleMap ($$) {
 
 sub AxAddStyleMap ($$$$) {
     my ($cfg, $parms, $type, $module) = @_;
+#    warn "AxAddStyleMap: $type => $module\n";
+    load_module($module);
     $cfg->{StyleMap}{$type} = $module;
 }
 
@@ -47,11 +49,13 @@ sub AxCacheDir ($$$) {
 
 sub AxConfigReader ($$$) {
     my ($cfg, $parms, $configclass) = @_;
+    load_module($configclass);
     $cfg->{ConfigReader} = $configclass;
 }
 
 sub AxProvider ($$$) {
     my ($cfg, $parms, $providerclass) = @_;
+    load_module($providerclass);
     $cfg->{Provider} = $providerclass;
 }
 
@@ -67,11 +71,13 @@ sub AxMedia ($$$) {
 
 sub AxCacheModule ($$$) {
     my ($cfg, $parms, $cachemodule) = @_;
+    load_module($cachemodule);
     $cfg->{CacheModule} = $cachemodule;
 }
 
 sub AxDebugLevel ($$$) {
     my ($cfg, $parms, $level) = @_;
+#    warn "Setting debug level to: $level\n";
     $cfg->{DebugLevel} = $level;
 }
 
@@ -101,6 +107,7 @@ sub AxErrorStylesheet ($$$$) {
 
 sub AxAddXSPTaglib ($$$) {
     my ($cfg, $parms, $package) = @_;
+    load_module($package);
     $cfg->{XSPTaglibs}{$package}++;
 }
 
@@ -150,14 +157,20 @@ sub AxAddDTDProcessor ($$$$$) {
     push @{$cfg->{Processors}{$media}{$style}}, $processor;
 }
 
+sub AxAddDynamicProcessor ($$$) {
+    my ($cfg, $parms, $package) = @_;
+    push @{$cfg->{DynamicProcessors}}, $package;
+}
+
+
 sub AxAddRootProcessor ($$$$$) {
     my ($cfg, $parms, $type, $stylesheet, $root_element, $media, $style) = @_;
 
     $media ||= 'screen';
     $style ||= '#default';
 
-#    warn "AxAddRootProcessor: $type, $stylesheet, $root_element [$media, $style]\n";
-
+#    warn "AxAddRootProcessor: $type, $stylesheet, $root_element, $media, $style";
+    
     my $processor = ['Root', $type, $stylesheet, $root_element];
 
     push @{$cfg->{Processors}{$media}{$style}}, $processor;
@@ -272,6 +285,7 @@ my @flat_params = qw(
         GzipOutput
         ErrorStylesheet
         XSPTaglibs
+        StyleMap
         );
 
 # This is a source of a mod_perl memory leak in mod_perl <= 1.24.
@@ -284,11 +298,9 @@ sub DIR_MERGE {
 
     return $parent if $parent == $current;
     
-    # style map
-    $new{StyleMap} = { %{$parent->{StyleMap} || {}}, %{$current->{StyleMap} || {}} };
-
     # flat merges (single parameters)
     for my $param (@flat_params) {
+#        warn "Merging $param\n";
         $new{$param} = $current->{$param} || $parent->{$param};
     }
 
@@ -312,6 +324,11 @@ sub DIR_MERGE {
         }
     }
 
+    # copy any dynamic processors
+    foreach my $proc (@{$current->{DynamicProcessors}}) {
+      push(@{$new{DynamicProcessors}},$proc);
+    }
+
     return bless \%new, ref($parent);
 }
 
@@ -322,12 +339,10 @@ sub DIR_MERGE {
 sub Debug {
     my $level = shift;
     if ($level <= $AxKit::DebugLevel) {
-        if ($_[-1] !~ /\n$/) {
-            warn("[AxKit] : ", @_, "\n");
-        }
-        else {
-            warn("[AxKit] : ", @_);
-        }
+        my @debug = @_;
+        $debug[-1] =~ s/\n$//;
+        my $log = Apache->request->log();
+        $log->info("[AxKit] : " . join('', @debug));
 
 #         my $fh = Apache->gensym();
 #         my %mem;
@@ -379,7 +394,7 @@ sub get_output_transformer {
         my $outputfunc = $func;
 
         $func = sub {
-            my $map = Apache::AxKit::CharsetConv->new("utf8", $charset)
+            my $map = Apache::AxKit::CharsetConv->new("utf-8", $charset)
 			|| die "Charset $charset not supported by Iconv";
 
             map { $map->convert( $_ ) } ($outputfunc->(@_));
@@ -393,6 +408,20 @@ sub get_output_transformer {
     #   set $func to that new closure
 
     return wantarray ? ($func, $actually_transform) : $func;
+}
+
+sub reset_depends {
+    %AxKit::__Depends = ();
+}
+
+sub add_depends {
+    my $depends = shift;
+#    warn "Adding depends: $depends\n";
+    $AxKit::__Depends{$depends}++;
+}
+
+sub get_depends {
+    return keys %AxKit::__Depends;
 }
 
 # sub DESTROY {
@@ -441,23 +470,17 @@ sub handler {
         }
 
         $r->header_out('X-AxKit-Version', $VERSION);
-
+        
         # get preferred stylesheet and media type
         my ($preferred, $media) = get_style_and_media();
         AxKit::Debug(2, "media: $media, preferred style: $preferred");
 
         # get cache object
-        my $cache = Apache::AxKit::Cache->new($r, $r->filename() . ($ENV{PATH_INFO} || ''), $preferred, $media);
+        my $cache = Apache::AxKit::Cache->new($r, $r->filename() . ($ENV{PATH_INFO} || ''), $preferred, $media, $r->notes('axkit_cache_extra'));
 
         my $recreate; # regenerate from source (not cached)
 
-        my ($styles, $ext_ents);
-        ($styles, $ext_ents) = get_styles_and_ext_ents(
-                                        $media,
-                                        $preferred,
-                                        $cache,
-                                        $provider,
-                                    );
+        my $styles = get_styles($media, $preferred, $cache, $provider);
 
         {
             local $^W;
@@ -474,12 +497,12 @@ sub handler {
             AxKit::Debug(2, "cache doesn't exist");
             $recreate++;
         }
-
+        
         if (!$recreate) {
-            $recreate = check_resource_mtimes($provider, $styles, $ext_ents, $cache->mtime());
+            $recreate = check_dependencies($r, $provider, $cache);
         }
 
-        if ($r->method() eq 'POST') {
+        if (!$recreate && $r->method() eq 'POST') {
             $recreate++;
         }
 
@@ -507,10 +530,19 @@ sub handler {
             AxKit::Debug(5, "Different output charset: $charset");
             $r->content_type("text/html; charset=$charset");
         }
+        
+        my $uri = $r->uri();
+        my $path_info = $r->path_info();
+        $uri =~ s/\Q$path_info\E$//;
+        $r->uri($uri);
+
+        reset_depends();
 
         # Main grunt of the work done here...
         process_request($r, $provider, $styles);
 
+        save_dependencies($r, $cache);
+        
         if (my $dom = $r->pnotes('dom_tree')) {
             AxKit::Debug(4, "got a dom_tree back - outputting that to the cache");
             $r->notes('resetstring', 1);
@@ -555,7 +587,7 @@ sub handler {
 
             $r->notes('xml_string', $error);
 
-            $r->send_http_header() unless lc($r->dir_config('Filter')) eq 'on';
+            $r->send_http_header();
 
             return try {
                 process_request($r, $provider, 1, $error_styles);
@@ -580,12 +612,18 @@ sub handler {
         if ($r->dir_config('AxLogDeclines')) {
             $r->log->info("[AxKit] [DECLINED] $E->{reason}")
                     if $E->{reason};
+            $r->log->info("[AxKit] [DECLINED] From: $E->{-file} : $E->{-line}");
         }
         AxKit::Debug(4, "DECLINED");
         return DECLINED;
     }
     catch Apache::AxKit::Exception::OK with {
         return OK;
+    }
+    catch Apache::AxKit::Exception::Retval with {
+        my $E = shift;
+        my $code = $E->{return_code};
+        return $code;
     }
     catch Error::Simple with {
         my $E = shift;
@@ -608,7 +646,7 @@ sub handler {
 
             $r->notes('xml_string', $error);
 
-            $r->send_http_header() unless lc($r->dir_config('Filter')) eq 'on';
+            $r->send_http_header();
 
             return try {
                 process_request($r, $provider, 1, $error_styles);
@@ -697,7 +735,7 @@ sub get_style_and_media {
     return ($style, $media);
 }
 
-sub get_styles_and_ext_ents {
+sub get_styles {
     my ($media, $style, $cache, $provider) = @_;
 
     my $key = $cache->key();
@@ -706,49 +744,36 @@ sub get_styles_and_ext_ents {
     AxKit::Debug(2, "getting styles and external entities from the XML");
     # get styles/ext_ents from cache or re-parse
 
-    my ($styles, $ext_ents);
+    my $styles;
 
     if (exists($AxKit::Stash{$key})
             && $AxKit::Stash{$key}{mtime} <= $mtime)
     {
         AxKit::Debug(3, "styles and external entities cached");
-        ($styles, $ext_ents) =
-                @{$AxKit::Stash{$key}}{('styles', 'external_entities')};
+        return $AxKit::Stash{$key}{'styles'};
     }
     else {
-#        warn "No styles in axkit stash\n";
         AxKit::Debug(3, "styles and external entities not cached - calling get_styles()");
-        ($styles, $ext_ents) = $provider->get_styles($media, $style);
+        my $styles = $provider->get_styles($media, $style);
 
         $AxKit::Stash{$key} = {
             styles => $styles,
-            external_entities => $ext_ents,
             mtime => $mtime,
             };
+        
+        return $styles;
     }
-
-    return ($styles, $ext_ents);
 }
 
 sub check_resource_mtimes {
-    my ($xml_provider, $styles, $ext_ents, $mtime) = @_;
+    my ($xml_provider, $styles, $mtime) = @_;
 
     my $r = Apache->request;
     
-    AxKit::Debug(3, "checking external entities mtimes vs cache mtime");
-    # check external entities too now
-    for my $ext (@$ext_ents) {
-        local $^W;
-        my $ent_provider = Apache::AxKit::Provider->new(
-                $r,
-                uri => $ext,
-                rel => $xml_provider,
-                );
-
-        if ($ent_provider && ($ent_provider->mtime() <= $mtime)) {
-            AxKit::Debug(3, "external entity '$ext' newer than cache");
-            return 1; # recreate
-        }
+    AxKit::Debug(3, "checking xml mtime vs cache mtime");
+    if ($xml_provider->mtime() <= $mtime) {
+        AxKit::Debug(3, "xml newer than cache");
+        return 1;
     }
 
     AxKit::Debug(3, "checking stylesheet mtimes vs cache mtime");
@@ -774,13 +799,52 @@ sub check_resource_mtimes {
         }
     }
 
-    AxKit::Debug(3, "checking xml mtime vs cache mtime");
-    if ($xml_provider->mtime() <= $mtime) {
+    return 0;
+}
+
+sub check_dependencies {
+    my ($r, $provider, $cache) = @_;
+    AxKit::Debug(2, "Checking dependencies");
+    if ($provider->mtime() <= $cache->mtime()) {
         AxKit::Debug(3, "xml newer than cache");
         return 1;
     }
+    else {
+        my $depend_cache = Apache::AxKit::Cache->new($r, $cache->key() . '.depends');
+        my $depends_contents = $depend_cache->read();
+        if ($depends_contents) {
+            DEPENDENCY:
+            for my $dependency (split(/:/, $depends_contents)) {
+                AxKit::Debug(3, "Checking dependency: $dependency for resource ", $provider->key());
+                my $dep = Apache::AxKit::Provider->new($r, key => $dependency);
+                if ($dep->mtime() <= $cache->mtime()) {
+                    AxKit::Debug(4, "dependency: $dependency newer");
+                    return 1;
+                }
+            }
+        }
+        else {
+            AxKit::Debug(2, "No dependencies list yet");
+            return 1;
+#            return check_resource_mtimes($provider, $styles, $cache->mtime());
+        }
+    }
+}
 
-    return 0;
+sub save_dependencies {
+    my ($r, $cache) = @_;
+    
+    return if $cache->no_cache();
+    
+    try {
+        my @depends = get_depends();
+        my $depend_cache = Apache::AxKit::Cache->new($r, $cache->key() . '.depends');
+        $depend_cache->write(join(':', @depends));
+    }
+    catch Error with {
+        my $error = shift;
+        AxKit::Debug(2, "Cannot write dependencies cache: $error");
+    };
 }
 
 sub deliver_to_browser {
@@ -793,7 +857,7 @@ sub deliver_to_browser {
         my ($transformer, $doit) = get_output_transformer();
         if ($AxKit::Cfg->DoGzip) {
             AxKit::Debug(4, 'Sending gzipped xml string to browser');
-            $r->send_http_header() unless lc($r->dir_config('Filter')) eq 'on';
+            $r->send_http_header();
             if ($doit) {
                 $r->print( Compress::Zlib::memGzip(
                         $transformer->( $r->notes('xml_string') )
@@ -804,7 +868,7 @@ sub deliver_to_browser {
             }
         }
         else {
-            $r->send_http_header() unless lc($r->dir_config('Filter')) eq 'on';
+            $r->send_http_header();
             if ($doit) {
                 $r->print(
                         $transformer->( $r->notes('xml_string') )
@@ -840,6 +904,8 @@ sub xml_escape {
 
     return $text;
 }
+
+1;
 
 #########################################################################
 # Apache Request Object subclass
@@ -917,6 +983,8 @@ sub send_http_header {
     $self->SUPER::send_http_header;
 }
 
+1;
+
 package AxKit::ApacheDebug;
 use vars qw/@ISA/;
 use Apache;
@@ -991,13 +1059,13 @@ To do this install as follows:
     perl Makefile.PL NO_DIRECTIVES=1
     make
     make test
-    make install
+    make install UNINST=1
 
-This removes the custom configuration directives. Note that you may have
-to manually remove old AxKit.pm files from your perl library directory
-if you have previously built it, because dynamically built libraries
-go into the i386 (or whatever processor you have) directory. Now
-you can change the directives to ordinary PerlSetVar directives:
+This removes the custom configuration directives. Note that the 
+UNINST=1 is required to make sure that old AxKit files are removed
+from the binary directory (since it has no binary component any
+more). Now you can change the directives to ordinary PerlSetVar
+directives:
 
     PerlSetVar AxStyleMap "text/xsl => Apache::AxKit::Language::XSLT, \
         application/x-xpathscript => Apache::AxKit::Language::XPathScript"
@@ -1007,6 +1075,9 @@ you can change the directives to ordinary PerlSetVar directives:
 It's worth noting that the PerlSetVar option is available regardless of
 whether you compile with NO_DIRECTIVES set, although it is marginally
 slower to use PerlSetVar.
+
+Also note that if you go B<back> to using the compiled directives,
+you must again install with UNINST=1.
 
 =head1 CONFIGURATION DIRECTIVES
 

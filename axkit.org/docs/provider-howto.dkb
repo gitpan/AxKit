@@ -274,6 +274,7 @@ PerlModule AxKit
 &lt;Location /filter&gt;
  SetHandler perl-script
  PerlSetVar Filter On
+ AxProvider Apache::AxKit::Provider::Filter
  PerlHandler Apache::RegistryFilter AxKit
 &lt;/Location&gt;
 </programlisting>
@@ -338,9 +339,10 @@ PerlModule Apache::ASP
 PerlModule AxKit
 
 &lt;Location /filter&gt;
-SetHandler perl-script
-PerlSetVar Filter On
-PerlHandler Apache::ASP AxKit
+ SetHandler perl-script
+ PerlSetVar Filter On
+ AxProvider Apache::AxKit::Provider::Filter
+ PerlHandler Apache::ASP AxKit
 &lt;/Location&gt;
 </programlisting>
 <para>Then create a sample ASP page to generate the xml. Here is a minimalistic example:</para> 

@@ -4,43 +4,67 @@ body {
 }
 
 p {
-	font-family: Arial,Helvetica,Helv,sans-serif;
+    font-family: Arial,Helvetica,Helv,sans-serif;
 }
 
+H3, .hd {
+  font-family:  Verdana,Helvetica,Helv,sans-serif;
+  font-size:    15pt;
+  font-weight:  bold;
+}
 
-h1 {
-	font-family: Arial,Helvetica,Helv,sans-serif;
-	font-size:	 25px;
+.hd2 {
+  font-family:  Verdana,Helvetica,Helv,sans-serif;
+  font-size:    14pt;
+  font-weight:  bold;
+}
+
+.hd3 {
+  font-family:  Verdana,Helvetica,Helv,sans-serif;
+  font-size:    12pt;
+  font-weight:  bold;
+}
+
+.hd4 {
+  font-family:  Verdana,Helvetica,Helv,sans-serif;
+  font-size:    10pt;
+  font-weight:  bold;
 }
 
 @media screen {
-	a:hover {
-		color:	 			#fc6;
-		text-decoration:	none;
-	}
+
+    A.plain:hover {
+        color:      transparent;
+        background: transparent;
+    }
+    
+    a:hover {
+        color:              #fc6;
+        text-decoration:    none;
+    }
 }
 
 .toplevel {
 	color:		 #306;
 	font-family: Arial,Helvetica,Helv,sans-serif;
-	font-size:	 14px;
+	font-size:	 11pt;
 	font-weight: bold;
 }
 
 .sublevel {
 	font-family: Arial,Helvetica,Helv,sans-serif;
-	font-size:	 12px;
+	font-size:	 10pt;
 	font-weight: bold;
 }
 
 .toponomic {
 	font-family: Arial,Helvetica,Helv,sans-serif;
-	font-size:	 12px;
+	font-size:	 10pt;
 	font-weight: bold;
 }
 
 .copyright {
 	font-family: Arial,Helvetica,Helv,sans-serif;
-	font-size:	 10px;
+	font-size:	 8pt;
 	font-style:  italic;
 }

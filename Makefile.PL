@@ -1,4 +1,4 @@
-# $Id: Makefile.PL,v 1.27 2001/01/21 17:13:17 matt Exp $
+# $Id: Makefile.PL,v 1.29 2001/02/16 19:16:58 matt Exp $
 
 package AxKit;
 # file Makefile.PL
@@ -30,7 +30,7 @@ my %config;
 
 $|=1; # flush output
 
-for(@ARGV) {
+while($_ = shift @ARGV) {
     my ($k, $v) = split /=/, $_, 2;
     $config{$k} = $v;
 }
@@ -64,25 +64,7 @@ else {
 }
 
 # delete returns the value, which would be 1 if enabled.
-unless (delete $config{NO_DIRECTIVES}) { 
-    my @directives = get_directives();
-
-    command_table(\@directives);
-    require mod_perl;
-    unless ($mod_perl::VERSION > 1.24) {
-        open (FILE, ">>AxKit.xs") || die "Can't append to AxKit.xs: $!";
-        print FILE 'void
-END()
-
-    CODE:
-    if (find_linked_module("AxKit")) {
-        remove_module(&XS_AxKit);
-    }
-';
-        close(FILE);
-    }
-}
-else {
+if (delete $config{NO_DIRECTIVES}) { 
     rename("AxKit.pm", "AxKit.pm.old") || die "Can't fixup AxKit.pm: $!";
     open(FH, "AxKit.pm.old") || die "Can't open AxKit.pm.old: $!";
     open(WRFH, ">AxKit.pm") || die "Can't write AxKit.pm: $!";
@@ -99,6 +81,7 @@ else {
     close FH;
     close WRFH;
     rm_f("AxKit.pm.old");
+    rename("AxKit.xs", "AxKit.xs.unused") || die "Can't remove (rename) AxKit.xs: $!";
 }
 
 my $install_expat = 0;
@@ -111,8 +94,8 @@ unless (have_module('XML::Parser', '2.27')) {
             my $expat_opts = delete $config{EXPAT_OPTS};
             xsystem("cd $expat_dir && ./configure $expat_opts && make");
             $install_expat = 1;
-            push @ARGV, "EXPATINCPATH=" . MM->catdir($from_dir, $expat_dir, 'lib');
-            push @ARGV, "EXPATLIBPATH=" . MM->catdir($from_dir, $expat_dir, 'lib', '.libs');
+            $config{"EXPATINCPATH"} = MM->catdir($from_dir, $expat_dir, 'lib');
+            $config{"EXPATLIBPATH"} = MM->catdir($from_dir, $expat_dir, 'lib', '.libs');
             print "ok\n";
         };
         if ($@) {
@@ -174,14 +157,17 @@ if ($DEBUG) {
     }
 }
 
+foreach my $k (keys %config) {
+    push @ARGV, "$k=$config{$k}";
+}
+
 WriteMakefile(
         'NAME' => __PACKAGE__,
         'VERSION_FROM' => 'AxKit.pm',
         'AUTHOR' => 'AxKit.com Limited - http://axkit.com/',
         'ABSTRACT' => 'AxKit is an XML Application Server for mod_perl',
         'DIR' => [ @DIRS ],
-        'clean' => { 'FILES' => '*.xs*' },
-        %config,
+#        %config,
 );
 
 #################################################################
@@ -351,35 +337,6 @@ sub test_module {
     return 1;
 }
 
-sub get_directives {
-    
-    my @directives;
-    
-    my $line;
-    my %option;
-    do {
-        $option{name} = get_data();
-        $option{errmsg} = get_data();
-        $option{args_how} = get_data();
-        $option{req_override} = get_data();
-
-        push @directives, {%option};
-        
-        %option = ();
-    } while (<DATA>);
-    
-#     use Data::Dumper;
-#     print "directives:\n", Data::Dumper->Dump([@directives], ['directives']), "\n";
-    
-    return @directives;
-}
-
-sub get_data {
-    my $line = <DATA>;
-    chomp $line;
-    return $line;
-}
-
 sub MY::install {
     package MY;
     my $self = shift;
@@ -399,118 +356,15 @@ INSTALL
     return $install;
 }
 
-__DATA__
-AxAddProcessor
-a mime type and a stylesheet to use
-TAKE2
-OR_ALL
+sub MY::clean {
+    package MY;
+    my $self = shift;
+    
+    my $clean = $self->SUPER::clean(@_);
+    
+    $clean .= <<EOF;
+\t-mv AxKit.xs.unused AxKit.xs \$(DEV_NULL)
+EOF
 
-AxAddDocTypeProcessor
-a mime type, a stylesheet, and an XML public identifier
-TAKE3
-OR_ALL
-
-AxAddDTDProcessor
-a mime type, a stylesheet, and a dtd filename
-TAKE3
-OR_ALL
-
-AxAddRootProcessor
-a mime type, a stylesheet, and a root element
-TAKE3
-OR_ALL
-
-AxResetProcessors
-reset the list of processors
-NO_ARGS
-OR_ALL
-
-<AxMediaType
-Media type block
-RAW_ARGS
-OR_ALL
-
-</AxMediaType>
-End of media type block
-NO_ARGS
-OR_ALL
-
-<AxStyleName
-Style name block
-RAW_ARGS
-OR_ALL
-
-</AxStyleName>
-End of Style name block
-NO_ARGS
-OR_ALL
-
-AxAddStyleMap
-a mime type and a module name to use
-TAKE2
-OR_ALL
-
-AxResetStyleMap
-reset the styles
-NO_ARGS
-OR_ALL
-
-AxCacheDir
-directory to store cache files
-TAKE1
-OR_ALL
-
-AxConfigReader
-alternative module to use for reading configuration
-TAKE1
-OR_ALL
-
-AxProvider
-alternative module to use for reading the xml
-TAKE1
-OR_ALL
-
-AxStyle
-a default stylesheet (title) to use
-TAKE1
-OR_ALL
-
-AxMedia
-a default media to use other than screen
-TAKE1
-OR_ALL
-
-AxCacheModule
-alternative cache module
-TAKE1
-OR_ALL
-
-AxDebugLevel
-debug level (0 == none, higher numbers == more debugging)
-TAKE1
-OR_ALL
-
-AxTranslateOutput
-On or Off [default] to automatically change character set on output
-FLAG
-OR_ALL
-
-AxOutputCharset
-character set used by iconv
-TAKE1
-OR_ALL
-
-AxGzipOutput
-On or Off [default] to gzip the output
-FLAG
-OR_ALL
-
-AxErrorStylesheet
-Error Stylesheet and a content-type for the StyleMap to use
-TAKE2
-OR_ALL
-
-AxAddXSPTaglib
-module that provides a taglib functionality
-TAKE1
-OR_ALL
+    return $clean;
+}

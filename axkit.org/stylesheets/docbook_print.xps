@@ -1,3 +1,6 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/strict.dtd">
+<html>
+<!--#include file="spacer.xps"-->
 <!--#include file="docbook_tags.xps"-->
 <%
 
@@ -18,12 +21,16 @@ $t->{'ulink'}{testcode} = sub {
 	};
 
 %>
-<html>
 <head>
-	<title><%= findvalue('/article/artheader/title/text()') %></title>
+<title><%= findvalue('/article/artheader/title/text()') %></title>
+<link rel="stylesheet" href="/stylesheets/axkit.css" type="text/css" />
 </head>
-<body bgcolor="white">
+<!--#include file="body_print_html.xps"-->
 
+<table width="100%">
+<tr>
+<td width="10"><%= spacer(10,0) %></td>
+<td width="*" style="font-size: small;">
 <%
 # display title/TOC page
 print apply_templates('/article/artheader/*');
@@ -50,5 +57,8 @@ for my $link (sort {$links{$a} <=> $links{$b}} keys %links) {
 <% } %>
 </table>
 
+</td>
+</tr>
+</table>
 </body>
 </html>

@@ -1,4 +1,4 @@
-# $Id: XPathScript.pm,v 1.43 2001/01/19 14:49:06 matt Exp $
+# $Id: XPathScript.pm,v 1.47 2001/02/16 13:36:24 matt Exp $
 
 package Apache::AxKit::Language::XPathScript;
 
@@ -43,6 +43,7 @@ sub handler {
     local $Apache::AxKit::Language::XPathScript::local_ent_handler;
     
     if (my $entity_handler = $xml_provider->get_ext_ent_handler()) {
+#        warn "XPathScript: setting entity_handler\n";
         $xml_parser->setHandlers(
                 ExternEnt => $entity_handler,
                 );
@@ -128,9 +129,10 @@ sub handler {
     no strict 'refs';
     my $cv = \&{"$package\::handler"};
 
-    $Apache::AxKit::Language::XPathScript::xp = $xpath;
+    local $Apache::AxKit::Language::XPathScript::xp = $xpath;
     my $t = {};
-    $Apache::AxKit::Language::XPathScript::trans = $t;
+    local $Apache::AxKit::Language::XPathScript::trans = $t;
+    local $Apache::AxKit::Language::XPathScript::style_provider = $style_provider;
     
     AxKit::Debug(7, "Running XPathScript script\n");
     local $^W;
@@ -144,7 +146,7 @@ sub handler {
 
     $Apache::AxKit::Language::XPathScript::xp = undef;
     $Apache::AxKit::Language::XPathScript::trans = undef;
-    
+    $Apache::AxKit::Language::XPathScript::style_provider = undef;
 #    warn "Returning $old_status\n";
     return $r->status($old_status);
 }
@@ -168,7 +170,7 @@ sub check_inc_mtime {
 }
 
 sub extract {
-    my ($provider) = @_;
+    my ($provider,$scalar_output) = @_;
     
     my $contents = try { 
         my $fh = $provider->get_fh();
@@ -184,7 +186,7 @@ sub extract {
         
         AxKit::Debug(8, "XPS: got charset: $charset");
         
-        my $map = Apache::AxKit::CharsetConv->new($charset, "utf8") || die "No such charset: $charset";
+        my $map = Apache::AxKit::CharsetConv->new($charset, "utf-8") || die "No such charset: $charset";
         $contents = $map->convert($contents);
     }
     
@@ -201,12 +203,20 @@ sub extract {
         my ($text, $type) = ($1, $2);
         $line += $text =~ tr/\n//;
         $text =~ s/\|/\\\|/g;
-        $script .= "print q|$text|;";
+        if($scalar_output) {
+            $script .= "\$__OUTPUT.=q|$text|;";
+        } else {
+            $script .= "print q|$text|;";
+        }
         $script .= "\n#line $line $key\n";
         if ($type eq '<%=') {
             $contents =~ /\G(.*?)%>/gcs || die "No terminating '%>' after line $line ($key)";
             my $perl = $1;
-            $script .= "print( $perl );\n";
+            if(!$scalar_output) {
+                $script .= "print( $perl );\n";
+            } else {
+                $script .= "\$__OUTPUT.=join('',($perl));\n";
+            }
             $line += $perl =~ tr/\n//;
         }
         elsif ($type eq '<!--#include') {
@@ -221,7 +231,7 @@ sub extract {
             }
             
             AxKit::Debug(10, "About to include file $params{file}");
-            $script .= include_file($params{file}, $provider);
+            $script .= include_file($params{file}, $provider, $scalar_output);
             AxKit::Debug(10, "include done");
         }
         else {
@@ -236,7 +246,11 @@ sub extract {
     if ($contents =~ /\G(.*)/gcs) {
         my ($text) = ($1);
         $text =~ s/\|/\\\|/g;
-        $script .= "print q|$text|;";
+        if ($scalar_output) {
+            $script .= "\$__OUTPUT.=q|$text|;";
+        } else {
+            $script .= "print q|$text|;";
+        }
     }
     
     return $script;
@@ -268,7 +282,7 @@ sub compile {
 }
 
 sub include_file {
-    my ($filename, $provider) = @_;
+    my ($filename, $provider, $script_output) = @_;
 
     # return if already included
     my $key = $provider->key();
@@ -282,10 +296,11 @@ sub include_file {
             rel => $provider,
             );
     
-    return extract($inc_provider);
+    return extract($inc_provider, $script_output);
 }
 
 sub XML::XPath::Function::document {
+#    warn "Document function called\n";
     return unless $Apache::AxKit::Language::XPathScript::local_ent_handler;
     my $self = shift;
     my ($node, @params) = @_;
@@ -302,11 +317,13 @@ sub XML::XPath::Function::document {
     my $results = XML::XPath::NodeSet->new();
     my $newdoc;
     try {
+#        warn "Trying to parse $params[0]\n";
         $newdoc = $parser->parse(
                 $Apache::AxKit::Language::XPathScript::local_ent_handler->(
                     undef, undef, $params[0]
                 )
             );
+#        warn "Parsed OK into $newdoc\n";
     }
     catch Apache::AxKit::Exception::IO with {
         my $E = shift;
@@ -385,6 +402,7 @@ sub get_package_name {
             apply_templates
             matches
             set_namespace
+            import_template
             DO_SELF_AND_KIDS
             DO_SELF_ONLY
             DO_NOT_PROCESS
@@ -393,6 +411,31 @@ sub get_package_name {
     sub DO_SELF_AND_KIDS () { return 1; }
     sub DO_SELF_ONLY () { return -1; }
     sub DO_NOT_PROCESS () { return 0; }
+    sub MAX_DEPTH () { return 32; }
+
+    sub import_template {
+        my ($filename, $local_changes) = @_;
+        my ($script) = Apache::AxKit::Language::XPathScript::include_file($filename,$Apache::AxKit::Language::XPathScript::style_provider, 1);
+        # changes may be local to this imported template, or global (default).
+        my ($setup_t);
+        if ($local_changes) {
+            $setup_t = 'local $Apache::AxKit::Language::XPathScript::trans = clone($Apache::AxKit::Language::XPathScript::trans);';
+        }
+        
+        $script = join('',
+                     'use strict;',
+                     'sub { ',
+                     'my ($node, $real_local_t) = @_;',
+                     'local $Apache::AxKit::Language::XPathScript::xp = $node;',
+                     $setup_t,
+                     'my ($t) = $Apache::AxKit::Language::XPathScript::trans;',
+                     'my ($__OUTPUT);',
+                     $script,';',
+                     '$real_local_t->{pre} = $__OUTPUT;',
+                     'return -1;',
+                     '}');
+        return eval($script);
+    }
 
     sub findnodes {
         $Apache::AxKit::Language::XPathScript::xp->findnodes(@_);
@@ -421,7 +464,7 @@ sub get_package_name {
         }
         catch Error with {
             my $E = shift;
-            warn "set_namespace failed: $E";
+            AxKit::Debug(3, "set_namespace failed: $E");
         };
     }
     
@@ -439,12 +482,19 @@ sub get_package_name {
         }
         
         my $retval = '';
-        if ($arg1->isa('XML::XPath::NodeSet')) {
+        if (ref($arg1) eq "HASH") {
+#            warn "apply_templates with a hash\n";
+            local $Apache::AxKit::Language::XPathScript::trans = $arg1;
+            return apply_templates(@args);
+        } 
+        elsif ($arg1->isa('XML::XPath::NodeSet')) {
+#            warn "apply_templates with a NodeSet\n";
             foreach my $node ($arg1->get_nodelist) {
                 $retval .= translate_node($node);
             }
         }
         else {
+#            warn "apply_templates with a list of " , 1 + @args, " nodes? : ", ref($arg1), "\n";
             $retval .= translate_node($arg1);
             foreach my $node (@args) {
                 $retval .= translate_node($node);
@@ -514,9 +564,15 @@ sub get_package_name {
         }
         
         if (!$trans) {
-            return start_tag($node) . 
+#            warn "Default trans\n";
+            if (my @children = $node->getChildNodes) {
+                return start_tag($node) . 
                     _apply_templates($node->getChildNodes) .
                     end_tag($node);
+            }
+            else {
+                return empty_tag($node);
+            }
         }
         
         local $^W;
@@ -526,23 +582,43 @@ sub get_package_name {
 
         my $t = {};
         if ($trans->{testcode}) {
-#            warn "Evalling testcode\n";
-            my $result = $trans->{testcode}->($node, $t);
-            if ($result eq "0") {
-                # don't process anything.
-                return;
+#            warn "eval testcode\n";
+            my $result;
+            my $testcode = $trans->{testcode};
+            my $depth = 0;
+            while (1) {
+                $result = $testcode->($node, $t);
+#                warn "Testcode returned: $result\n";
+                if (defined($t->{testcode}) &&
+                      ref($t->{testcode}) eq "CODE") {
+                    if ($depth++ > MAX_DEPTH) {
+                        die "Max Depth of ", MAX_DEPTH, " reached on testcode eval!";
+                    }
+                    $testcode = $t->{testcode};
+                    $t = {};
+                } else {
+                    last;
+                }
             }
-            if ($result eq "-1") {
-                # -1 means don't do children.
-                $dokids = 0;
-            }
-            elsif ($result eq "1") {
-                # do kids
-            }
-            else {
+            
+#            warn "Here with $result\n";
+            
+            if ($result =~ /\D/) {
                 $dokids = 0;
                 $search = $result;
             }
+            elsif ($result == DO_NOT_PROCESS) {
+                # don't process anything.
+                return;
+            }
+            elsif ($result == DO_SELF_ONLY) {
+                # -1 means don't do children.
+                $dokids = 0;
+            }
+            elsif ($result == DO_SELF_AND_KIDS) {
+                # do kids
+            }
+#            warn "Here with dokids => $dokids, search => $search\n";
         }
         
         local $translations->{$node_name};
@@ -630,6 +706,27 @@ sub get_package_name {
         }
     }
     
+    sub empty_tag {
+        my ($node) = @_;
+        
+        my $name = $node->getName;
+        return '' unless $name;
+        
+        my $string = "<" . $name;
+        
+        foreach my $ns ($node->getNamespaceNodes) {
+            $string .= $ns->toString;
+        }
+        
+        foreach my $attr ($node->getAttributeNodes) {
+            $string .= $attr->toString;
+        }
+
+        $string .= " />";
+        
+        return $string;
+    }        
+    
     sub interpolate {
         my ($node, $string) = @_;
         return $string if $XPathScript::DoNotInterpolate;
@@ -643,6 +740,24 @@ sub get_package_name {
         $string =~ /\G(.*)/gcs;
         $new .= $1 if defined $1;
         return $new;
+    }
+
+    # make a clone, but copy subs.
+    sub clone {
+        my ($a) = @_;
+        my ($b);
+        if (ref($a) eq "HASH") {
+            $b = {};
+            foreach my $key (keys(%$a)) {        
+                my ($copy) = clone($a->{$key});
+                $b->{$key} = $copy;
+            }
+        }
+        else {
+            # copy as is
+            $b = $a;
+        }
+        return $b;
     }
 
     1;

@@ -4,6 +4,7 @@ Kip Hampton (moral support, Util taglib, docs, StyleChoosers)
 Vincent Cagnard (Apache::Filter support (although it was re-done))
 Owen Stenseth (output filtering single point of exit, and others)
 Honza Pazdziora (many small patches)
+Brian Wheeler (Filter fixes, XPathScript improvements, AxAddDynamicProcessor)
 
 If I've missed anyone, please correct this list as my memory
 is poor.

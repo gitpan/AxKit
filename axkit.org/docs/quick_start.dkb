@@ -275,7 +275,7 @@ $t->{'species'}{testcode} = sub {
     <table bgcolor="eeeeee" border="1">
     <tr><th>Species</th><th>No. of Humps</th><th>Disposition</th></tr>
 
-    <%= apply_templates('/dromedaries/species'); %>
+    <%= apply_templates('/dromedaries/species') %>
 
     </table>
 </body>

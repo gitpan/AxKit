@@ -38,13 +38,7 @@ make test install
 				<title>I install AxKit and Apache segfaults when it
 				starts</title>
 				<para>
-					This can be a result of several problems. First, it might be
-					that AxKit has some problems with XML::Parser 2.28 and 2.29, although
-					these usually don't manifest themselves until a page is
-					requested.
-				</para>
-				<para>
-					The more usual cause is currently a conflict between differing
+					The usual cause is currently a conflict between differing
 					versions of expat that are being loaded at the same time. The
 					problem is too deep to go into in a simple FAQ (although I'll
 					try and find a link to an explanation in a future version of
@@ -56,12 +50,21 @@ make test install
 					arounds, and I'm trying to bring the community of developers
 					together to solve this problem permanently.
 				</para>
+        <para>
+        First of all, to find out if this is your problem, execute the
+        command: <code>strings /path/to/apache/bin/httpd | grep -i
+        XML</code>. If there are any results at all then you are going
+        to see these segfaults until you recompile Apache (and probably
+        mod_perl too)
+        </para>
 				<para>
 					To compile Apache without expat, simply supply the option:
 					<pre>RULE_EXPAT=NO</pre>
-					to <code>configure</code> when you build Apache. Alternatively if you build
+					to <code>./configure</code> when you build Apache. Alternatively if you build
 					Apache with mod_perl (with mod_perl's DO_HTTPD option) it will
-					supply this option automatically for you.
+					supply this option automatically for you. See also the AxKit
+          INSTALL file for a recipe for building Apache and mod_perl
+          together that works.
 				</para>
 				<para>
 					If none of this helps, then you may be having platform
@@ -106,6 +109,23 @@ make test install</pre>
 				</para>
 			</subsection>
 
+			<subsection>
+				<title>Can I run AxKit on Windows?</title>
+				<para>
+				Yes, although it is not considered a primary platform, so you
+        are mostly on your own with this. You can install it via 
+        ActiveState's PPM as follows:
+        <pre>
+ppm install 
+ http://theoryx5.uwinnipeg.ca/ppmpackages/mod_perl-1.25_1.3.17-axkit.ppd
+        </pre>
+        Note that will install mod_perl too. You can install it without
+        mod_perl using the AxKit.ppd package at the same location. If
+        you have further questions, please contact the AxKit Users <ulink 
+        url="/mailinglist.xml">mailing list</ulink>.
+				</para>
+			</subsection>
+      
 			<subsection>
 				<title>Should I ever run with scissors?</title>
 				<para>

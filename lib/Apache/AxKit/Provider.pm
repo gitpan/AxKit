@@ -1,4 +1,4 @@
-# $Id: Provider.pm,v 1.18 2001/01/15 16:56:27 matt Exp $
+# $Id: Provider.pm,v 1.21 2001/02/16 13:38:45 matt Exp $
 
 package Apache::AxKit::Provider;
 use strict;
@@ -18,7 +18,7 @@ sub new {
     
     $self->init(@_);
     
-#     AxKit::Debug(7, "Provider->new Count: " . ++$COUNT);
+    AxKit::add_depends($self->key());
     
     return $self;
 }
@@ -40,6 +40,7 @@ sub get_ext_ent_handler {
     my $self = shift;
     return sub {
         my ($e, $base, $sysid, $pubid) = @_;
+#        warn "ext_ent: base => $base, sys => $sysid, pub => $pubid\n";
         if ($sysid =~ /^http:/) {
             if ($pubid) {
                 return ''; # do not bring in public DTD's
@@ -65,9 +66,12 @@ sub get_ext_ent_handler {
 #        warn "File provider ext_ent_handler called with '$sysid'\n";
         my $provider = Apache::AxKit::Provider->new(
                 Apache->request,
-                uri => $sysid
+                uri => $sysid,
+#                rel => $self,
                 );
+#        warn "Got provider with key: ", $provider->key, "\n";
         my $str = $provider->get_strref;
+#        warn "Returning string with length: ", length($$str), "\n";
         return $$str;
     };
 }
@@ -81,7 +85,6 @@ sub get_styles {
     }
     
     my $styles = [];
-    my $ext_ents = [];
     my $vals = [];
     
     my $key = $self->key();
@@ -95,23 +98,15 @@ sub get_styles {
     AxKit::Debug(4, "get_styles: creating XML::Parser");
     
     my $xml_parser = XML::Parser->new(
-                ParseParamEnt => 1, 
-                ErrorContext => 2,
-                Namespaces => 1,
-                );
-    $xml_parser->setHandlers(
+            Namespaces => 1,
+            ErrorContext => 2,
+            Handlers => {
                 Start => \&parse_start,
                 Doctype => \&parse_dtd,
                 Proc => \&parse_pi,
-                Entity => \&parse_entity_decl,
-                );
+            },
+        );
 
-    if (my $entity_handler = $self->get_ext_ent_handler()) {
-        $xml_parser->setHandlers(
-				 ExternEnt => $entity_handler,
-				);
-    }
-    
     my $to_parse = try { 
         $self->get_fh();
     } catch Error with {
@@ -124,7 +119,6 @@ sub get_styles {
                 $to_parse,
                 XMLStyle_preferred => $pref_style,
                 XMLStyle_style => $styles,
-                XMLStyle_ext_ents => $ext_ents,
                 XMLStyle_vals => $vals,
                 XMLStyle_style_screen => [],
                 XMLStyle_media => $media,
@@ -141,14 +135,14 @@ sub get_styles {
     };
         
     AxKit::Debug(4, "get_styles: parse returned successfully");
-
+    
     # Let GetMatchingProcessors to process the @$styles array
     my @styles = $AxKit::Cfg->GetMatchingProcessors($media,
-		$pref_style, @$vals[0 .. 2], $styles);
+		$pref_style, @$vals[0 .. 2], $styles, $self);
     
     if (!@styles) {
         throw Apache::AxKit::Exception::Declined(
-                -text => "No styles defined for '$key'"
+                reason => "No styles defined for '$key'"
                 );
     }
     
@@ -179,7 +173,7 @@ sub get_styles {
         };
     }
     
-    return \@styles, $ext_ents;
+    return \@styles;
 }
 
 sub parse_start {
@@ -188,14 +182,11 @@ sub parse_start {
     # use James Clark's universal name format
     $e->{XMLStyle_vals}[2] = $ns ? "{$ns}$el" : $el;
     
-#    warn "styles: ", scalar @{$e->{XMLStyle_style_screen_persistant}}, "\n";
-    
     if (!@{$e->{XMLStyle_style}} && !$e->{XMLStyle_style_persistant}) {
         if ($e->{XMLStyle_style_screen_persistant}) {
             push @{$e->{XMLStyle_style}}, @{$e->{XMLStyle_style_screen_persistant}};
         }
         if (@{$e->{XMLStyle_style_screen}}) {
-    #        warn "Matching style for media ", $e->{XMLStyle_media}, " not found. Using screen media stylesheets instead\n";
             push @{$e->{XMLStyle_style}}, @{$e->{XMLStyle_style_screen}};
         }
     }
@@ -204,16 +195,6 @@ sub parse_start {
     }
     
     die "OK\n";
-}
-
-sub parse_entity_decl {
-    my $e = shift;
-    my ($name, $val, $sysid, $pubid, $ndata) = @_;
-#    warn "external entity: '$sysid'\n";
-    if (!defined $val) {
-        # external entity - save so the cache gets done properly!
-        push @{$e->{XMLStyle_ext_ents}}, $sysid;
-    }
 }
 
 sub parse_dtd {
@@ -379,11 +360,9 @@ Return the last modification time in days before the current time.
 
 =head2 get_styles()
 
-Extract the stylesheets and external entities from the XML resource. Should
-return a list of ($styles, $ext_ents). Both are array refs, the style
-entries are hashes refs with required keys 'href' and 'type'. The external
-entities entries are scalars containing the system identifier of the 
-external entity.
+Extract the stylesheets from the XML resource. Should return an array
+ref of styles. The style entries are hashes refs with required keys
+'href' and 'type'.
 
 =head2 get_fh()
 
