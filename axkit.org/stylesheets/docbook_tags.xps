@@ -84,8 +84,14 @@ $t->{'itemizedlist'}{post} = '</ul>';
 $t->{'orderedlist'}{pre} = '<ol>';
 $t->{'orderedlist'}{post} = '</ol>';
 
-$t->{'listitem'}{pre} = '<li>';
-$t->{'listitem'}{post} = '</li>';
+$t->{'listitem'}{testcode} = sub {
+    my ($node, $t2) = @_;
+    $t2->{pre} = '<li>';
+    $t2->{post} = '</li>';
+    
+    return 1;
+#    return '*[1]/node() | *[position() > 1]';
+};
 
 $t->{'procedure'}{pre} = '<ol>';
 $t->{'procedure'}{post} = '</ol>';

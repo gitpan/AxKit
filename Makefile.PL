@@ -1,12 +1,10 @@
-# $Id: Makefile.PL,v 1.29 2001/02/16 19:16:58 matt Exp $
+# $Id: Makefile.PL,v 1.45 2001/06/05 09:28:45 matt Exp $
 
 package AxKit;
 # file Makefile.PL
 
 use ExtUtils::MakeMaker;
 
-use Apache::ExtUtils qw/command_table/;
-use Apache::src ();
 use Text::Wrap ();
 use Cwd;
 
@@ -35,7 +33,7 @@ while($_ = shift @ARGV) {
     $config{$k} = $v;
 }
 
-my $DEBUG = delete $config{DEBUG};
+$DEBUG = delete $config{DEBUG};
 ######################################################
 
 if (!have_module('mod_perl', '1.17')) {
@@ -47,42 +45,8 @@ You can download mod_perl from http://perl.apache.org/
 
 DEATH
 }
-else {
-    unless (have_module('mod_perl', '1.24_01')) {
-        rename("AxKit.pm", "AxKit.pm.old") || die "Can't fixup AxKit.pm: $!";
-        open(FH, "AxKit.pm.old") || die "Can't open AxKit.pm.old: $!";
-        open(WRFH, ">AxKit.pm") || die "Can't write AxKit.pm: $!";
-        my $nowrite = 0;
-        while(<FH>) {
-            s/^sub DIR_MERGE(.*)$/sub NO_DIR_MERGE$1 # renamed from DIR_MERGE due to mem leaks/m;
-            print WRFH $_;
-        }
-        close FH;
-        close WRFH;
-        rm_f("AxKit.pm.old");
-    }
-}
 
-# delete returns the value, which would be 1 if enabled.
-if (delete $config{NO_DIRECTIVES}) { 
-    rename("AxKit.pm", "AxKit.pm.old") || die "Can't fixup AxKit.pm: $!";
-    open(FH, "AxKit.pm.old") || die "Can't open AxKit.pm.old: $!";
-    open(WRFH, ">AxKit.pm") || die "Can't write AxKit.pm: $!";
-    my $nowrite = 0;
-    while(<FH>) {
-        if (!$nowrite && $_ =~ /^if \(\$ENV{MOD_PERL}\) \{/) {
-            $nowrite = 1;
-        }
-        print WRFH $_ unless $nowrite;
-        if ($nowrite && $_ =~ /^}/) {
-            $nowrite = 0;
-        }
-    }
-    close FH;
-    close WRFH;
-    rm_f("AxKit.pm.old");
-    rename("AxKit.xs", "AxKit.xs.unused") || die "Can't remove (rename) AxKit.xs: $!";
-}
+require Apache::src;
 
 my $install_expat = 0;
 
@@ -148,6 +112,86 @@ XSLT processor to work. You don't have to install it,
 but you won't be able to use Apache::AxKit::Language::Sablot without it.
 REASON
         
+test_module('XML::LibXSLT', '0.99', <<"REASON");
+XML::LibXSLT 0.96 or higher is required for our LibXSLT 
+XSLT processor to work. You don't have to install it, 
+but you won't be able to use Apache::AxKit::Language::LibXSLT without it.
+REASON
+
+my $is_Win32 = ($^O =~ /Win32/);
+
+eval {
+    print "running xml2-config... ";
+    my $libs = backtick('xml2-config --libs');
+    $config{LIBS} .= " $libs" if $libs;
+    my $inc = backtick('xml2-config --cflags');
+    $config{INC} .= " $inc" if $inc;
+    print "ok\n";
+};
+if ($@) {
+    print "failed (will try to find libxml2 anyway)\n";
+}
+
+if (have_library('xml2')) {
+    $config{DEFINE} .= ' -DHAVE_LIBXML2';
+    $config{LIBS} .= ' -lxml2 -lz';
+}
+else {
+    my $apache;
+    
+    print <<EOT;
+
+We will now check if your apache has XML symbols in it, to be sure that
+AxKit will work under your version of Apache. If you do not wish to 
+perform this check, please just enter 0 (zero) below.
+
+EOT
+
+    while (!is_apache($apache)) {
+        $apache = prompt("Path to apache httpd?", "/usr/local/apache/bin/httpd");
+        last if $apache eq "0";
+    }
+    
+    if ($apache ne "0") {
+        print "checking for expat symbols in apache... ";
+        eval {
+            my $symbols = backtick("grep -i xml $apache");
+            if ($symbols) {
+                die wrap(<<DEATH);
+Your Apache has XML symbols in it. This means it will segfault when you
+try and use it with XML::Parser. Your options are to either recompile
+Apache, or to install libxml2 from http://www.xmlsoft.org and re-install
+AxKit. However if you do not recompile Apache without expat/xml support,
+you will not be able to use XPathScript, XSP, or any other modules that
+make use of XML::Parser. Please see the AxKit FAQ on http://axkit.org
+for more details.
+DEATH
+            }
+        };
+        print "ok\n";
+    }
+}
+        
+if ($is_Win32) {
+    if (!have_module('mod_perl', '1.24_01')) {
+        die wrap(<<DEATH);
+AxKit on Win32 requires mod_perl greater than 1.24_01 in order to 
+get the paths to the Apache and mod_perl build directories.
+
+DEATH
+    }
+    
+    use Apache::MyConfig;
+    $config{INC} .= qq{ -I"$Apache::MyConfig::Setup{MODPERL_INC}/../.." }
+        . qq{ -I"$Apache::MyConfig::Setup{APACHE_INC}" }
+        . qq{ -I"$Apache::MyConfig::Setup{APACHE_INC}/../os/win32" };
+    $config{CCFLAGS} = $Config{ccflags} . 
+        ' -D_WINSOCK2API_ -D_MSWSOCK_ -D_INC_SIGNAL -D_INC_MALLOC ';
+    $config{LIBS} = 
+        qq{ -L"$Apache::MyConfig::Setup{APACHE_LIB}" -lApacheCore } .
+        qq{ -L"$Apache::MyConfig::Setup{MODPERL_LIB}" -lmod_perl};
+}
+
 $config{INC} .= ' ' . Apache::src->new->inc;
 
 if ($DEBUG) {
@@ -161,13 +205,16 @@ foreach my $k (keys %config) {
     push @ARGV, "$k=$config{$k}";
 }
 
+%config = () if $] > 5.00560; 
+
 WriteMakefile(
         'NAME' => __PACKAGE__,
         'VERSION_FROM' => 'AxKit.pm',
         'AUTHOR' => 'AxKit.com Limited - http://axkit.com/',
         'ABSTRACT' => 'AxKit is an XML Application Server for mod_perl',
         'DIR' => [ @DIRS ],
-#        %config,
+        'OBJECT' => '$(O_FILES)',
+        %config,
 );
 
 #################################################################
@@ -176,11 +223,14 @@ WriteMakefile(
 
 use Config;
 use Symbol;
+use File::Spec;
 
-use vars qw/$LINK/;
+use vars qw/$LINK $DEVNULL/;
 
 BEGIN {
-  $LINK = "$Config{ld} -o conftest $Config{ccflags} -I$Config{incpath} %s $Config{ldflags} conftest.c $Config{libs} %s %s";
+  $LINK = "$Config{cc} $Config{ccdlflags} -o conftest $Config{ccflags} -I$Config{incpath} $Config{ldflags} %s %s conftest.c $Config{libs} %s";
+  $DEVNULL = eval { File::Spec->devnull };
+  if ($@) { $DEVNULL = "/dev/null" }
 }
 
 sub rm_f {
@@ -206,8 +256,8 @@ sub xsystem {
     }
     open(OLDOUT, ">&STDOUT");
     open(OLDERR, ">&STDERR");
-    open(STDOUT, ">/dev/null");
-    open(STDERR, ">/dev/null");
+    open(STDOUT, ">$DEVNULL");
+    open(STDERR, ">$DEVNULL");
     my $retval = system($command);
     open(STDOUT, ">&OLDOUT");
     open(STDERR, ">&OLDERR");
@@ -230,8 +280,8 @@ sub backtick {
     }
     open(OLDOUT, ">&STDOUT");
     open(OLDERR, ">&STDERR");
-    open(STDOUT, ">/dev/null");
-    open(STDERR, ">/dev/null");
+    open(STDOUT, ">$DEVNULL");
+    open(STDERR, ">$DEVNULL");
     my $results = `$command`;
     my $retval = $?;
     open(STDOUT, ">&OLDOUT");
@@ -273,14 +323,14 @@ sub have_library {
 #include <windows.h>
 #include <winsock.h>
 int main() { return 0; }
-int t() { #{func}(); return 0; }
+int t() { ${func}(); return 0; }
 SRC
             unless ($result) {
                 $result = try_link(<<"SRC", $libs);
 #include <windows.h>
 #include <winsock.h>
 int main() { return 0; }
-int t() { void ((*p)()); p = (void ((*)()))#{func}; return 0; }
+int t() { void ((*p)()); p = (void ((*)()))${func}; return 0; }
 SRC
             }
         }
@@ -356,15 +406,16 @@ INSTALL
     return $install;
 }
 
-sub MY::clean {
-    package MY;
-    my $self = shift;
-    
-    my $clean = $self->SUPER::clean(@_);
-    
-    $clean .= <<EOF;
-\t-mv AxKit.xs.unused AxKit.xs \$(DEV_NULL)
-EOF
-
-    return $clean;
+sub is_apache {
+    my $path = shift;
+    return unless $path;
+    if (-e $path && -x _) {
+        my $version = eval { backtick("$path -v") };
+        if (!$@) {
+            $version =~ /Server version: Apache/
+                && return 1;
+        }
+    }
+    warn("No apache httpd found at $path\n");
+    return;
 }

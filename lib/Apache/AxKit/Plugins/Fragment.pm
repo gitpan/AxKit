@@ -1,4 +1,4 @@
-# $Id: Fragment.pm,v 1.3 2000/06/12 16:19:19 matt Exp $
+# $Id: Fragment.pm,v 1.5 2001/05/12 10:09:48 matt Exp $
 
 package Apache::AxKit::Plugins::Fragment;
 
@@ -64,11 +64,11 @@ sub handler {
 	
 	if ($results->isa('XML::XPath::NodeSet')) {
 #		warn "setting xml_string to a nodeset size: ", $results->size, "\n";
-		$r->notes('xml_string', "<$toptag>" . join('', map { $_->toString } $results->get_nodelist) . "</$toptag>");
+		$r->pnotes('xml_string', "<$toptag>" . join('', map { $_->toString } $results->get_nodelist) . "</$toptag>");
 	}
 	else {
 #		warn "setting xml_string to a value\n";
-		$r->notes('xml_string', "<$toptag>" . $results->value . "</$toptag>");
+		$r->pnotes('xml_string', "<$toptag>" . $results->value . "</$toptag>");
 	}
 	
 	return OK;
@@ -80,6 +80,11 @@ __END__
 =head1 NAME
 
 Apache::AxKit::Plugins::Fragment - Fragment plugin
+
+=head1 SYNOPSIS
+
+	PerlHandler Apache::AxKit::Plugins::Fragment \
+			AxKit
 
 =head1 DESCRIPTION
 

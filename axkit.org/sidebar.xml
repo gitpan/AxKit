@@ -14,6 +14,10 @@
 			<sb:title>Installation</sb:title>
 			<sb:url>/install.xml</sb:url>
 		</sb:item>
+    <sb:item>
+      <sb:title>Daily Churn</sb:title>
+      <sb:url>/irclog.xml</sb:url>
+    </sb:item>
 	</sb:section>
 	
 	<sb:section>
@@ -29,6 +33,10 @@
 		<sb:item>
 			<sb:title>Mailing List</sb:title>
 			<sb:url>/mailinglist.xml</sb:url>
+		</sb:item>
+		<sb:item>
+			<sb:title>Contribute</sb:title>
+			<sb:url>/contribute.xml</sb:url>
 		</sb:item>
 		<sb:item>
 			<sb:title>Support</sb:title>

@@ -1,4 +1,4 @@
-/* $Id: CharsetConv.xs,v 1.4 2001/01/19 14:46:35 matt Exp $ */
+/* $Id: CharsetConv.xs,v 1.5 2001/05/25 16:14:11 matt Exp $ */
 /* XSUB for Perl module Apache::AxKit::CharsetConv  */
 /* Originally from Text::Iconv distribution, */
 /* all credits to Michael Piotrowski - this is a verbatim copy */
@@ -159,12 +159,12 @@ new(self, fromcode, tocode)
       switch(errno)
       {
 	 case ENOMEM:
-	    croak("Insufficient memory to initialize conversion: %s", 
-		  strerror(errno));
+	    croak("Insufficient memory to initialize conversion: %s -> %s", 
+                  fromcode, tocode);
 	 case EINVAL:
-	    croak("Unsupported conversion: %s", strerror(errno));
+	    croak("Unsupported conversion: %s -> %s", fromcode, tocode);
 	 default:
-	    croak("Couldn't initialize conversion: %s", strerror(errno));
+	    croak("Couldn't initialize conversion: %s -> %s", fromcode, tocode);
       }
    }
    OUTPUT:

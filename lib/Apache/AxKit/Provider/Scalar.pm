@@ -1,4 +1,4 @@
-# $Id: Scalar.pm,v 1.5 2000/10/02 17:36:20 matt Exp $
+# $Id: Scalar.pm,v 1.6 2001/04/26 21:37:37 matt Exp $
 
 package Apache::AxKit::Provider::Scalar;
 use strict;
@@ -9,10 +9,7 @@ use Apache;
 use Apache::Log;
 use Apache::AxKit::Exception;
 use Apache::AxKit::Provider;
-use Apache::MimeXML;
-use File::Basename;
-use XML::Parser;
-use Fcntl qw(:DEFAULT);
+use AxKit;
 
 sub new {
     my $class = shift;
@@ -47,13 +44,9 @@ sub exists {
     return 1;
 }
 
-use vars qw/$mtime/;
-
-$mtime = 0;
-
 sub mtime {
     my $self = shift;
-    return --$mtime; # brand new (and getting newer by the second...)
+    return time(); # always fresh
 }
 
 sub get_fh {

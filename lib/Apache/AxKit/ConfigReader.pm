@@ -1,10 +1,8 @@
-# $Id: ConfigReader.pm,v 1.24 2001/01/31 14:51:30 matt Exp $
+# $Id: ConfigReader.pm,v 1.33 2001/05/29 10:20:14 matt Exp $
 
 package Apache::AxKit::ConfigReader;
 
 use strict;
-
-use Apache::ModuleConfig ();
 
 # use vars qw/$COUNT/;
 
@@ -12,18 +10,22 @@ sub new {
     my $class = shift;
     my $r = shift;
     
-    my $cfg = Apache::ModuleConfig->get($r, 'AxKit') || {};
+    my $cfg = AxKit::get_config($r) || {};
+    
+#     use Apache::Peek 'Dump';
+#     Dump($cfg);
+#     use Data::Dumper;
+#     $Data::Dumper::Indent = 1;
+#     warn("Cfg: ", Data::Dumper->Dump([$cfg], ['cfg']));
     
     if (my $alternate = $cfg->{ConfigReader} || $r->dir_config('AxConfigReader')) {
         $class = $alternate;
-        my $pkg = $class;
-        $pkg =~ s/::/\//g;
-        require "$pkg.pm";
+        AxKit::load_module($class);
     }
     
 #     AxKit::Debug(7, "ConfigReader->new count: ".++$COUNT);
     
-    return bless { apache => $r, cfg => $cfg }, $class;
+    return bless { apache => $r, cfg => $cfg, output_charset_ok => 0 }, $class;
 }
 
 # sub DESTROY {
@@ -66,6 +68,22 @@ sub ProviderClass {
     return 'Apache::AxKit::Provider::File';
 }
 
+sub StyleProviderClass {
+    my $self = shift;
+    if (my $alternate = $self->{cfg}{StyleProvider} || 
+            $self->{apache}->dir_config('AxStyleProvider')) {
+        return $alternate;
+    }
+    
+    return 'Apache::AxKit::Provider::File';
+}
+
+sub NoCache {
+    my $self = shift;
+    return $self->{cfg}{NoCache} || 
+            $self->{apache}->dir_config('AxNoCache');
+}
+
 sub PreferredStyle {
     my $self = shift;
     
@@ -105,9 +123,35 @@ sub DebugLevel {
             0;
 }
 
+sub StackTrace {
+    my $self = shift;
+    return $self->{cfg}{StackTrace} ||
+            $self->{apache}->dir_config('AxStackTrace') ||
+            0;
+}
+
+sub LogDeclines {
+    my $self = shift;
+    return $self->{cfg}{LogDeclines} ||
+            $self->{apache}->dir_config('AxLogDeclines') ||
+            0;
+}
+
+sub AllowOutputCharset {
+    my $self = shift;
+    
+    my $oldval = $self->{output_charset_ok};
+    if (@_) {
+        $self->{output_charset_ok} = shift;
+    }
+    return $oldval;
+}
+    
 sub OutputCharset {
     my $self = shift;
 
+    return unless $self->{output_charset_ok};
+    
 #    warn "OutputCharset\n";
     unless ($self->{cfg}{TranslateOutput} ||
             $self->{apache}->dir_config('AxTranslateOutput')) {
@@ -250,26 +294,33 @@ sub GetMatchingProcessors {
     
     for my $directive (@$list) {
         my $type = $directive->[0];
+        my $style_hash = {
+                    type => $directive->[1], 
+                    href => $directive->[2],
+                    title => $style,
+                };
         if ($type eq 'NORMAL') {
-            push @results, { type => $directive->[1], href => $directive->[2],
-                    title => $style };
+            push @results, $style_hash;
         }
         elsif ($type eq 'DocType') {
             if ($doctype eq $directive->[3]) {
-                push @results, { type => $directive->[1], href => $directive->[2],
-                    title => $style };
+                push @results, $style_hash;
             }
         }
         elsif ($type eq 'DTD') {
             if ($dtd eq $directive->[3]) {
-                push @results, { type => $directive->[1], href => $directive->[2],
-                    title => $style };
+                push @results, $style_hash;
             }
         }
         elsif ($type eq 'Root') {
             if ($root eq $directive->[3]) {
-                push @results, { type => $directive->[1], href => $directive->[2],
-                    title => $style };
+                push @results, $style_hash;
+            }
+        }
+        elsif ($type eq 'URI') {
+            my $uri = $provider->apache_request->uri;
+            if ($uri =~ /$directive->[3]/) {
+                push @results, $style_hash;
             }
         }
         else {
@@ -280,13 +331,11 @@ sub GetMatchingProcessors {
     # list any dynamically chosen stylesheets here
     $list = $self->{cfg}{DynamicProcessors};
     foreach my $package (@$list) {
-      my($filename)=$package;
-      $filename=~s|::|/|g;
-      require "$filename.pm";
-      no strict 'refs';
-      my($handler) = $package.'::handler';
-      push @results, &$handler($provider,$media, $style, 
-                               $doctype, $dtd, $root);
+        AxKit::load_module($package);
+        no strict 'refs';
+        my($handler) = $package.'::handler';
+        push @results, $handler->($provider, $media, $style, 
+                                  $doctype, $dtd, $root);
     }   
     
     return @results;

@@ -1,0 +1,9 @@
+<%
+sub spacer {
+	my ($width, $height, $align) = @_;
+	return '<img src="/img/pix.gif" 
+	width="'.$width.'" height="'.$height.'"' . ($align ? " align=\"$align\"" : "") .
+ ' border="0" vspace="0" hspace="0" 
+	alt="" />';
+}
+%>

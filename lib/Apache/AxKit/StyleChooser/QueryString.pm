@@ -1,4 +1,4 @@
-# $Id: QueryString.pm,v 1.6 2000/12/06 14:11:54 matt Exp $
+# $Id: QueryString.pm,v 1.7 2001/04/30 21:13:48 matt Exp $
 
 package Apache::AxKit::StyleChooser::QueryString;
 
@@ -21,6 +21,11 @@ __END__
 =head1 NAME
 
 Apache::AxKit::StyleChooser::QueryString - Choose stylesheet using querystring
+
+=head1 SYNOPSIS
+
+	PerlHandler Apache::AxKit::StyleChooser::QueryString \
+			AxKit
 
 =head1 DESCRIPTION
 

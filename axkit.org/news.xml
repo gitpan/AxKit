@@ -22,53 +22,51 @@
       </image>
 
 <item>
-<title>Avalanche of XML Query drafts</title>
-<link>http://www.xmlhack.com/read.php?item=1072</link>
-<description>Jonathan Robie announced the release of five W3C Working Drafts related to XML Query/XQuery work.</description>
-<category>Databases</category>
-<category>W3C</category>
-</item>
-<item>
-<title>Requirements for XSLT, XPath 2.0</title>
-<link>http://www.xmlhack.com/read.php?item=1071</link>
-<description>While battles rage over the future of XSLT 1.1, the W3C has moved ahead with requirements documents for XSLT 2.0 and XPath 2.0.</description>
-<category>XSLT</category>
-<category>W3C</category>
-</item>
-<item>
-<title>James Clark updates TREX sample implementation</title>
-<link>http://www.xmlhack.com/read.php?item=1070</link>
-<description>James Clark has 
-        announced an update to the sample
-        Java implementation he created for his TREX
-        validation language.</description>
+<title>OASIS announces RELAX, TREX to form RELAX NG</title>
+<link>http://www.xmlhack.com/read.php?item=1245</link>
+<description>OASIS announced the renaming of the TREX technical committee to RELAX NG, reflecting "their decision to integrate TREX and RELAX in order to collaborate on a unified lightweight specification for validating XML-based languages."</description>
 <category>Schemas</category>
-<category>Tools</category>
+<category>OASIS</category>
 </item>
 <item>
-<title>PSGML mode for Emacs: v1.2.2 released</title>
-<link>http://www.xmlhack.com/read.php?item=1069</link>
-<description>Lennart Staflin has announced the release of v1.2.2 of
-        PSGML,
-        an Emacs major mode for editing XML and SGML documents.</description>
-<category>Tools</category>
-<category>SGML/XML</category>
+<title>New drafts for URI processing on DNS</title>
+<link>http://www.xmlhack.com/read.php?item=1244</link>
+<description>The IETF released two new drafts of A DDDS Database Using The Domain Name System and Assignment Procedures for the URI Resolution using DNS.</description>
+<category>IETF</category>
+<category>Namespaces</category>
 </item>
 <item>
-<title>XML Data Management Benchmark Unveiled</title>
-<link>http://www.xmlhack.com/read.php?item=1068</link>
-<description>Timo Boehme of the database group at the University of Leipzig has announced XMach-1,
-a scaleable, multi-user benchmark for XML data management systems.
-</description>
-<category>Databases</category>
-<category>Tools</category>
-</item>
-<item>
-<title>XML Fragment Interchange resurrected as CR</title>
-<link>http://www.xmlhack.com/read.php?item=1067</link>
-<description>Over nineteen months since its previous inception as a Working Draft, XML Fragment Interchange has become a W3C Candidate Recommendation.</description>
-<category>XML</category>
+<title>XHTML 1.1 reaches Recommendation</title>
+<link>http://www.xmlhack.com/read.php?item=1243</link>
+<description>The W3C has released XHTML 1.1 as a W3C Recommendation, as well as a new XHTML module, Ruby Annotation.</description>
+<category>XHTML</category>
 <category>W3C</category>
+</item>
+<item>
+<title>W3C workshop on XML key management</title>
+<link>http://www.xmlhack.com/read.php?item=1242</link>
+<description>The W3C is holding a workshop
+on XML key management in Redwood City, California, on 19 July 2001, to
+consider the requirements for simple key resolution and trust services for XML
+security applications.</description>
+<category>W3C</category>
+<category>E-Commerce</category>
+</item>
+<item>
+<title>SVG renderer for UML diagrams</title>
+<link>http://www.xmlhack.com/read.php?item=1241</link>
+<description>Christian Nentwich has created BOX, a tool that
+takes UML diagrams in XMI format and renders them in either SVG or Microsoft's
+VML format.</description>
+<category>SVG</category>
+<category>Tools</category>
+</item>
+<item>
+<title>New Perl XML modules</title>
+<link>http://www.xmlhack.com/read.php?item=1240</link>
+<description>Matt Sergeant has released several new Perl/XML modules: XML::LibXML,
+XML::Handler::HTMLWriter and XML::Filter::Base.</description>
+<category>Perl</category>
 </item>
 
 </channel>

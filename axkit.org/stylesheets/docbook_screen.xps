@@ -50,20 +50,20 @@ $t->{'xref'}{testcode} = sub {
 
 <!--#include file="body_tag_html.xps"-->
 
-<table width='100%' border='0' cellspacing='0' cellpadding='0'>
+<table width="100%" border="0" cellspacing="0" cellpadding="0">
 <tr>
 <!-- navbar -->
-<td align='left' valign='top' width='172'>
+<td align="left" valign="top" width="172">
 
 <!--#include file="navbar_html.xps"-->
 
 </td>
 
 <!-- whitespace -->
-<td align='left' valign='top' width='10'><%= spacer(10,1) %></td>
+<td align="left" valign="top" width="10"><%= spacer(10,1) %></td>
 
 <!-- content -->
-<td align='left' valign='top' style="font-size: small;">
+<td align="left" valign="top" style="font-size: small;">
 
 <%
 if (!$sect) {
@@ -147,7 +147,7 @@ Next
 </td>
 
 <!-- whitespace -->
-<td align='left' valign='top' width='10'><%= spacer(10,1) %></td>
+<td align="left" valign="top" width="10"><%= spacer(10,1) %></td>
 
 </tr>
 </table>

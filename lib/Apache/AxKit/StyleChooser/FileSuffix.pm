@@ -1,4 +1,4 @@
-# $Id: FileSuffix.pm,v 1.6 2001/01/14 13:18:07 matt Exp $
+# $Id: FileSuffix.pm,v 1.7 2001/04/30 21:13:48 matt Exp $
 
 package Apache::AxKit::StyleChooser::FileSuffix;
 
@@ -26,6 +26,12 @@ __END__
 =head1 NAME
 
 Apache::AxKit::StyleChooser::FileSuffix - Choose stylesheet using file suffix
+
+=head1 SYNOPSIS
+
+	PerlTypeHandler Apache::AxKit::StyleChooser::FileSuffix
+	SetHandler perl-script
+	PerlHandler AxKit
 
 =head1 DESCRIPTION
 

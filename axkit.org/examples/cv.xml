@@ -149,14 +149,14 @@
 			<dateto>Present</dateto>
 			<role>Lead Developer</role>
 			<details>
-				Lead developer on an NDA'd project that hopefully will
-				change the world ;-). This project involves nothing but
-				pure Perl, and mod_perl, developing to the highest
-				standards of object oriented, performance aware code.
-				Every aspect of Perl programming is being used: Database
-				access, installation, Object Orientation, Module design,
-				and lots of internet API's. The project is slated for release
-        in Q2 2001.
+        Developing a commercial Perl based Web Discussion system, with
+        Web, Email and NNTP interfaces. The project was a complete, from
+        scratch development that I personally designed, architected and
+        developed (with one further developer helping later). The
+        technologies used included Object Oriented (OO) Perl5, mod_perl,
+        DBI, MySQL, PostgreSQL, Oracle, Sybase, module design, Apache, multi
+        threaded kernel development, Email and NNTP message parsing 
+        (Internet RFC's 821, 977, 1341, 1641 and 2980), and much more.
 			</details>
 		</employee>
 		<employee>
@@ -314,6 +314,44 @@
   
   <speaking>
    <engagement>
+    <conference>O'Reilly Open Source Software Convention 2001, San
+    Diego</conference>
+    <talk>AxKit - XML Application Serving with mod_perl</talk>
+    <talk>mod_perl as an HTTP RPC Daemon</talk>
+    <talk>Exception Handling in mod_perl</talk>
+    <talk>Cross Database Perl Applications</talk>
+    <talk>Orchard: a new API for XML</talk>
+   </engagement>
+   <engagement>
+    <conference>Open Source Web Solutions 2001, Stockholm</conference>
+    <talk>Developing XML applications with Perl and AxKit</talk>
+    <talk>Building a web portal with XML and Perl</talk>
+   </engagement>
+   <engagement>
+    <conference>XML Dev Con 2001 New York</conference>
+    <talk>Building XML Based Web Sites with Open Source Tools</talk>
+   </engagement>
+   <engagement>
+    <conference>Apache Con 2001 San Jose</conference>
+    <talk>AxKit - the XML Application server for Apache</talk>
+   </engagement>
+   <engagement>
+    <conference>XML Dev Con Europe 2001 London</conference>
+    <talk>Building XML Based Web Sites with Open Source Tools</talk>
+   </engagement>
+   <engagement>
+    <conference>XML Dev Con Fall 2000 San Jose</conference>
+    <talk>Building XML Based Web Sites with Open Source Tools</talk>
+   </engagement>
+   <engagement>
+    <conference>XML Dev Con Fall 2000 San Jose</conference>
+    <talk>Generating XML From Form Data</talk>
+   </engagement>
+   <engagement>
+    <conference>Apache Con Europe 2000 London</conference>
+    <talk>AxKit - the XML Application server for Apache</talk>
+   </engagement>
+   <engagement>
     <conference>XML Dev Con 2000 New York</conference>
     <talk>Generating XML From Form Data</talk>
    </engagement>
@@ -321,22 +359,6 @@
     <conference>XML Dev Con 2000 New York</conference>
     <talk>XML Little Languages (compilation, optimisation and execution
     of XML languages)</talk>
-   </engagement>
-   <engagement>
-    <conference>Apache Con Europe 2000 London</conference>
-    <talk>AxKit - the XML Application server for Apache</talk>
-   </engagement>
-   <engagement>
-    <conference>XML Dev Con Fall 2000 San Jose</conference>
-    <talk>Building XML Based Web Sites with Open Source Tools</talk>
-   </engagement>
-   <engagement>
-    <conference>XML Dev Con Fall 2000 San Jose</conference>
-    <talk>Generating XML From Form Data</talk>
-   </engagement>
-   <engagement>
-    <conference>XML Dev Con Europe 2001 London</conference>
-    <talk>Building XML Based Web Sites with Open Source Tools</talk>
    </engagement>
   </speaking>
 

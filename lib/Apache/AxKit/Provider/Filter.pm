@@ -1,4 +1,4 @@
-# $Id: Filter.pm,v 1.10 2001/02/16 13:39:17 matt Exp $
+# $Id: Filter.pm,v 1.14 2001/06/01 11:12:54 matt Exp $
 
 package Apache::AxKit::Provider::Filter;
 use strict;
@@ -11,7 +11,7 @@ use Apache::Log;
 use Apache::AxKit::Exception;
 use Apache::AxKit::Provider;
 use Apache::AxKit::Provider::File;
-use Apache::MimeXML;
+use AxKit;
 use Apache::Constants;
 use File::Basename;
 
@@ -40,6 +40,7 @@ sub get_fh {
                 -text => "Can't get fh for Filter filehandle"
                 );
     }
+    return $self->SUPER::get_fh();
 }
 
 sub get_strref {
@@ -60,15 +61,19 @@ sub process {
     # always process this resource.
     chdir(dirname($xmlfile));
     return 1;
-}      
+}
 
-use vars qw/$mtime/;
+sub exists {
+    my $self = shift;
+    return 1 if $self->{filter_data};
+    return $self->SUPER::exists();
+}
 
-$mtime = 0;
+sub has_changed () { 1; }
 
 sub mtime {
     my $self = shift;
-    return --$mtime; # brand new (and getting newer by the second...)
+    return time(); # always fresh
 }
 
 1;

@@ -127,6 +127,16 @@ ppm install
 			</subsection>
       
 			<subsection>
+				<title>AxKit fails on looking up stylesheets</title>
+				<para>
+				If you get an error message in your log with "OK" in it, this
+        may be caused by having CGI::Carp, or some other module that
+        installs a $SIG{__DIE__} handler in a broken manner. Make sure
+        you don't have CGI::Carp in your startup.pl or any other place.
+				</para>
+			</subsection>
+      
+			<subsection>
 				<title>Should I ever run with scissors?</title>
 				<para>
 				No. You should never, ever run with scissors.

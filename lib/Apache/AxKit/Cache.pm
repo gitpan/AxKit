@@ -1,4 +1,4 @@
-# $Id: Cache.pm,v 1.18 2001/01/19 13:50:52 matt Exp $
+# $Id: Cache.pm,v 1.25 2001/05/29 10:20:34 matt Exp $
 
 package Apache::AxKit::Cache;
 use strict;
@@ -7,13 +7,20 @@ use Apache;
 use Apache::AxKit::Exception;
 use Digest::MD5 ();
 use Compress::Zlib;
-use Fcntl qw(:DEFAULT);
+use Fcntl qw(:flock O_RDWR O_CREAT O_RDONLY);
 
 # use vars qw/$COUNT/;
 
 sub new {
     my $class = shift;
     my ($r, $xmlfile, @extras) = @_;
+    
+    my $gzip = 0;
+    if (grep(/gzip/, @extras)) {
+        $gzip++;
+        @extras = grep(!/gzip/, @extras);
+    }
+    
     my $key = Digest::MD5->new->add(
             join(':', 
                 $r->get_server_name,
@@ -36,6 +43,9 @@ sub new {
             $no_cache = 1;
         }
     }
+    if ($AxKit::Cfg->NoCache()) {
+        $no_cache = 1;
+    }
     
     my $self = bless { 
         apache => $r,
@@ -43,6 +53,7 @@ sub new {
         no_cache => $no_cache, 
         dir => $cachedir,
         file => "$cachedir/$key",
+        gzip => $gzip,
 #        extras => \@extras,
         }, $class;
 
@@ -64,7 +75,7 @@ sub write {
     return if $self->{no_cache};
     my $fh = Apache->gensym();
     if (sysopen($fh, $self->{file}.'new', O_RDWR|O_CREAT)) {
-        flock($fh, 2);
+        flock($fh, LOCK_EX);
         seek($fh, 0, 0);
         truncate($fh, 0);
         print $fh $_[0];
@@ -76,11 +87,11 @@ sub write {
         throw Apache::AxKit::Exception::IO( -text => "Couldn't open cachefile for writing: $!");
     }
     
-    if ($AxKit::Cfg->GzipOutput) {
+    if ($self->{gzip} && $AxKit::Cfg->GzipOutput) {
         AxKit::Debug(3, 'Creating gzip output cache');
         my $fh = Apache->gensym();
         if (sysopen($fh, $self->{file}.'new.gz', O_RDWR|O_CREAT)) {
-            flock($fh, 2);
+            flock($fh, LOCK_EX);
             seek($fh, 0, 0);
             truncate($fh, 0);
             print $fh ''.Compress::Zlib::memGzip($_[0]);
@@ -99,10 +110,11 @@ sub read {
     return if $self->{no_cache};
     my $fh = Apache->gensym();
     if (sysopen($fh, $self->{file}, O_RDONLY)) {
-        flock($fh, 1);
+        flock($fh, LOCK_SH);
         local $/;
         return <$fh>;
-        # closes and unlocks automatically upon loss of scope
+        # close($fh);
+        # close unlocks automatically
     }
     return '';
 }
@@ -112,12 +124,45 @@ sub get_fh {
     return if $self->{no_cache};
     my $fh = Apache->gensym();
     if (sysopen($fh, $self->{file}, O_RDONLY)) {
-        flock($fh, 1);
+        flock($fh, LOCK_SH);
         return $fh;
     }
     else {
         throw Apache::AxKit::Exception::IO( -text => "Cannot open cache file for reading: $!");
     }
+}
+
+sub set_type {
+    my $self = shift;
+    return if $self->{no_cache};
+    
+    my $fh = Apache->gensym();
+    if (sysopen($fh, $self->{file}.'newtype', O_RDWR|O_CREAT)) {
+        flock($fh, LOCK_EX);
+        seek($fh, 0, 0);
+        truncate($fh, 0);
+        print $fh $_[0];
+        close $fh;
+        rename($self->{file}.'newtype', $self->{file}.'.type') 
+                || throw Apache::AxKit::Exception::IO( -text => "Couldn't rename type cachefile: $!");
+    }
+    else {
+        throw Apache::AxKit::Exception::IO( -text => "Couldn't open type cachefile for writing: $!");
+    }
+}
+
+sub get_type {
+    my $self = shift;
+    return if $self->{no_cache};
+    my $fh = Apache->gensym();
+    if (sysopen($fh, $self->{file}.'.type', O_RDONLY)) {
+        flock($fh, LOCK_SH);
+        local $/;
+        return <$fh>;
+        # close($fh);
+        # close unlocks automatically
+    }
+    return '';
 }
 
 sub deliver {
@@ -128,10 +173,18 @@ sub deliver {
     {
         # get content-type
         AxKit::Debug(4, "Cache: Getting content-type");
-        my $typecache = Apache::AxKit::Cache->new($r, $self->{key} . '.type');
-        if (my $type = $typecache->read()) {
+        if (my $type = $self->get_type) {
+            AxKit::Debug(4, "Cache: setting content-type: $type");
             $r->content_type($type);
         }
+    }
+    
+    if ($r->content_type eq 'changeme' && !$r->notes('axkit_passthru_type')) {
+        $AxKit::Cfg->AllowOutputCharset(1);
+        $r->content_type('text/html; charset=' . ($AxKit::Cfg->OutputCharset || "UTF-8"));
+    }
+    elsif ($r->notes('axkit_passthru_type')) {
+        $r->content_type($AxKit::OrigType);
     }
     
     my ($transformer, $doit) = AxKit::get_output_transformer();
@@ -149,7 +202,7 @@ sub deliver {
         $ENV{PATH_INFO} = '';
         $r->path_info('');
         
-        if ($AxKit::Cfg->DoGzip) {
+        if ($self->{gzip} && $AxKit::Cfg->DoGzip) {
             AxKit::Debug(4, 'Cache: Delivering gzipped output');
             $r->filename($self->{file}.'.gz');
         }
@@ -172,7 +225,13 @@ sub reset {
 sub mtime {
     my $self = shift;
     return $self->{mtime} if exists $self->{mtime};
-    return ($self->{mtime} = -M $self->{file});
+    return ($self->{mtime} = (stat($self->{file}))[9]);
+}
+
+sub has_changed {
+    my $self = shift;
+    my $time = shift;
+    return $self->mtime > $time;
 }
 
 sub exists {
@@ -198,7 +257,7 @@ sub no_cache {
 #         my $r = $self->{apache};
 #         my $fh = Apache->gensym();
 #         if (sysopen($fh, $self->{file}, O_RDONLY)) {
-#             flock($fh, 1);
+#             flock($fh, LOCK_SH);
 #             $r->send_http_header();
 #             while (<$fh>) {
 #                 $r->print($_);

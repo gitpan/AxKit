@@ -1,4 +1,4 @@
-# $Id: UserAgent.pm,v 1.2 2001/01/09 14:50:19 kip Exp $
+# $Id: UserAgent.pm,v 1.3 2001/04/30 21:13:48 matt Exp $
 
 package Apache::AxKit::StyleChooser::UserAgent;
 
@@ -38,6 +38,7 @@ __END__
 Apache::AxKit::StyleChooser::UserAgent - Choose stylesheets based on the user agent.
 
 =head1 SYNOPSIS
+
     In your .conf or .htaccess file(s):
     
     PerlHandler Apache::AxKit::StyleChooser::UserAgent \

@@ -1,4 +1,4 @@
-# $Id: File.pm,v 1.24 2001/02/16 13:39:17 matt Exp $
+# $Id: File.pm,v 1.28 2001/05/12 10:09:48 matt Exp $
 
 package Apache::AxKit::Provider::File;
 use strict;
@@ -8,12 +8,12 @@ use vars qw/@ISA/;
 use Apache;
 use Apache::Log;
 use Apache::Constants qw(HTTP_OK);
-use Apache::AxKit::Exception ':try';
+use Apache::AxKit::Exception;
 use Apache::AxKit::Provider;
 use Apache::MimeXML;
+use AxKit;
 use File::Basename;
-use XML::Parser;
-use Fcntl qw(:DEFAULT);
+use Fcntl qw(O_RDONLY LOCK_SH);
 
 sub init {
     my $self = shift;
@@ -31,7 +31,7 @@ sub init {
     if ($p{uri}) {
         my $r = $p{rel} ? $p{rel}->apache_request() : $self->apache_request();
         
-        AxKit::Debug(8, "File Provider looking up " . ($p{rel} ? "relative" : "") . " uri $p{uri}");
+        AxKit::Debug(8, "File Provider looking up" . ($p{rel} ? " relative" : "") . " uri $p{uri}");
 
         $self->{apache} = $r->lookup_uri($p{uri});
         my $status = $self->{apache}->status();
@@ -98,8 +98,9 @@ sub process {
     local $^W;
     if (($xmlfile =~ /\.xml$/i) ||
         ($self->{apache}->content_type() =~ /^(text|application)\/xml/) ||
-        $self->{apache}->notes('xml_string') ||
-        Apache::MimeXML::check_for_xml(try {$self->get_fh} catch Error with { ${ $self->get_strref } })) {
+        $self->{apache}->pnotes('xml_string') ||
+        Apache::MimeXML::check_for_xml(eval {$self->get_fh} || ${ $self->get_strref } )
+        ) {
             chdir(dirname($xmlfile));
             return 1;
     }
@@ -112,7 +113,7 @@ sub process {
 sub mtime {
     my $self = shift;
     return $self->{mtime} if exists $self->{mtime};
-    return ($self->{mtime} = -M $self->{file});
+    return ($self->{mtime} = (stat($self->{file}))[9]);
 }
 
 sub get_fh {
@@ -124,7 +125,8 @@ sub get_fh {
     chdir(dirname($filename));
     my $fh = Apache->gensym();
     if (sysopen($fh, $filename, O_RDONLY)) {
-        flock($fh, 1);
+        flock($fh, LOCK_SH);
+        # seek($fh, 0, 0);
         return $fh;
     }
     throw Apache::AxKit::Exception::IO( -text => "Can't open '$self->{file}': $!" );

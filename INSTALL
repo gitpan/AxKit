@@ -112,6 +112,49 @@ Makefile.PL:
     yet mod_perl will pick up the original copy compiled with
     directives, which is probably not what you want at all.
 
+CONFIGURATION
+
+In general you should read the AxKit Quick Start guide on
+http://axkit.org/, but for the impatient, read on.
+
+Once you have AxKit installed, you need to configure Apache to
+associate XML files with AxKit.  In doing so, there are a few
+considerations to make.  If your installation is only going to be
+handling XML files (ex: no PHP or cgi requests) then it's safe to
+include the following directives in your httpd.conf:
+
+    # note the PerlModule line has to be *outside* any
+    # <Files>, <Location>, <Directory> or <VirtualHost>
+    # sections.
+    PerlModule AxKit
+    
+    AxKit On
+    
+    AxCacheDir /tmp/axkit_cache/
+    AxAddStyleMap text/xsl Apache::AxKit::Language::LibXSLT
+
+If, however, you are using other content handler modules, such
+as PHP or mod_cgi to send content to the browser, you will more
+than likely want to wrap the previous configuration lines in 
+a <Files> or <Location> tag such as:
+
+    PerlModule AxKit
+    
+    <Files "*.xml">
+          AxKit On
+          ...
+    </Files>
+    
+Another symptom that you want to wrap your configuration in a conditional
+block is if you turn on debugging (see perldoc AxKit for AxDebugLevel),
+request a test cgi program, receive the plain text version of the test 
+cgi and see something similar to the following in your error logs:
+
+      [warn] [AxKit] : handler called for /cgi-bin/test-cgi
+      [warn] [AxKit] : checking if we process this resource
+      [warn] [AxKit] [DECLINED] '/usr/local/www/cgi-bin/test-cgi' not 
+      recognized as XML
+
 GETTING HELP
 
 If you are still stuck getting this to work, first of all, see the
@@ -131,8 +174,12 @@ However please note that installation problems regarding mod_perl,
 Sablotron, or Apache should be directed to the appropriate places
 for those modules, not to the axkit-users mailing list. Thank you.
 
+Please do not send email direct to matt@sergeant.org for problems
+with AxKit. Thank you.
+
 IF EVERYTHING WORKS
 
 Congratulations! You have a running AxKit. Now please visit
 http://axkit.org/docs/quick_start.dkb for a guide to your first pages
 with AxKit.
+

@@ -114,13 +114,18 @@ foreach my $employee (findnodes('/resume/experience/employee[position() <= 7]'))
 
 <b><font size="+1">Speaking Engagements</font></b>
 <hr width="100%">
+As one of the world's leading Perl and XML developers, I am invited to
+speak at many conferences each year. These are the talks I have given or
+will be giving in the coming year:
 <table>
 <%
+$t->{'talk'}{showtag} = 0;
+
 foreach my $engagement (findnodes('/resume/speaking/engagement')) {
 %>
 	<tr>
 		<td width="25"> </td>
-		<td><%= $engagement->findvalue('conference') %> <i>(<%= $engagement->findvalue('talk') %>)</i></td>
+		<td><%= $engagement->findvalue('conference') %> <i>(<%= join(', ', map { apply_templates($_) } $engagement->findnodes('talk')) %>)</i></td>
 	</tr>
 <%
 }

@@ -3,30 +3,30 @@
 $t->{'rss'}{testcode} = sub {
 	my ($node, $t) = @_;
 	
-	$t->{'pre'} = q(<table width='190' border='0' cellspacing='0' cellpadding='0'>
-            <tr><td align='center' bgcolor='#330066'>
-            <table width='100%' border='0' cellspacing='1' cellpadding='0'>
+	$t->{'pre'} = q(<table width="190" border="0" cellspacing="0" cellpadding="0">
+            <tr><td align="center" bgcolor="#330066">
+            <table width="100%" border="0" cellspacing="1" cellpadding="0">
             <tr>
-            <td align='center' bgcolor='#9966cc'><table border='0' cellpadding='0'
-			cellspacing='0'><tr><td bgcolor='#660099'>) . spacer(1,1) . q(</td><td align='center' bgcolor='white'><a href=');
+            <td align="center" bgcolor="#9966cc"><table border="0" cellpadding="0"
+			cellspacing="0"><tr><td bgcolor="#660099">) . spacer(1,1) . q(</td><td align="center" bgcolor="white"><a href=");
 	$t->{'pre'} .= findvalue('channel/image/link/text()', $node);
-	$t->{'pre'} .= q('><img src=');
+	$t->{'pre'} .= q("><img src=");
 				
 	$t->{'pre'} .= findvalue('channel/image/url/text()', $node);
 	
-	$t->{'pre'} .= q(' border='0' vspace='0' hspace='0' alt=');
+	$t->{'pre'} .= q(" border="0" vspace="0" hspace="0" alt=");
 	$t->{'pre'} .= findvalue('channel/image/title/text()', $node);
 	
-	$t->{'pre'} .= q(' /></a></td><td bgcolor='#660099'>) . spacer(1,1) . q(</td></tr></table></td>
+	$t->{'pre'} .= q(" /></a></td><td bgcolor="#660099">) . spacer(1,1) . q(</td></tr></table></td>
 
             </tr>
 
             <tr>
             <td>
 
-                <table width='100%' border='0' cellspacing='0' cellpadding='5' bgcolor='#ffffff'>
+                <table width="100%" border="0" cellspacing="0" cellpadding="5" bgcolor="#ffffff">
                 <tr>
-                <td align='left' valign='top'>);
+                <td align="left" valign="top">);
 	
 	$t->{'post'} = q(</td>
                 </tr>

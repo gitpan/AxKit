@@ -1,9 +1,10 @@
-# $Id: Provider.pm,v 1.21 2001/02/16 13:38:45 matt Exp $
+# $Id: Provider.pm,v 1.33 2001/06/04 16:00:33 matt Exp $
 
 package Apache::AxKit::Provider;
 use strict;
 
-use Apache::AxKit::Exception ':try';
+use Apache::AxKit::Exception;
+#use XML::Parser;
 
 # use vars qw/$COUNT/;
 
@@ -36,6 +37,20 @@ sub apache_request {
     return $self->{apache};
 }
 
+sub has_changed {
+    my $self = shift;
+    my $time = shift;
+    return $self->mtime > $time;
+}
+
+sub decline {
+    my $self = shift;
+    my %args = @_;
+    
+    throw Apache::AxKit::Exception::Declined(
+                reason => $args{reason} || "provider declined");
+}
+
 sub get_ext_ent_handler {
     my $self = shift;
     return sub {
@@ -65,7 +80,7 @@ sub get_ext_ent_handler {
         
 #        warn "File provider ext_ent_handler called with '$sysid'\n";
         my $provider = Apache::AxKit::Provider->new(
-                Apache->request,
+                AxKit::Apache->request,
                 uri => $sysid,
 #                rel => $self,
                 );
@@ -84,7 +99,7 @@ sub get_styles {
         undef $pref_style;
     }
     
-    my $styles = [];
+    my $xml_styles = [];
     my $vals = [];
     
     my $key = $self->key();
@@ -95,50 +110,53 @@ sub get_styles {
     #   Root element name (including namespace)
     # use three element array @$vals
     
-    AxKit::Debug(4, "get_styles: creating XML::Parser");
+    if (defined &Apache::AxKit::Provider::xs_get_styles_fh) {
+        AxKit::Debug(2, "using XS get_styles (libxml2)\n");
+        my ($xs_styles, $doctype, $dtd, $root) = 
+                $self->xs_get_styles($media, $pref_style);
+        @$xml_styles = @$xs_styles;
+        @$vals = ($doctype, $dtd, $root);
+    }
+    else {
+        require XML::Parser;
+        
+        AxKit::Debug(4, "get_styles: creating XML::Parser");
+        
+        my $xml_parser = XML::Parser->new(
+                Namespaces => 1,
+                ErrorContext => 2,
+                Handlers => {
+                    Start => \&parse_start,
+                    Doctype => \&parse_dtd,
+                    Proc => \&parse_pi,
+                },
+            );
     
-    my $xml_parser = XML::Parser->new(
-            Namespaces => 1,
-            ErrorContext => 2,
-            Handlers => {
-                Start => \&parse_start,
-                Doctype => \&parse_dtd,
-                Proc => \&parse_pi,
-            },
-        );
-
-    my $to_parse = try { 
-        $self->get_fh();
-    } catch Error with {
-        ${ $self->get_strref(); };
-    };
-    
-    try {
+        my $to_parse;
+        eval { 
+            $to_parse = $self->get_fh();
+        };
+        if ($@) {
+            $to_parse = ${ $self->get_strref(); };
+        }
+        
         AxKit::Debug(4, "get_styles: calling XML::Parser->parse('$key')");
         $xml_parser->parse(
                 $to_parse,
                 XMLStyle_preferred => $pref_style,
-                XMLStyle_style => $styles,
+                XMLStyle_media => $media,
+                XMLStyle_style => $xml_styles,
                 XMLStyle_vals => $vals,
                 XMLStyle_style_screen => [],
-                XMLStyle_media => $media,
                 );
+            
+        AxKit::Debug(4, "get_styles: parse returned successfully");
     }
-    catch Error with {
-        my $E = shift;
-        AxKit::Debug(4, "get_styles: parse returned: >> $E <<");
-        if ("$E" !~ /^OK/) { # note that regex bindings don't stringify in 5.6.0 - fixed in 5.6.1
-            throw Apache::AxKit::Exception::Error(
-                    -text => "Parsing '$key' returned: $E\n"
-                    );
-        }
-    };
-        
-    AxKit::Debug(4, "get_styles: parse returned successfully");
     
     # Let GetMatchingProcessors to process the @$styles array
+    AxKit::Debug(4, "Calling GetMatchingProcessors with ($media, $pref_style, $vals->[0], $vals->[1], $vals->[2])");
     my @styles = $AxKit::Cfg->GetMatchingProcessors($media,
-		$pref_style, @$vals[0 .. 2], $styles, $self);
+		$pref_style, @$vals[0 .. 2], $xml_styles, $self);
     
     if (!@styles) {
         throw Apache::AxKit::Exception::Declined(
@@ -162,18 +180,75 @@ sub get_styles {
         $style->{module} = $mapto;
 
         # first load module if it's not already loaded.
-        try {
+        eval {
             AxKit::load_module($mapto);
-        }
-        catch Error with {
-            my $E = shift;
-            throw Apache::AxKit::Exception::Error(
-                    reason => "Load of '$mapto' failed with: $E"
-                    );
         };
+        if ($@) {
+            throw Apache::AxKit::Exception::Error(
+                    -text => "Load of '$mapto' failed with: $@"
+                    );
+        }
     }
     
     return \@styles;
+}
+
+sub xs_get_styles {
+    my $self = shift;
+    my ($media, $pref_style) = @_;
+    
+    my $bits;
+    eval {
+        my $fh = $self->get_fh();
+        AxKit::Debug(4, "calling xs_get_styles_fh()\n");
+        $bits = xs_get_styles_fh($self->apache_request, $fh);
+    };
+    if ($@) {
+        my $strref = $self->get_strref();
+        AxKit::Debug(4, "calling xs_get_styles_str()\n");
+        $bits = xs_get_styles_str($self->apache_request, $$strref);
+    }
+    
+    my @xml_stylesheet = @{$bits->[0]};
+    my %attribs = @{$bits->[2]};
+    my $element = $bits->[1];
+    
+    # resolve namespaces (libxml doesn't!)
+    if ($attribs{'xmlns'} && $element !~ /:/) {
+        $element = "{$attribs{xmlns}}$element";
+    }
+    elsif ($element =~ /^(.*):(.*)$/) {
+        my ($prefix, $el) = ($1, $2);
+        my $ns = $attribs{"xmlns:$prefix"};
+        $element = "{$ns}$el";
+    }
+    
+    my $e = {
+        XMLStyle_style => [], 
+        XMLStyle_style_screen => [],
+        XMLStyle_preferred => $pref_style,
+        XMLStyle_media => $media,
+        };
+    
+    foreach my $pi (@xml_stylesheet) {
+        parse_pi($e, "xml-stylesheet", $pi);
+    }
+    
+    if (!@{$e->{XMLStyle_style}} && !$e->{XMLStyle_style_persistant}) {
+        if ($e->{XMLStyle_style_screen_persistant}) {
+            push @{$e->{XMLStyle_style}}, @{$e->{XMLStyle_style_screen_persistant}};
+        }
+        if (@{$e->{XMLStyle_style_screen}}) {
+            push @{$e->{XMLStyle_style}}, @{$e->{XMLStyle_style_screen}};
+        }
+    }
+    elsif ($e->{XMLStyle_style_persistant}) {
+        unshift @{$e->{XMLStyle_style}}, @{$e->{XMLStyle_style_persistant}};
+    }
+    
+    AxKit::Debug(4, "xs_get_styles returned: $bits->[3], $bits->[4], $element\n");
+    
+    return ($e->{XMLStyle_style}, $bits->[3], $bits->[4], $element);
 }
 
 sub parse_start {
@@ -194,7 +269,7 @@ sub parse_start {
         unshift @{$e->{XMLStyle_style}}, @{$e->{XMLStyle_style_persistant}};
     }
     
-    die "OK\n";
+    $e->finish();
 }
 
 sub parse_dtd {

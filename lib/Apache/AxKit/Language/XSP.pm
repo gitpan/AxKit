@@ -1,23 +1,19 @@
-# $Id: XSP.pm,v 1.39 2001/02/16 03:23:18 matt Exp $
+# $Id: XSP.pm,v 1.50 2001/06/04 13:27:31 matt Exp $
 
 package Apache::AxKit::Language::XSP;
 
 use strict;
 use Apache::AxKit::Language;
 use Apache::Request;
-use Apache::AxKit::Exception ':try';
+use Apache::AxKit::Exception;
+use Apache::AxKit::Cache;
 use XML::Parser;
 
-use vars qw/@ISA $NS @EXPORT_OK/;
+use vars qw/@ISA/;
 
-require Exporter;
+@ISA = ('Apache::AxKit::Language');
 
-@ISA = ('Apache::AxKit::Language', 'Exporter');
-$NS = 'http://apache.org/xsp/core/v1';
-
-@EXPORT_OK = qw(start_expr expr end_expr append_to_script manage_text);
-
-sub stylesheet_exists { 0; }
+sub stylesheet_exists () { 0; }
 
 sub get_mtime {
     return 30; # 30 days in the cache?
@@ -40,19 +36,17 @@ my $cache;
 
 sub handler {
     my $class = shift;
-    my ($r, $xml, undef, $reparse) = @_;
+    my ($r, $xml, undef) = @_;
     
     _register_me_and_others();
-    
-    # hack for backwards compatibility:
-    $class->register_taglib("http://www.apache.org/1999/XSP/Core");
     
 #    warn "XSP Parse: $xmlfile\n";
     
     my $key = $xml->key();
     
     my $package = get_package_name($key);
-    my $handler = $class->new_handler(
+    
+    my $handler = AxKit::XSP::SAXHandler->new_handler(
             XSP_Package => $package,
             XSP_Line => $key,
             );
@@ -61,16 +55,18 @@ sub handler {
             Handler => $handler,
             );
     
+    local $Apache::AxKit::Language::XSP::ResNamespaces = $r->dir_config('XSPResNamespaces');
+    
     my $to_eval;
     
-    try {
+    eval {
         if (my $dom_tree = $r->pnotes('dom_tree')) {
             AxKit::Debug(5, 'XSP: parsing dom_tree');
             $to_eval = $parser->parse($dom_tree->toString);
             delete $r->pnotes()->{'dom_tree'};
         }
-        elsif (my $xmlstr = $r->notes('xml_string')) {
-            if ($reparse || $r->no_cache()
+        elsif (my $xmlstr = $r->pnotes('xml_string')) {
+            if ($r->no_cache()
                     || !defined &{"${package}::handler"}) {
                 AxKit::Debug(5, 'XSP: parsing xml_string');
                 $to_eval = $parser->parse($xmlstr);
@@ -84,7 +80,7 @@ sub handler {
             my $mtime = $xml->mtime();
             no strict 'refs';
             if (exists($cache->{$key})
-                    && ($cache->{$key}{mtime} <= $mtime)
+                    && !$xml->has_changed($cache->{$key}{mtime})
                     && defined &{"${package}::handler"}
                     )
             {
@@ -93,25 +89,22 @@ sub handler {
             }
             else {
                 AxKit::Debug(5, 'XSP: parsing fh');
-                $to_eval = try {
+                $to_eval = eval {
                     $parser->parse($xml->get_fh());
-                }
-                catch Error with {
-                    $parser->parse(${ $xml->get_strref() });
-                };
+                } || $parser->parse(${ $xml->get_strref() });
                 
                 $cache->{$key}{mtime} = $mtime;
             }
         }
-    }
-    catch Error with {
-        my $err = shift;
-        die "Parse of '$key' failed: $err";
     };
+    if ($@) {
+        throw Apache::AxKit::Exception::Error(
+                -text => "Parse of '$key' failed: $@"
+                );
+    }
     
     if ($to_eval) {
         undef &{"${package}::handler"};
-#        warn "Got script: $to_eval\n";
         AxKit::Debug(5, 'Recompiling XSP script');
         AxKit::Debug(10, $to_eval);
         eval $to_eval;
@@ -119,7 +112,7 @@ sub handler {
         if ($@) {
             my $line = 1;
             $to_eval =~ s/\n/"\n".++$line." "/eg;
-            AxKit::Debug(2, "Script:\n1 $to_eval\n");
+            warn("Script:\n1 $to_eval\n");
             die "Failed to parse: $@";
         }
     }
@@ -130,7 +123,16 @@ sub handler {
     my $cgi = Apache::Request->instance($r);
     
     $r->no_cache(1);
-
+    
+    my $xsp_cache = Apache::AxKit::Cache->new($r, $package);
+    
+    if (!$package->has_changed($xsp_cache->mtime()) && 
+                !$xml->has_changed($xsp_cache->mtime())) {
+        AxKit::Debug(3, "XSP results cached");
+        $r->print($xsp_cache->read);
+        return;
+    }
+    
     eval {
 #        local $^W;
         $r->pnotes('dom_tree', $cv->($r, $cgi));
@@ -139,6 +141,7 @@ sub handler {
         die "XSP Script failed: $@";
     }
     
+    $xsp_cache->write( $r->pnotes('dom_tree')->toString );
 }
 
 sub register {
@@ -149,8 +152,6 @@ sub register {
 
 sub _register_me_and_others {
 #    warn "Loading taglibs\n";
-    __PACKAGE__->register();
-    
     foreach my $package ($AxKit::Cfg->XSPTaglibs()) {
 #        warn "Registering taglib: $package\n";
         AxKit::load_module($package);
@@ -170,60 +171,17 @@ sub register_taglib {
 sub is_xsp_namespace {
     my ($ns) = @_;
     
+    # a uri of the form "res:perl/<spec>" turns into an implicit loading of
+    # the module indicated by <spec> (after slashes are turned into
+    # double-colons). an example uri is "res:perl/My/Cool/Module".
+    if ($Apache::AxKit::Language::XSP::ResNamespaces && $ns =~ m/^res:perl\/(.*)$/) {
+       my $package = $1;
+       $package =~ s/\//::/g;
+       AxKit::load_module($package);
+       $package->register();
+    }
+    
     return 1 if $Apache::AxKit::Language::XSP::tag_lib{$ns};
-}
-
-sub start_expr {
-    my ($e) = @_;
-    my $element = { Name => "expr",
-                    NamespaceURI => $NS,
-                    Attributes => [ ] };
-#    warn "start_expr: $tag\n";
-    $e->start_element($element);
-}
-
-# sub expr {
-#     my ($e, $expression) = @_;
-#     my $expr_tag = $e->generate_ns_name("expr", $NS);
-#     push @{$e->{Context}}, $expr_tag;
-#     main_parse_char($e, $expression);
-#     pop @{$e->{Context}};
-# }
-
-sub end_expr {
-    my ($e) = @_;
-    my $element = { Name => "expr",
-                    NamespaceURI => $NS,
-                    Attributes => [ ] };
-    $e->end_element($element);
-}
-
-sub append_to_script {
-    my ($e, $code) = @_;
-    $e->{XSP_Script} .= $code;
-}
-
-sub manage_text {
-    my ($e, $set) = @_;
-
-    my $depth = @{$e->{NodeStack}};
-    if (defined($set) && $set >= 0) {
-        $e->{XSP_Manage_Text}[$depth] = $set;
-    }
-    else {
-        if (defined($set) && $set == -1) {
-            # called from characters handler, rather than expr
-            return $e->{XSP_Manage_Text}[$depth];
-        }
-        return $e->{XSP_Manage_Text}[$depth - 1];
-    }
-}
-
-sub current_element {
-    my $e = shift;
-    my $tag = $e->{NodeStack}[-1]{Name};
-    $tag =~ s/^(.*:)//;
-    return $tag;
 }
 
 sub get_package_name {
@@ -246,24 +204,96 @@ sub get_package_name {
 # SAX Handler code
 ############################################################
 
+package AxKit::XSP::SAXHandler;
+
 sub new_handler {
     my ($type, %self) = @_; 
     return bless \%self, $type;
+}
+
+sub start_expr {
+    my ($e) = @_;
+    my $element = { Name => "expr",
+                    NamespaceURI => $AxKit::XSP::Core::NS,
+                    Attributes => [ ],
+                    Parent => $e->{Current_Element}->{Parent},
+#                    OldParent => $e->{Current_Element},
+            };
+#    warn "start_expr: $e->{Current_Element}->{Name}\n";
+    $e->start_element($element);
+}
+
+sub end_expr {
+    my ($e) = @_;
+    my $parent = $e->{Current_Element}->{Parent};
+    my $element = { Name => "expr",
+                    NamespaceURI => $AxKit::XSP::Core::NS,
+                    Attributes => [ ],
+                    Parent => $parent,
+            };
+#    warn "end_expr: $parent->{Name}\n";
+    $e->end_element($element);
+}
+
+sub append_to_script {
+    my ($e, $code) = @_;
+    $e->{XSP_Script} .= $code;
+}
+
+sub manage_text {
+    my ($e, $set, $go_back) = @_;
+    
+    $go_back ||= 0;
+
+    my $depth = $e->depth();
+    if (defined($set) && $set >= 0) {
+        $e->{XSP_Manage_Text}[$depth - $go_back] = $set;
+    }
+    else {
+        if (defined($set) && $set == -1) {
+            # called from characters handler, rather than expr
+            return $e->{XSP_Manage_Text}[$depth];
+        }
+        return $e->{XSP_Manage_Text}[$depth - 1];
+    }
+}
+
+sub depth {
+    my ($e) = @_;
+    my $element = $e->{Current_Element};
+    
+    my $depth = 0;
+    while ($element = $element->{Parent}) {
+        $depth++;
+    }
+    
+    return $depth;
+}
+
+sub current_element {
+    my $e = shift;
+    my $tag = $e->{Current_Element}{Name};
+    $tag =~ s/^(.*:)//;
+    return $tag;
 }
 
 sub start_document {
     my $e = shift;
     
     $e->{XSP_Script} = join("\n", 
-                "package $e->{XSP_Package};",
+                "package $e->{XSP_Package}; \@$e->{XSP_Package}::ISA = ('Apache::AxKit::Language::XSP::Page');",
+                "#line 2 ".$e->{XSP_Line}."\n",
                 "use Apache;",
                 "use XML::XPath;",
-                "#line 1 ".$e->{XSP_Line}."\n",
                 );
     
     foreach my $ns (keys %Apache::AxKit::Language::XSP::tag_lib) {
         my $pkg = $Apache::AxKit::Language::XSP::tag_lib{$ns};
-        if (my $sub = $pkg->can("parse_init")) {
+        my $sub;
+        if (($sub = $pkg->can("start_document")) && ($sub != \&start_document)) {
+            $e->{XSP_Script} .= $sub->($e);
+        }
+        elsif ($sub = $pkg->can("parse_init")) {
             $e->{XSP_Script} .= $sub->($e);
         }
     }
@@ -274,7 +304,11 @@ sub end_document {
     
     foreach my $ns (keys %Apache::AxKit::Language::XSP::tag_lib) {
         my $pkg = $Apache::AxKit::Language::XSP::tag_lib{$ns};
-        if (my $sub = $pkg->can("parse_final")) {
+        my $sub;
+        if (($sub = $pkg->can("end_document")) && ($sub != \&end_document)) {
+            $e->{XSP_Script} .= $sub->($e);
+        }
+        elsif ($sub = $pkg->can("parse_final")) {
             $e->{XSP_Script} .= $sub->($e);
         }
     }
@@ -287,6 +321,10 @@ sub end_document {
 sub start_element {
     my $e = shift;
     my $element = shift;
+    
+    $element->{Parent} ||= $e->{Current_Element};
+    
+    $e->{Current_Element} = $element;
 
     my $ns = $element->{NamespaceURI};
     
@@ -296,13 +334,13 @@ sub start_element {
     
     for my $attr (@{$element->{Attributes}}) {
         if ($attr->{Name} eq 'xmlns') {
-            unless (is_xsp_namespace($attr->{Value})) {
+            unless (Apache::AxKit::Language::XSP::is_xsp_namespace($attr->{Value})) {
                 $e->{Current_NS}{'#default'} = $attr->{Value};
             }
         }
         elsif ($attr->{Name} =~ /^xmlns:(.*)$/) {
             my $prefix = $1;
-            unless (is_xsp_namespace($attr->{Value})) {
+            unless (Apache::AxKit::Language::XSP::is_xsp_namespace($attr->{Value})) {
                 $e->{Current_NS}{$prefix} = $attr->{Value};
             }
         }
@@ -317,21 +355,26 @@ sub start_element {
         !exists($Apache::AxKit::Language::XSP::tag_lib{ $ns })) 
     {
         $e->manage_text(0); # set default for non-xsp tags
-        $e->{XSP_Script} .= default_parse_start($e, $element);
+        $e->{XSP_Script} .= AxKit::XSP::DefaultHandler::start_element($e, $element);
     }
     else {
 #        local $^W;
-        my $tag = $element->{Name};
-        $tag =~ s/^(.*)://; # strip prefix
+        $element->{Name} =~ s/^(.*)://;
         my $prefix = $1;
+        my $tag = $element->{Name};
         my %attribs;
+        # this is probably a bad hack to turn xsp:name="value" into name="value"
         for my $attr (@{$element->{Attributes}}) {
             $attr->{Name} =~ s/^\Q$prefix\E://;
             $attribs{$attr->{Name}} = $attr->{Value};
         }
         $e->manage_text(1); # set default for xsp tags
         my $pkg = $Apache::AxKit::Language::XSP::tag_lib{ $ns };
-        if (my $sub = $pkg->can("parse_start")) {
+        my $sub;
+        if (($sub = $pkg->can("start_element")) && ($sub != \&start_element)) {
+            $e->{XSP_Script} .= $sub->($e, $element);
+        }
+        elsif ($sub = $pkg->can("parse_start")) {
             $e->{XSP_Script} .= $sub->($e, $tag, %attribs);
         }
     }
@@ -348,23 +391,29 @@ sub end_element {
     if (!defined($ns) || 
         !exists($Apache::AxKit::Language::XSP::tag_lib{ $ns })) 
     {
-        $e->{XSP_Script} .= default_parse_end($e, $element);
+        $e->{XSP_Script} .= AxKit::XSP::DefaultHandler::end_element($e, $element);
     }
     else {
 #        local $^W;
+        $element->{Name} =~ s/^(.*)://;
         my $tag = $element->{Name};
-        $tag =~ s/^(.*)://; # strip prefix
         my $pkg = $Apache::AxKit::Language::XSP::tag_lib{ $ns };
-        if (my $sub = $pkg->can("parse_end")) {
+        my $sub;
+        if (($sub = $pkg->can("end_element")) && ($sub != \&end_element)) {
+            $e->{XSP_Script} .= $sub->($e, $element);
+        }
+        elsif ($sub = $pkg->can("parse_end")) {
             $e->{XSP_Script} .= $sub->($e, $tag);
         }
     }
+    
+    $e->{Current_Element} = $element->{Parent} || $e->{Current_Element}->{Parent};
 }
 
 sub characters {
     my $e = shift;
     my $text = shift;
-    my $ns = $e->{NodeStack}->[-1]->{NamespaceURI};
+    my $ns = $e->{Current_Element}->{NamespaceURI};
     
 #    warn "CHAR-NS: $ns\n";
     
@@ -372,11 +421,15 @@ sub characters {
         !exists($Apache::AxKit::Language::XSP::tag_lib{ $ns }) ||
         !$e->manage_text(-1))
     {
-        $e->{XSP_Script} .= default_parse_char($e, $text->{Data});
+        $e->{XSP_Script} .= AxKit::XSP::DefaultHandler::characters($e, $text);
     }
     else {
         my $pkg = $Apache::AxKit::Language::XSP::tag_lib{ $ns };
-        if (my $sub = $pkg->can("parse_char")) {
+        my $sub;
+        if (($sub = $pkg->can("characters")) && ($sub != \&characters)) {
+            $e->{XSP_Script} .= $sub->($e, $text);
+        }
+        elsif ($sub = $pkg->can("parse_char")) {
             $e->{XSP_Script} .= $sub->($e, $text->{Data});
         }
     }
@@ -386,17 +439,21 @@ sub comment {
     my $e = shift;
     my $comment = shift;
 
-    my $ns = $e->{NodeStack}->[-1]->{NamespaceURI};
+    my $ns = $e->{Current_Element}->{NamespaceURI};
                 
     if (!defined($ns) || 
         !exists($Apache::AxKit::Language::XSP::tag_lib{ $ns })) 
     {
-        $e->{XSP_Script} .= default_parse_comment($e, $comment);
+        $e->{XSP_Script} .= AxKit::XSP::DefaultHandler::comment($e, $comment);
     }
     else {
 #        local $^W;
         my $pkg = $Apache::AxKit::Language::XSP::tag_lib{ $ns };
-        if (my $sub = $pkg->can("parse_comment")) {
+        my $sub;
+        if (($sub = $pkg->can("comment")) && ($sub != \&comment)) {
+            $e->{XSP_Script} .= $sub->($e, $comment);
+        }
+        elsif ($sub = $pkg->can("parse_comment")) {
             $e->{XSP_Script} .= $sub->($e, $comment);
         }
     }
@@ -406,27 +463,267 @@ sub processing_instruction {
     my $e = shift;
     my $pi = shift;
 
-    my $ns = $e->{NodeStack}->[-1]->{NamespaceURI};
+    my $ns = $e->{Current_Element}->{NamespaceURI};
     
     if (!defined($ns) || 
         !exists($Apache::AxKit::Language::XSP::tag_lib{ $ns })) 
     {
-        $e->{XSP_Script} .= default_parse_pi($e, $pi);
+        $e->{XSP_Script} .= AxKit::XSP::DefaultHandler::processing_instruction($e, $pi);
     }
     else {
 #        local $^W;
         my $pkg = $Apache::AxKit::Language::XSP::tag_lib{ $ns };
-        if (my $sub = $pkg->can("parse_pi")) {
+        my $sub;
+        if (($sub = $pkg->can("processing_instruction")) && ($sub != \&processing_instruction)) {
+            $e->{XSP_Script} .= $sub->($e, $pi);
+        }
+        elsif ($sub = $pkg->can("parse_pi")) {
             $e->{XSP_Script} .= $sub->($e, $pi);
         }
     }
 }
 
 ############################################################
+# Functions implementing xsp:* processing
+############################################################
+
+package AxKit::XSP::Core;
+
+use vars qw/@ISA $NS/;
+
+@ISA = ('Apache::AxKit::Language::XSP');
+
+$NS = 'http://apache.org/xsp/core/v1';
+
+__PACKAGE__->register();
+
+# hack for backwards compatibility:
+__PACKAGE__->register_taglib("http://www.apache.org/1999/XSP/Core");
+
+
+sub start_document {
+    return "#initialize xsp namespace\n";
+}
+
+sub end_document {
+    return '';
+}
+
+sub comment {
+    return '';
+}
+
+sub processing_instruction {
+    return '';
+}
+
+sub characters {
+    my ($e, $node) = @_;
+
+    local $^W;
+    
+    my $text = $node->{Data};
+    
+#     Ricardo writes: "<xsp:expr> produces either an [object]
+# _expression_ (not necessarily a String) or a character event depending
+# on context. When  <xsp:expr> is enclosed in another XSP tag (except
+# <xsp:content>), it's replaced by the code it contains. Otherwise it
+# should be treated as a text node and, therefore, coerced to String to be
+# output through a characters SAX event."
+
+    if ($e->current_element() =~ /^(content)$/) {
+        $text =~ s/\|/\\\|/g;
+
+        return <<"EOT";
+{
+    my \$text = XML::XPath::Node::Text->new(q|$text|);
+    \$parent->appendChild(\$text, 1); 
+}
+EOT
+    }
+    elsif ($e->current_element() =~ /^(attribute|comment|name)$/) {
+        return '' if ($e->current_element() eq 'attribute' && !$e->{attrib_seen_name});
+        $text =~ s/^\s*//; $text =~ s/\s*$//;
+        $text =~ s/\|/\\\|/g;    
+        return ". q|$text|";
+    }
+    
+#    return '' unless $e->{XSP_User_Root};
+    
+    return $text;
+}
+
+sub start_element {
+    my ($e, $node) = @_;
+    
+    my ($tag, %attribs);
+    
+    $tag = $node->{Name};
+    
+    foreach my $attrib (@{$node->{Attributes}}) {
+        $attribs{$attrib->{Name}} = $attrib->{Value};
+    }
+    
+    if ($tag eq 'page') {
+        if ($attribs{language} && lc($attribs{language}) ne 'perl') {
+            die "Only Perl XSP pages supported at this time!";
+        }
+        local $^W;
+        if ($attribs{'indent-result'} eq 'yes') {
+            $e->{XSP_Indent} = 1;
+        }
+    }
+    elsif ($tag eq 'structure') {
+    }
+    elsif ($tag eq 'dtd') {
+    }
+    elsif ($tag eq 'include') {
+        return "warn \"xsp:include is deprecated\"; use ";
+    }
+    elsif ($tag eq 'content') {
+    }
+    elsif ($tag eq 'logic') {
+    }
+    elsif ($tag eq 'import') {
+        return "use ";
+    }
+    elsif ($tag eq 'element') {
+        if (my $name = $attribs{name}) {
+            $e->manage_text(0);
+            return '{ my $elem = XML::XPath::Node::Element->new(q(' . $name . '));' .
+                    '$parent->appendChild($elem, 1); $parent = $elem; }' . "\n";
+        }
+    }
+    elsif ($tag eq 'attribute') {
+        if (my $name = $attribs{name}) {
+            $e->{attrib_seen_name} = 1;
+            return '{ my $attr = XML::XPath::Node::Attribute->new(q|' . $name . '|, ""';
+        }
+        $e->{attrib_seen_name} = 0;
+    }
+    elsif ($tag eq 'name') {
+        return '{ my $name = ""';
+    }
+    elsif ($tag eq 'pi') {
+    }
+    elsif ($tag eq 'comment') {
+        return '{ my $comment = XML::XPath::Node::Comment->new(""';
+    }
+    elsif ($tag eq 'text') {
+        return '{ my $text = XML::XPath::Node::Text->new(""';
+    }
+    elsif ($tag eq 'expr') {
+#        warn "expr: -2 = {", $node->{Parent}->{NamespaceURI}, "}", $node->{Parent}->{Name}, "\n";
+        if (Apache::AxKit::Language::XSP::is_xsp_namespace($node->{Parent}->{NamespaceURI})) {
+            if (!$e->manage_text() || $node->{Parent}->{Name} =~ /^(.*:)?content$/) {
+                return <<'EOT';
+{
+    my $text = XML::XPath::Node::Text->new(do {
+EOT
+            }
+            elsif ($node->{Parent}->{Name} =~ /^(.*:)?(logic|expr)$/) {
+                return 'do {';
+            }
+        }
+        else {
+            return <<'EOT';
+{
+    my $text = XML::XPath::Node::Text->new(do {
+EOT
+        }
+        
+        return '. do {';
+#        warn "start Expr: CurrentEl: ", $e->current_element, "\n";
+    }
+    
+    return '';
+}
+
+sub end_element {
+    my ($e, $node) = @_;
+    
+    my $tag = $node->{Name};
+    
+    if ($tag eq 'page') {
+    }
+    elsif ($tag eq 'structure') {
+    }
+    elsif ($tag eq 'dtd') {
+    }
+    elsif ($tag eq 'include') {
+        return ";\n";
+    }
+    elsif ($tag eq 'import') {
+        return ";\n";
+    }
+    elsif ($tag eq 'content') {
+    }
+    elsif ($tag eq 'logic') {
+    }
+    elsif ($tag eq 'element') {
+        return '$parent = $parent->getParentNode;' . "\n";
+    }
+    elsif ($tag eq 'attribute') {
+        return '); $parent->appendAttribute($attr, 1); }' . "\n";
+    }
+    elsif ($tag eq 'name') {
+        if ($node->{Parent}->{Name} =~ /^(.*:)?element$/) {
+            $e->manage_text(0, 1);
+            return '; my $elem = XML::XPath::Node::Element->new($name);' .
+                    '$parent->appendChild($elem, 1); $parent = $elem; }' . "\n";
+        }
+        elsif ($node->{Parent}->{Name} =~ /^(.*:)?attribute$/) {
+            $e->{attrib_seen_name} = 1;
+            return '; my $attr = XML::XPath::Node::Attribute->new($name, ""';
+        }
+        else {
+            die "xsp:name parent node: $node->{Parent}->{Name} not valid";
+        }
+    }
+    elsif ($tag eq 'pi') {
+    }
+    elsif ($tag eq 'comment') {
+        return '); $parent->appendChild($comment, 1); }' . "\n";
+    }
+    elsif ($tag eq 'text') {
+        return '); $parent->appendChild($text, 1); }' . "\n";
+    }
+    elsif ($tag eq 'expr') {
+#        warn "expr: -2 = {", $node->{Parent}->{NamespaceURI}, "}", $node->{Parent}->{Name}, "\n";
+        if (Apache::AxKit::Language::XSP::is_xsp_namespace($node->{Parent}->{NamespaceURI})) {
+            if (!$e->manage_text() || $node->{Parent}->{Name} =~ /^(.*:)?content$/) {
+                return <<'EOT';
+}); # xsp tag
+    $parent->appendChild($text, 1); 
+}
+EOT
+            }
+            elsif ($node->{Parent}->{Name} =~ /^(.*:)?(logic|expr)$/) {
+                return '}';
+            }
+        }
+        else {
+            return <<'EOT';
+}); # non xsp tag
+    $parent->appendChild($text, 1); 
+}
+EOT
+        }
+        return '}';
+    }
+    
+    return '';
+}
+
+1;
+
+############################################################
 ## Default (non-xsp-namespace) handlers
 ############################################################
 
-sub default_parse_start {
+package AxKit::XSP::DefaultHandler;
+
+sub start_element {
     my ($e, $node) = @_;
     
     if (!$e->{XSP_User_Root}) {
@@ -463,7 +760,7 @@ sub default_parse_start {
     return $code;
 }
 
-sub default_parse_end {
+sub end_element {
     my ($e, $element) = @_;
     
     $e->{Current_NS} = pop @{ $e->{NS_Stack} };
@@ -471,8 +768,10 @@ sub default_parse_end {
     return '$parent = $parent->getParentNode;' . "\n";
 }
 
-sub default_parse_char {
-    my ($e, $text) = @_;
+sub characters {
+    my ($e, $node) = @_;
+    
+    my $text = $node->{Data};
     
     return '' unless $e->{XSP_User_Root}; # should not happen!
     
@@ -486,190 +785,11 @@ sub default_parse_char {
             '$parent->appendChild($text, 1); }' . "\n";
 }
 
-sub default_parse_comment {
+sub comment {
     return '';
 }
 
-sub default_parse_pi {
-    return '';
-}
-
-############################################################
-# Functions implementing xsp:* processing
-############################################################
-
-sub parse_init {
-    return "#initialize xsp namespace\n";
-}
-
-sub parse_final {
-}
-
-sub parse_comment {
-    return '';
-}
-
-sub parse_pi {
-    return '';
-}
-
-sub parse_char {
-    my ($e, $text) = @_;
-
-    local $^W;
-    
-#     Ricardo writes: "<xsp:expr> produces either an [object]
-# _expression_ (not necessarily a String) or a character event depending
-# on context. When  <xsp:expr> is enclosed in another XSP tag (except
-# <xsp:content>), it's replaced by the code it contains. Otherwise it
-# should be treated as a text node and, therefore, coerced to String to be
-# output through a characters SAX event."
-
-    if ($e->current_element() =~ /^(content)$/) {
-        $text =~ s/\|/\\\|/g;
-
-        return <<"EOT";
-{
-    my \$text = XML::XPath::Node::Text->new(q|$text|);
-    \$parent->appendChild(\$text, 1); 
-}
-EOT
-    }
-    elsif ($e->current_element() =~ /^(attribute|comment)$/) {
-        $text =~ s/\|/\\\|/g;    
-        return ". q|$text|";
-    }
-    
-#    return '' unless $e->{XSP_User_Root};
-    
-    return $text;
-}
-
-sub parse_start {
-    my ($e, $tag, %attribs) = @_;
-    
-    if ($tag eq 'page') {
-        if ($attribs{language} && lc($attribs{language}) ne 'perl') {
-            die "Only Perl XSP pages supported at this time!";
-        }
-        local $^W;
-        if ($attribs{'indent-result'} eq 'yes') {
-            $e->{XSP_Indent} = 1;
-        }
-    }
-    elsif ($tag eq 'structure') {
-    }
-    elsif ($tag eq 'dtd') {
-    }
-    elsif ($tag eq 'include') {
-        return "warn \"xsp:include is deprecated\"; use ";
-    }
-    elsif ($tag eq 'content') {
-    }
-    elsif ($tag eq 'logic') {
-    }
-    elsif ($tag eq 'import') {
-        return "use ";
-    }
-    elsif ($tag eq 'element') {
-        $e->manage_text(0);
-        return '{ my $elem = XML::XPath::Node::Element->new(q(' . $attribs{'name'} . '));' .
-                '$parent->appendChild($elem, 1); $parent = $elem; }' . "\n";
-    }
-    elsif ($tag eq 'attribute') {
-        return '{ my $attr = XML::XPath::Node::Attribute->new(q|' . $attribs{'name'} . '|, ""';
-    }
-    elsif ($tag eq 'pi') {
-    }
-    elsif ($tag eq 'comment') {
-        return '{ my $comment = XML::XPath::Node::Comment->new(""';
-    }
-    elsif ($tag eq 'text') {
-        return '{ my $text = XML::XPath::Node::Text->new(""';
-    }
-    elsif ($tag eq 'expr') {
-#        warn "expr: -2 = {", $e->{NodeStack}[-2]{NamespaceURI}, "}", $e->{NodeStack}[-2]{Name}, "\n";
-        if (Apache::AxKit::Language::XSP::is_xsp_namespace($e->{NodeStack}[-2]{NamespaceURI})) {
-            if (!$e->manage_text() || $e->{NodeStack}[-2]{Name} =~ /^(.*:)?content$/) {
-                return <<'EOT';
-{
-    my $text = XML::XPath::Node::Text->new(do {
-EOT
-            }
-            elsif ($e->{NodeStack}[-2]{Name} =~ /^(.*:)?logic$/) {
-                return 'do {';
-            }
-        }
-        else {
-            return <<'EOT';
-{
-    my $text = XML::XPath::Node::Text->new(do {
-EOT
-        }
-        
-        return '. do {';
-#        warn "start Expr: CurrentEl: ", $e->current_element, "\n";
-    }
-    
-    return '';
-}
-
-sub parse_end {
-    my ($e, $tag) = @_;
-    
-    if ($tag eq 'page') {
-    }
-    elsif ($tag eq 'structure') {
-    }
-    elsif ($tag eq 'dtd') {
-    }
-    elsif ($tag eq 'include') {
-        return ";\n";
-    }
-    elsif ($tag eq 'import') {
-        return ";\n";
-    }
-    elsif ($tag eq 'content') {
-    }
-    elsif ($tag eq 'logic') {
-    }
-    elsif ($tag eq 'element') {
-        return '$parent = $parent->getParentNode;' . "\n";
-    }
-    elsif ($tag eq 'attribute') {
-        return '); $parent->appendAttribute($attr, 1); }' . "\n";
-    }
-    elsif ($tag eq 'pi') {
-    }
-    elsif ($tag eq 'comment') {
-        return '); $parent->appendChild($comment, 1); }' . "\n";
-    }
-    elsif ($tag eq 'text') {
-        return '); $parent->appendChild($text, 1); }' . "\n";
-    }
-    elsif ($tag eq 'expr') {
-        if (Apache::AxKit::Language::XSP::is_xsp_namespace($e->{NodeStack}[-2]{NamespaceURI})) {
-            if (!$e->manage_text() || $e->{NodeStack}[-2]{Name} =~ /^(.*:)?content$/) {
-                return <<'EOT';
-});
-    $parent->appendChild($text, 1); 
-}
-EOT
-            }
-            elsif ($e->{NodeStack}[-2]{Name} =~ /^(.*:)?logic$/) {
-                return '}';
-            }
-        }
-        else {
-            return <<'EOT';
-});
-    $parent->appendChild($text, 1); 
-}
-EOT
-        }
-        return '}';
-    }
-    
+sub processing_instruction {
     return '';
 }
 
@@ -712,7 +832,7 @@ sub parse {
 
     $self->{InScopeNamespaceStack} = [ { '_Default' => undef,
 				         'xmlns' => $xmlns_ns } ];
-    $self->{Handler}{NodeStack} = [ ];
+    $self->{NodeStack} = [ ];
 
     return $parser->parse($thing);
 }
@@ -720,15 +840,15 @@ sub parse {
 sub _handle_init {
     my ($self, $expat) = @_;
 
-    my $document = { };
-    push @{ $self->{Handler}{NodeStack} }, $document;
+    my $document = { Parent => undef };
+    push @{ $self->{NodeStack} }, $document;
     $self->{Handler}->start_document( $document );
 }
 
 sub _handle_final {
     my ($self, $expat) = @_;
 
-    my $document = pop @{ $self->{Handler}{NodeStack} };
+    my $document = pop @{ $self->{NodeStack} };
     return $self->{Handler}->end_document( $document );
 }
 
@@ -751,33 +871,33 @@ sub _handle_start {
     my $namespace = $self->_namespace($element_name);
     my $element = { Name => $element_name,
                     NamespaceURI => $namespace,
-                    Attributes => [ @attributes ] };
+                    Attributes => [ @attributes ],
+                    Parent => $self->{NodeStack}[-1] };
 
-    push @{ $self->{Handler}{NodeStack} }, $element;
+    push @{ $self->{NodeStack} }, $element;
     $self->{Handler}->start_element( $element );
 }
 
 sub _handle_end {
     my $self = shift;
 
-    my $element = $self->{Handler}{NodeStack}[-1];
-    my $results = $self->{Handler}->end_element( $element );
     pop @{ $self->{InScopeNamespaceStack} };
-    pop @{ $self->{Handler}{NodeStack} };
+    my $element = pop @{ $self->{NodeStack} };
+    my $results = $self->{Handler}->end_element( $element );
     return $results;
 }
 
 sub _handle_char {
     my ($self, $expat, $string) = @_;
 
-    my $characters = { Data => $string };
+    my $characters = { Data => $string, Parent => $self->{NodeStack}[-1] };
     $self->{Handler}->characters( $characters );
 }
 
 sub _handle_comment {
     my ($self, $expat, $data) = @_;
 
-    my $comment = { Data => $data };
+    my $comment = { Data => $data, Parent => $self->{NodeStack}[-1] };
     $self->{Handler}->comment( $comment );
 }
 
@@ -785,7 +905,8 @@ sub _handle_proc {
     my ($self, $expat, $target, $data) = @_;
 
     my $pi = {  Target => $target,
-                Data => $data };
+                Data => $data,
+                Parent => $self->{NodeStack}[-1] };
     $self->{Handler}->processing_instruction( $pi );
 }
 
@@ -817,6 +938,18 @@ sub _namespace {
     }
 }
 
+############################################################
+# Base page class
+############################################################
+
+package Apache::AxKit::Language::XSP::Page;
+
+sub has_changed {
+    my $class = shift;
+    my $mtime = shift;
+    return 1;
+}
+
 1;
 
 __END__
@@ -826,16 +959,200 @@ __END__
 
 Apache::AxKit::Language::XSP - eXtensible Server Pages
 
+=head1 SYNOPSIS
+
+  <xsp:page
+    xmlns:xsp="http://apache.org/xsp/core/v1">
+
+    <xsp:structure>
+        <xsp:import>Time::Object</xsp:import>
+    </xsp:structure>
+
+    <page>
+        <title>XSP Test</title>
+        <para>
+        Hello World!
+        </para>
+        <para>
+        Good 
+        <xsp:logic>
+        if (localtime->hour >= 12) {
+            <xsp:content>Afternoon</xsp:content>
+        }
+        else {
+            <xsp:content>Morning</xsp:content>
+        }
+        </xsp:logic>
+        </para>
+    </page>
+    
+  </xsp:page>
+
 =head1 DESCRIPTION
 
 XSP implements a tag-based dynamic language that allows you to develop
-your own tags, examples include sendmail and sql taglibs.
+your own tags, examples include sendmail and sql taglibs. It is AxKit's
+way of providing an environment for dynamic pages. XSP is originally part
+of the Apache Cocoon project, and so you will see some Apache namespaces
+used in XSP.
+
+=head1 Tag Reference
+
+=head2 C<<xsp:page>>
+
+This is the top level element, although it does not have to be. AxKit's
+XSP implementation can process XSP pages even if the top level element
+is not there, provided you use one of the standard AxKit ways to turn
+on XSP processing for that page. See L<AxKit>.
+
+The attribute C<language="Perl"> can be present, to mandate the language.
+This is useful if you expect people might mistakenly try and use this
+page on a Cocoon system. The default value of this attribute is "Perl".
+
+XSP normally swallows all whitespace in your output. If you don't like
+this feature, or it creates invalid output, then you can add the
+attribute: C<indent-result="yes">
+
+=head2 C<<xsp:structure>>
+
+  parent: <xsp:page>
+
+This element appears at the root level of your page before any non-XSP
+tags. It defines page-global "things" in the C<<xsp:logic>> and
+C<<xsp:import>> tags.
+
+=head2 C<<xsp:import>>
+
+  parent: <xsp:structure>
+
+Use this tag for including modules into your code, for example:
+
+  <xsp:structure>
+    <xsp:import>DBI</xsp:import>
+  </xsp:structure>
+
+=head2 C<<xsp:logic>>
+
+  parent: <xsp:structure>, any
+
+The C<<xsp:logic>> tag introduces some Perl code into your page.
+
+As a child of C<<xsp:structure>>, this element allows you to define
+page global variables, or functions that get used in the page. Placing
+functions in here allows you to get around the Apache::Registry
+closures problem (see the mod_perl guide at http://perl.apache.org/guide
+for details).
+
+Elsewhere the perl code contained within the tags is executed on every
+view of the XSP page.
+
+B<Warning:> Be careful - the Perl code contained within this tag is still
+subject to XML's validity constraints. Most notably to Perl code is that
+the & and < characters must be escaped into &amp; and &lt; respectively.
+You can get around this to some extent by using CDATA sections. This is
+especially relevant if you happen to think something like this will work:
+
+  <xsp:logic>
+    if ($some_condition) {
+      print "<para>Condition True!</para>";
+    }
+    else {
+      print "<para>Condition False!</para>";
+    }
+  </xsp:logic>
+
+The correct way to write that is simply:
+
+  <xsp:logic>
+    if ($some_condition) {
+      <para>Condition True!</para>
+    }
+    else {
+      <para>Condition False!</para>
+    }
+  </xsp:logic>
+
+The reason is that XSP intrinsically knows about XML!
+
+=head2 C<<xsp:content>>
+
+  parent: <xsp:logic>
+
+This tag allows you to temporarily "break out" of logic sections to generate
+some XML text to go in the output. Using something similar to the above
+example, but without the surrounding C<<para>> tag, we have:
+
+  <xsp:logic>
+    if ($some_condition) {
+      <xsp:content>Condition True!</xsp:content>
+    }
+    else {
+      <xsp:content>Condition False!</xsp:content>
+    }
+  </xsp:logic>
+
+=head2 C<<xsp:element>>
+
+This tag generates an element of name equal to the value in the attribute
+C<name>. Alternatively you can use a child element C<<xsp:name>> to specify
+the name of the element. Text contents of the C<<xsp:element>> are created
+as text node children of the new element.
+
+=head2 C<<xsp:attribute>>
+
+Generates an attribute. The name of the attribute can either be specified
+in the C<name="..."> attribute, or via a child element C<<xsp:name>>. The
+value of the attribute is the text contents of the tag.
+
+=head2 C<<xsp:comment>>
+
+Normally XML comments are stripped from the output. So to add one back in
+you can use the C<<xsp:comment>> tag. The contents of the tag are the
+value of the comment.
+
+=head2 C<<xsp:text>>
+
+Create a plain text node. The contents of the tag are the text node to be
+generated. This is useful when you wish to just generate a text node while
+in an C<<xsp:logic>> section.
+
+=head2 C<<xsp:expr>>
+
+This is probably the most useful, and most important (and also the most
+complex) tag. An expression is some perl code that executes, and the results
+of which are added to the output. Exactly how the results are added to the
+output depends very much on context.
+
+The default method for output for an expression is as a text node. So for
+example:
+
+  <p>
+  It is now: <xsp:expr>localtime</xsp:expr>
+  </p>
+
+Will generate a text node containing the time.
+
+If the expression is contained within an XSP namespaces, that is either a
+tag in the xsp:* namespace, or a tag implementing a tag library, then an
+expression generally does not create a text node, but instead is simply
+wrapped in a Perl C<do {}> block, and added to the perl script. However,
+there are anti-cases to this. For example if the expression is within
+a C<<xsp:content>> tag, then a text node is created.
+
+Needless to say, in every case, C<<xsp:expr>> should just "do the right
+thing". If it doesn't, then something (either a taglib or XSP.pm itself)
+is broken and you should report a bug.
 
 =head1 DESIGN PATTERNS
 
 Writing your own taglibs can be tricky, because you're using an event
-based API to write out Perl code. These patterns represent the things
-you may want to achieve when authoring a tag library.
+based API to write out Perl code. You may want to take a look at the
+Apache::AxKit::Language::XSP::TaglibHelper module, which comes with
+AxKit and allows you to easily publish a taglib without writing
+XML event code.
+
+These patterns represent the things you may want to achieve when 
+authoring a tag library "from scratch".
 
 B<1. Your tag is a wrapper around other things.>
 

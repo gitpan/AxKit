@@ -1,3 +1,61 @@
+1.4
+ - Config directives no longer implemented by Apache::ExtUtils
+ - New TaglibHelper module, makes writing XSP taglibs almost trivial.
+ - Build checks for iconv library - should make things smoother on *BSD
+ - Known bug in Filter provider is fixed
+ - Major memory leak cleanup
+ - Added LibXSLT language module (for use with XML::LibXSLT). This is
+   over twice as fast as XML::Sablotron, and more compliant.
+ - Added AxAddURIProcessor config directive
+ - Added AxLogDeclines config directive (replaces PerlSetVar equivalent)
+ - Added import_templates() to XPathScript
+ - XSP now uses SAX to generate code
+ - Sablot.pm allows you to set the outgoing mime type
+ - Many fixes to AxKit.xs compiled directives (hopefully making it work
+   for more people now)
+ - Removed eval{} stuff around XML parsing in Provider.pm as it seemed to
+   be causing segfaults in Perl 5.6.1
+ - Fixes to LibXSLT language module to make it work with new versions of
+   XML::LibXSLT (and the core libxslt library).
+ - Cleaned up error handling, and error stylesheets significantly
+ - Removed Storable from XPathScript (to get control of the segfaults)
+ - Implemented has_changed() for all "cache" bits
+ - Improved error handling with an AxStackTrace config directive
+   allowing the Error Stylesheet to get a full stack trace.
+ - Doc fixes to stop pod2man complaining.
+ - AxKit now adds AxKit/Version to your Server string (for netcraft!)
+ - Switched xml_string to pnotes so you can have binary nulls in the output
+   (e.g. for PDFs).
+ - Added some configuration tidbits to INSTALL
+ - Much better (though not 100% there) test harness code
+ - Major fixes to Makefile.PL (to work better on *BSD and Win32)
+ - XML::Parser no longer needed if you have libxml2 installed. This will
+   allow AxKit to work with Apaches that have expat enabled!
+ - XSP pages can implement a has_changed() function, which allows you to
+   control the caching of the results (can have significant performance
+   increases on dynamic pages)
+ - Providers responsible for returning declined (this allows for non-file
+   providers to not end up in a 404 when doing e.g. passthru)
+ - Added AxNoCache option to turn off caching on purpose.
+ - split AxKit.xs into more managable files
+ - Better error messages from CharsetConv (iconv)
+ - Added a PDF slideshow builder called AxPoint
+ - Sablot fix for changing content-type.
+ - Much cleaner handling of character set conversions
+ - AxKit::Apache->request() added (similar to Apache->request())
+ - Cache maintains content-type more sanely.
+ - Many, many minor bug fixes.
+
+1.3
+    - Re-written XSP engine
+    - Much better dependencies checking
+    - XPathScript adds import_template() function and other minor changes
+    - Better shared memory usage when using directives in httpd.conf
+    - All XSP namespaces updated to Apache normalised versions (these are
+      http://apache.org/xsp/<module>/<version> although these may well
+      change again shortly)
+
+
 1.2
     - XPathScript can interpolate "{xpath}" in $t hash
     - reduced required modules list

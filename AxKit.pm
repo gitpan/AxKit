@@ -1,4 +1,4 @@
-# $Id: AxKit.pm,v 1.68 2001/02/16 15:27:00 matt Exp $
+# $Id: AxKit.pm,v 1.105 2001/06/05 15:10:41 matt Exp $
 
 package AxKit;
 use strict;
@@ -6,11 +6,10 @@ use vars qw/$VERSION/;
 
 use DynaLoader ();
 use UNIVERSAL ();
-use Apache;
+use Apache qw(warn);
 use Apache::Log;
 use Apache::Constants ':common';
-use Apache::ModuleConfig ();
-use Apache::AxKit::Exception ':try';
+use Apache::AxKit::Exception;
 use Apache::AxKit::ConfigReader;
 use Apache::AxKit::Cache;
 use Apache::AxKit::Provider;
@@ -18,318 +17,15 @@ use Apache::AxKit::Provider::File;
 use Apache::AxKit::Provider::Scalar;
 use Apache::AxKit::CharsetConv;
 
-$VERSION = "1.3";
+Apache::AxKit::CharsetConv::raise_error(1);
 
-if ($ENV{MOD_PERL}) {
-    no strict;
-    @ISA = qw(DynaLoader);
-    __PACKAGE__->bootstrap($VERSION);
-}
-
-###########################################################
-# Configuration Directive Callbacks
-###########################################################
-
-sub AxResetStyleMap ($$) {
-    my ($cfg, $parms) = @_;
-    %{$cfg->{StyleMap}} = ();
-}
-
-sub AxAddStyleMap ($$$$) {
-    my ($cfg, $parms, $type, $module) = @_;
-#    warn "AxAddStyleMap: $type => $module\n";
-    load_module($module);
-    $cfg->{StyleMap}{$type} = $module;
-}
-
-sub AxCacheDir ($$$) {
-    my ($cfg, $parms, $cachedir) = @_;
-    $cfg->{CacheDir} = $cachedir;
-}
-
-sub AxConfigReader ($$$) {
-    my ($cfg, $parms, $configclass) = @_;
-    load_module($configclass);
-    $cfg->{ConfigReader} = $configclass;
-}
-
-sub AxProvider ($$$) {
-    my ($cfg, $parms, $providerclass) = @_;
-    load_module($providerclass);
-    $cfg->{Provider} = $providerclass;
-}
-
-sub AxStyle ($$$) {
-    my ($cfg, $parms, $style) = @_;
-    $cfg->{Style} = $style;
-}
-
-sub AxMedia ($$$) {
-    my ($cfg, $parms, $media) = @_;
-    $cfg->{Media} = $media;
-}
-
-sub AxCacheModule ($$$) {
-    my ($cfg, $parms, $cachemodule) = @_;
-    load_module($cachemodule);
-    $cfg->{CacheModule} = $cachemodule;
-}
-
-sub AxDebugLevel ($$$) {
-    my ($cfg, $parms, $level) = @_;
-#    warn "Setting debug level to: $level\n";
-    $cfg->{DebugLevel} = $level;
-}
-
-sub AxTranslateOutput ($$$) {
-    my ($cfg, $parms, $enabled) = @_;
-    $cfg->{TranslateOutput} = $enabled;
-}
-
-sub AxOutputCharset ($$$) {
-    my ($cfg, $parms, $charset) = @_;
-    $cfg->{OutputCharset} = $charset;
-}
-
-sub AxGzipOutput ($$$) {
-    my ($cfg, $parms, $arg) = @_;
-    $cfg->{GzipOutput} = $arg;
-    if ($arg) {
-        require Compress::Zlib;
+BEGIN {
+    $VERSION = "1.4";
+    if ($ENV{MOD_PERL}) {
+        $AxKit::ServerString = "AxKit/$VERSION";
+        @AxKit::ISA = qw(DynaLoader);
+        __PACKAGE__->bootstrap($VERSION);
     }
-}
-
-# TODO - may want >1 error stylesheet
-sub AxErrorStylesheet ($$$$) {
-    my ($cfg, $parms, $type, $style) = @_;
-    $cfg->{ErrorStylesheet} = [$type, $style];
-}
-
-sub AxAddXSPTaglib ($$$) {
-    my ($cfg, $parms, $package) = @_;
-    load_module($package);
-    $cfg->{XSPTaglibs}{$package}++;
-}
-
-################################################
-# New mapping directives experiment
-################################################
-
-sub AxAddProcessor ($$$$) {
-    my ($cfg, $parms, $type, $stylesheet, $media, $style) = @_;
-
-    $media ||= 'screen';
-    $style ||= '#default';
-
-#    warn "AxAddProcessor: $type, $stylesheet [$media, $style]\n";
-
-#    warn "Debug Level currently: $cfg->{DebugLevel}\n";
-
-    my $processor = ['NORMAL', $type, $stylesheet];
-
-    push @{$cfg->{Processors}{$media}{$style}}, $processor;
-    return 1;
-}
-
-sub AxAddDocTypeProcessor ($$$$$) {
-    my ($cfg, $parms, $type, $stylesheet, $pubid, $media, $style) = @_;
-
-    $media ||= 'screen';
-    $style ||= '#default';
-
-#    warn "AxAddDocTypeProcessor: $type, $stylesheet, $pubid [$media, $style]\n";
-
-    my $processor = ['DocType', $type, $stylesheet, $pubid];
-
-    push @{$cfg->{Processors}{$media}{$style}}, $processor;
-}
-
-sub AxAddDTDProcessor ($$$$$) {
-    my ($cfg, $parms, $type, $stylesheet, $dtd, $media, $style) = @_;
-
-    $media ||= 'screen';
-    $style ||= '#default';
-
-#    warn "AxAddDTDProcessor: $type, $stylesheet, $dtd [$media, $style]\n";
-
-    my $processor = ['DTD', $type, $stylesheet, $dtd];
-
-    push @{$cfg->{Processors}{$media}{$style}}, $processor;
-}
-
-sub AxAddDynamicProcessor ($$$) {
-    my ($cfg, $parms, $package) = @_;
-    push @{$cfg->{DynamicProcessors}}, $package;
-}
-
-
-sub AxAddRootProcessor ($$$$$) {
-    my ($cfg, $parms, $type, $stylesheet, $root_element, $media, $style) = @_;
-
-    $media ||= 'screen';
-    $style ||= '#default';
-
-#    warn "AxAddRootProcessor: $type, $stylesheet, $root_element, $media, $style";
-    
-    my $processor = ['Root', $type, $stylesheet, $root_element];
-
-    push @{$cfg->{Processors}{$media}{$style}}, $processor;
-}
-
-sub AxResetProcessors ($$) {
-    my ($cfg, $parms) = @_;
-    $cfg->{ResetProcessors} = 1;
-}
-
-my $ENDMedia = "</AxMediaType>";
-
-sub AxMediaType ($$$;*) {
-    my ($cfg, $parms, $media, $cfg_fh, $style) = @_;
-
-#    warn "AxMediaType: $cfg, $parms, $media, $cfg_fh, $style\n";
-
-    $media =~ s/>$//;
-
-    $style ||= '#default';
-
-#    warn "CFG_FH is a: ", ref($cfg_fh), "\n";
-#    warn "Next line is: ", <$cfg_fh>, "\n";
-
-#    warn "AxMediaType: $media [$style] [$cfg_fh]\n";
-
-    parse_contents($cfg, $parms, $ENDMedia, $cfg_fh, $media, $style);
-}
-
-sub AxMediaType_END () {
-    die "$ENDMedia outside a <AxMediaType> container\n";
-}
-
-my $ENDStyle = "</AxStyleName>";
-
-sub AxStyleName ($$$;*) {
-    my ($cfg, $parms, $style, $cfg_fh, $media) = @_;
-
-#    warn "AxStyleType: $cfg, $parms, $style, $cfg_fh, $media\n";
-
-    $style =~ s/>$//;
-
-    $media ||= 'screen';
-
-#    warn "AxStyleName: $style [$media]\n";
-
-    parse_contents($cfg, $parms, $ENDStyle, $cfg_fh, $media, $style);
-}
-
-sub AxStyleName_END () {
-    die "$ENDStyle outside a <AxStyleName> container\n";
-}
-
-sub parse_contents {
-    my ($cfg, $parms, $end_token, $cfg_fh, $media, $style) = @_;
-
-#    warn "parse_contents ($end_token - $cfg_fh)\n";
-
-    while (my $line = <$cfg_fh>) {
-#        warn "parse line: $line\n";
-
-        last if $line =~ /^$end_token/;
-
-        $line =~ s/^(<?\w+)// || die "No command found in $line\n";
-        my $cmd = $1;
-
-        my @params = parse_params($line);
-
-#        warn "Found command: $cmd\n";
-
-        no strict 'refs';
-        if ($cmd =~ s/^<//) {
-            if ($cmd =~ /AxMediaType/) {
-                $cmd->($cfg, $parms, $params[0], $cfg_fh, $style);
-            }
-            else {
-                $cmd->($cfg, $parms, $params[0], $cfg_fh, $media);
-            }
-        }
-        else {
-            $cmd->($cfg, $parms, @params, $media, $style);
-        }
-    }
-    return 1;
-}
-
-sub parse_params {
-    my $line = shift;
-
-    my @params;
-
-    while ($line =~ /\G\s*((["']).*?\2|\S+)/gc) {
-        my $match = $1;
-        $match =~ s/^["']//;
-        $match =~ s/["']$//;
-        push @params, $match;
-    }
-
-    return @params;
-}
-
-my @flat_params = qw(
-        CacheDir
-        ConfigReader
-        Provider
-        Style
-        Media
-        CacheModule
-        DebugLevel
-        OutputCharset
-        EncodingDir
-        GzipOutput
-        ErrorStylesheet
-        XSPTaglibs
-        StyleMap
-        );
-
-# This is a source of a mod_perl memory leak in mod_perl <= 1.24.
-sub DIR_MERGE {
-    my ($parent, $current) = @_;
-
-    my %new;
-
-#    warn "DIR MERGE called : [$parent] [$current]\n";
-
-    return $parent if $parent == $current;
-    
-    # flat merges (single parameters)
-    for my $param (@flat_params) {
-#        warn "Merging $param\n";
-        $new{$param} = $current->{$param} || $parent->{$param};
-    }
-
-    # merge processor mappings
-    
-    if (!$current->{ResetProcessors}) {
-        # from parent
-        foreach my $style (keys %{$parent->{Processors} || {}}) {
-            foreach my $media (keys %{$parent->{Processors}{$style}}) {
-                push @{$new{Processors}{$style}{$media}},
-                        @{$parent->{Processors}{$style}{$media}};
-            }
-        }
-    }
-
-    # from current
-    foreach my $style (keys %{$current->{Processors} || {}}) {
-        foreach my $media (keys %{$current->{Processors}{$style}}) {
-            push @{$new{Processors}{$style}{$media}},
-                    @{$current->{Processors}{$style}{$media}};
-        }
-    }
-
-    # copy any dynamic processors
-    foreach my $proc (@{$current->{DynamicProcessors}}) {
-      push(@{$new{DynamicProcessors}},$proc);
-    }
-
-    return bless \%new, ref($parent);
 }
 
 ###############################################################
@@ -342,8 +38,14 @@ sub Debug {
         my @debug = @_;
         $debug[-1] =~ s/\n$//;
         my $log = Apache->request->log();
-        $log->info("[AxKit] : " . join('', @debug));
+        $log->warn("[AxKit] : " . join('', @debug));
 
+# Log Time Taken
+#         use vars qw/$T0/;
+#         use Time::HiRes qw(tv_interval gettimeofday);
+#         $log->info("[Time] : " . tv_interval($T0));
+
+# Log Memory Usage
 #         my $fh = Apache->gensym();
 #         my %mem;
 #         if (open($fh, "/proc/self/statm")) {
@@ -362,18 +64,6 @@ sub Debug {
 #
 #             warn("[AxKit] Mem Total: $mem{Total} Shared: $mem{Shared}\n");
 #         }
-    }
-}
-
-sub load_module {
-    my $class = shift;
-
-    my $module = $class . '.pm';
-    $module =~ s/::/\//g;
-
-    if (!$INC{$module}) {
-        AxKit::Debug(9, "(Re)loading $module");
-        require $module;
     }
 }
 
@@ -396,8 +86,8 @@ sub get_output_transformer {
         $func = sub {
             my $map = Apache::AxKit::CharsetConv->new("utf-8", $charset)
 			|| die "Charset $charset not supported by Iconv";
-
-            map { $map->convert( $_ ) } ($outputfunc->(@_));
+            
+            return map { $map->convert( $_ ) } ($outputfunc->(@_));
         };
     }
 
@@ -436,6 +126,8 @@ sub get_depends {
 sub handler {
     my $r = shift;
 
+#$T0 = [gettimeofday]; # uncomment this and the code in Debug() if you want time outputs
+    
 #     ##############################
 #     ## COMMENT OUT FOR RELEASE!!!
 #     ##############################
@@ -445,38 +137,42 @@ sub handler {
 #     }
 #     ##############################
 
+    local $SIG{__DIE__} = sub { AxKit::prep_exception(@_)->throw };
+    
     local $AxKit::Cfg;
     local $AxKit::Cache;
+    local $AxKit::HeadersSent;
 
-    return try {
-        throw Apache::AxKit::Exception::Declined(reason => 'in subrequest')
-                unless $r->is_main;
-
-        throw Apache::AxKit::Exception::Declined(reason => 'passthru')
-                if $r->notes('axkit_passthru');
-
+    my $retcode = eval {
         $AxKit::Cfg = Apache::AxKit::ConfigReader->new($r);
-        $AxKit::DebugLevel = $AxKit::Cfg->DebugLevel();
-        $Error::Debug = 1 if $AxKit::DebugLevel > 3;
+        
+        local $AxKit::DebugLevel = $AxKit::Cfg->DebugLevel();
+        local $Error::Debug = 1 if (($AxKit::DebugLevel > 3) || $AxKit::Cfg->StackTrace);
 
         my $provider = Apache::AxKit::Provider->new($r);
 
         AxKit::Debug(1, "handler called for " . $r->uri);
 
+        $provider->decline(reason => "passthru set")
+                if $r->notes('axkit_passthru');
+
         # Do we process this URL?
         AxKit::Debug(2, "checking if we process this resource");
         if (!$provider->process()) {
-            throw Apache::AxKit::Exception::Declined(reason => 'Provider declined');
+            $provider->decline(reason => 'Provider declined');
         }
 
         $r->header_out('X-AxKit-Version', $VERSION);
+        
+        $AxKit::OrigType = $r->content_type();
+        $r->content_type('changeme');
         
         # get preferred stylesheet and media type
         my ($preferred, $media) = get_style_and_media();
         AxKit::Debug(2, "media: $media, preferred style: $preferred");
 
         # get cache object
-        my $cache = Apache::AxKit::Cache->new($r, $r->filename() . ($ENV{PATH_INFO} || ''), $preferred, $media, $r->notes('axkit_cache_extra'));
+        my $cache = Apache::AxKit::Cache->new($r, $r->filename() . ($ENV{PATH_INFO} || ''), $preferred, $media, $r->notes('axkit_cache_extra'), 'gzip');
 
         my $recreate; # regenerate from source (not cached)
 
@@ -489,12 +185,14 @@ sub handler {
                 # Make sure we default the cache file, otherwise
                 # we setup a potential DoS
                 AxKit::Debug(3, "resetting cache with no preferred style ($preferred ne $styles->[0]{title})");
-                $cache = Apache::AxKit::Cache->new($r, $r->filename() . $ENV{PATH_INFO}, '', $media);
+                $cache = Apache::AxKit::Cache->new($r, $r->filename() . $ENV{PATH_INFO}, '', $media, $r->notes('axkit_cache_extra'), 'gzip');
             }
         }
         
         if (!$cache->exists()) {
             AxKit::Debug(2, "cache doesn't exist");
+            # set no_cache header if cache doesn't exist due to no_cache option
+            $r->no_cache(1) if $cache->no_cache();
             $recreate++;
         }
         
@@ -505,9 +203,6 @@ sub handler {
         if (!$recreate && $r->method() eq 'POST') {
             $recreate++;
         }
-
-        # set default content-type (expat returns in utf-8, so use that)
-        $r->content_type('text/html; charset=utf-8');
 
         $AxKit::Charset = $AxKit::Cfg->OutputCharset();
 
@@ -528,7 +223,9 @@ sub handler {
 
         if (my $charset = $AxKit::Cfg->OutputCharset) {
             AxKit::Debug(5, "Different output charset: $charset");
-            $r->content_type("text/html; charset=$charset");
+            if (!$r->notes('axkit_passthru_type')) {
+                $r->content_type("text/html; charset=$charset");
+            }
         }
         
         my $uri = $r->uri();
@@ -559,9 +256,30 @@ sub handler {
         deliver_to_browser($r);
 
         return OK;
+    };
+    my $E = $@;
+    unless ($E) {
+        return $retcode;
     }
-    catch Apache::AxKit::Exception::Error with {
-        my $E = shift;
+    
+    # restore $r if it hasn't been restored already
+    if (ref($r) eq 'AxKit::Apache') {
+        bless $r, 'Apache';
+        tie *STDOUT, 'Apache', $r;
+    }
+    
+    if ($E->isa('Apache::AxKit::Exception::OK')) {
+        return OK;
+    }
+    elsif ($E->isa('Apache::AxKit::Exception::Retval')) {
+        my $code = $E->{return_code};
+        return $code;
+    }
+    
+    $r->content_type($AxKit::OrigType)
+                if $r->content_type() eq 'changeme'; # restore content-type
+    
+    if ($E->isa('Apache::AxKit::Exception::Error')) {
         $r->log->error("[AxKit] [Error] $E->{-text}");
         $r->log->error("[AxKit] From: $E->{-file} : $E->{-line}");
 
@@ -571,112 +289,80 @@ sub handler {
 
         my $error_styles = $AxKit::Cfg->ErrorStyles;
         if (@$error_styles) {
-            my $error = '<error><file>' .
-                    xml_escape($r->filename) . '</file><msg>' .
-                    xml_escape($E->{-text}) . '</msg>' .
-                    '<stack_trace><bt level="0">'.
-                    '<file>' . xml_escape($E->{'-file'}) . '</file>' .
-                    '<line>' . xml_escape($E->{'-line'}) . '</line>' .
-                    '</bt>';
-
-            $error .= '</stack_trace></error>';
-
-            my $provider = Apache::AxKit::Provider::Scalar->new(
-                    $r, $error, $error_styles
-                    );
-
-            $r->notes('xml_string', $error);
-
-            $r->send_http_header();
-
-            return try {
-                process_request($r, $provider, 1, $error_styles);
-                bless $r, 'Apache';
-                tie *STDOUT, 'Apache', $r;
-#                $r->send_http_header();
-                print $r->notes('xml_string');
-                return OK;
-            }
-            catch Error with {
-                my $E = shift;
-                $r->log->error("[AxKit] [FATAL] Error occured while processing Error XML: $E");
-                return SERVER_ERROR;
-            };
+            return process_error($r, $E, $error_styles);
         }
 
         return SERVER_ERROR;
 
     }
-    catch Apache::AxKit::Exception::Declined with {
-        my $E = shift;
-        if ($r->dir_config('AxLogDeclines')) {
-            $r->log->info("[AxKit] [DECLINED] $E->{reason}")
+    elsif ($E->isa('Apache::AxKit::Exception::Declined')) {
+        if ($AxKit::Cfg && $AxKit::Cfg->LogDeclines()) {
+            $r->log->warn("[AxKit] [DECLINED] $E->{reason}")
                     if $E->{reason};
-            $r->log->info("[AxKit] [DECLINED] From: $E->{-file} : $E->{-line}");
         }
-        AxKit::Debug(4, "DECLINED");
+        AxKit::Debug(4, "[DECLINED] From: $E->{-file} : $E->{-line}");
         return DECLINED;
     }
-    catch Apache::AxKit::Exception::OK with {
-        return OK;
-    }
-    catch Apache::AxKit::Exception::Retval with {
-        my $E = shift;
-        my $code = $E->{return_code};
-        return $code;
-    }
-    catch Error::Simple with {
-        my $E = shift;
+    elsif ($E->isa('Error::Simple') || $E->isa('Apache::AxKit::Exception')) {
         $r->log->error("[AxKit] [UnCaught] $E");
 
         if ($Error::Debug) {
             $r->log->error("[AxKit] [Backtrace] " . $E->stacktrace);
         }
 
-        # return error page here somehow...
+        # return error page if a stylesheet for errors has been provided
         my $error_styles = $AxKit::Cfg->ErrorStyles;
         if (@$error_styles) {
-            my $error = '<error><file>' .
-                    xml_escape($r->filename) . '</file><msg>' .
-                    xml_escape($E) . '</msg></error>';
-
-            my $provider = Apache::AxKit::Provider::Scalar->new(
-                    $r, $error, $error_styles
-                    );
-
-            $r->notes('xml_string', $error);
-
-            $r->send_http_header();
-
-            return try {
-                process_request($r, $provider, 1, $error_styles);
-                bless $r, 'Apache';
-                tie *STDOUT, 'Apache', $r;
-#                $r->send_http_header();
-                print $r->notes('xml_string');
-                return OK;
-            }
-            catch Error with {
-                my $E = shift;
-                $r->log->error("[AxKit] [FATAL] Error occured while processing Error XML: $E");
-                return SERVER_ERROR;
-            };
-
+            return process_error($r, $E, $error_styles);
         }
 
         return SERVER_ERROR;
     }
-    except {
-        # restore $r if it hasn't been restored already
-        if (ref($r) eq 'AxKit::Apache') {
-            bless $r, 'Apache';
-            tie *STDOUT, 'Apache', $r;
-        }
-        return {};
+    
+    die "Unknown exception type: " . ref($E);
+    
+    return DECLINED;
+}
+
+sub process_error {
+    my ($r, $E, $error_styles) = @_;
+    
+    $r->content_type("text/html; charset=UTF-8"); # set a default for errors
+    
+    my $error = '<error><file>' .
+            xml_escape($r->filename) . '</file><msg>' .
+            xml_escape($E->{-text}) . '</msg>' .
+            '<stack_trace><bt level="0">'.
+            '<file>' . xml_escape($E->{'-file'}) . '</file>' .
+            '<line>' . xml_escape($E->{'-line'}) . '</line>' .
+            '</bt>';
+    
+    my $i = 1;
+    for my $stack (@{$E->stacktrace_list}) {
+        $error .= '<bt level="' . $i++ . '">' .
+                '<file>' . xml_escape($stack->{'-file'}) . '</file>' .
+                '<line>' . xml_escape($stack->{'-line'}) . '</line>' .
+                '</bt>';
     }
-    otherwise {
-        return DECLINED;
+
+    $error .= '</stack_trace></error>';
+
+    my $provider = Apache::AxKit::Provider::Scalar->new(
+            $r, $error, $error_styles
+            );
+
+    $r->pnotes('xml_string', $error);
+
+    AxKit::Apache::send_http_header($r);
+
+    eval {
+        process_request($r, $provider, $error_styles);
     };
+    if ($@) {
+        $r->log->error("[AxKit] [FATAL] Error occured while processing Error XML: $@");
+        return SERVER_ERROR;
+    }
+    return OK;
 }
 
 sub process_request {
@@ -698,6 +384,8 @@ sub process_request {
 
         my $mapto = $style->{module};
 
+        AxKit::load_module($mapto);
+        
         AxKit::Debug(3, "about to execute: $mapto\::handler");
 
         my $method = "handler";
@@ -739,7 +427,6 @@ sub get_styles {
     my ($media, $style, $cache, $provider) = @_;
 
     my $key = $cache->key();
-    my $mtime = $provider->mtime();
 
     AxKit::Debug(2, "getting styles and external entities from the XML");
     # get styles/ext_ents from cache or re-parse
@@ -747,18 +434,18 @@ sub get_styles {
     my $styles;
 
     if (exists($AxKit::Stash{$key})
-            && $AxKit::Stash{$key}{mtime} <= $mtime)
+            && !$provider->has_changed($AxKit::Stash{$key}{mtime}))
     {
-        AxKit::Debug(3, "styles and external entities cached");
+        AxKit::Debug(3, "styles cached");
         return $AxKit::Stash{$key}{'styles'};
     }
     else {
-        AxKit::Debug(3, "styles and external entities not cached - calling get_styles()");
+        AxKit::Debug(3, "styles not cached - calling \$provider->get_styles()");
         my $styles = $provider->get_styles($media, $style);
 
         $AxKit::Stash{$key} = {
             styles => $styles,
-            mtime => $mtime,
+            mtime => $provider->mtime(),
             };
         
         return $styles;
@@ -768,7 +455,7 @@ sub get_styles {
 sub check_resource_mtimes {
     my ($xml_provider, $styles, $mtime) = @_;
 
-    my $r = Apache->request;
+    my $r = AxKit::Apache->request;
     
     AxKit::Debug(3, "checking xml mtime vs cache mtime");
     if ($xml_provider->mtime() <= $mtime) {
@@ -805,19 +492,19 @@ sub check_resource_mtimes {
 sub check_dependencies {
     my ($r, $provider, $cache) = @_;
     AxKit::Debug(2, "Checking dependencies");
-    if ($provider->mtime() <= $cache->mtime()) {
+    if ( $provider->has_changed( $cache->mtime() ) ) {
         AxKit::Debug(3, "xml newer than cache");
         return 1;
     }
     else {
-        my $depend_cache = Apache::AxKit::Cache->new($r, $cache->key() . '.depends');
+        my $depend_cache = Apache::AxKit::Cache->new($r, $cache->key(), '.depends');
         my $depends_contents = $depend_cache->read();
         if ($depends_contents) {
             DEPENDENCY:
             for my $dependency (split(/:/, $depends_contents)) {
                 AxKit::Debug(3, "Checking dependency: $dependency for resource ", $provider->key());
                 my $dep = Apache::AxKit::Provider->new($r, key => $dependency);
-                if ($dep->mtime() <= $cache->mtime()) {
+                if ( $dep->has_changed( $cache->mtime() ) ) {
                     AxKit::Debug(4, "dependency: $dependency newer");
                     return 1;
                 }
@@ -836,53 +523,92 @@ sub save_dependencies {
     
     return if $cache->no_cache();
     
-    try {
+    eval {
         my @depends = get_depends();
-        my $depend_cache = Apache::AxKit::Cache->new($r, $cache->key() . '.depends');
+        my $depend_cache = Apache::AxKit::Cache->new($r, $cache->key(), '.depends');
         $depend_cache->write(join(':', @depends));
-    }
-    catch Error with {
-        my $error = shift;
-        AxKit::Debug(2, "Cannot write dependencies cache: $error");
     };
+    if ($@) {
+        AxKit::Debug(2, "Cannot write dependencies cache: $@");
+    }
 }
 
 sub deliver_to_browser {
     my ($r) = @_;
-
-    if ($AxKit::Cache->no_cache() || 
+    
+    if ($r->content_type eq 'changeme' && !$r->notes('axkit_passthru_type')) {
+        $AxKit::Cfg->AllowOutputCharset(1);
+        $r->content_type('text/html; charset=' . ($AxKit::Cfg->OutputCharset || "UTF-8"));
+    }
+    elsif ($r->notes('axkit_passthru_type')) {
+        $r->content_type($AxKit::OrigType);
+    }
+    
+    if (my $charset = $AxKit::Cfg->OutputCharset()) {
+        my $ct = $r->content_type;
+        $ct =~ s/charset=.*?(;|$)/charset=$charset/i;
+        $r->content_type($ct);
+    }
+            
+    if ($AxKit::Cache->no_cache() ||
             lc($r->dir_config('Filter')) eq 'on' ||
             $r->method() eq 'POST') {
         AxKit::Debug(4, "writing xml string to browser");
         my ($transformer, $doit) = get_output_transformer();
         if ($AxKit::Cfg->DoGzip) {
             AxKit::Debug(4, 'Sending gzipped xml string to browser');
-            $r->send_http_header();
+            AxKit::Apache::send_http_header($r);
             if ($doit) {
                 $r->print( Compress::Zlib::memGzip(
-                        $transformer->( $r->notes('xml_string') )
-                        ) );
+                         $transformer->( $r->pnotes('xml_string') )
+                         ) );
             }
             else {
-                $r->print( Compress::Zlib::memGzip( $r->notes('xml_string') ) );
+                $r->print( Compress::Zlib::memGzip( $r->pnotes('xml_string') ) );
             }
         }
         else {
-            $r->send_http_header();
+            AxKit::Apache::send_http_header($r);
             if ($doit) {
                 $r->print(
-                        $transformer->( $r->notes('xml_string') )
+                        $transformer->( $r->pnotes('xml_string') )
                         );
             }
             else {
-                $r->print( $r->notes('xml_string') );
+                $r->print( $r->pnotes('xml_string') );
             }
         }
     }
     else {
         AxKit::Debug(4, "writing xml string to cache and delivering to browser");
-        $AxKit::Cache->write($r->notes('xml_string'));
-        $AxKit::Cache->deliver();
+        eval {
+            $AxKit::Cache->write($r->pnotes('xml_string'));
+            $AxKit::Cache->deliver();
+        };
+        if (my $E = $@) {
+            if ($E->isa('Apache::AxKit::Exception::IO')) {
+                AxKit::Debug(1, "WARNING: Unable to write to AxCacheDir or .xmlstyle_cache");
+                AxKit::Apache::send_http_header($r);
+                $r->print( $r->pnotes('xml_string') );
+            }
+            else {
+                throw $E;
+            }
+        }
+    }
+}
+
+sub prep_exception {
+    my $err = shift;
+    
+    if (ref($err)) {
+        return $err;
+    }
+    elsif ($err) {
+        return Apache::AxKit::Exception::Error->new(-text => $err);
+    }
+    else {
+        return;
     }
 }
 
@@ -917,6 +643,10 @@ use Apache;
 use Fcntl qw(:DEFAULT);
 @ISA = ('Apache');
 
+sub request {
+    return bless Apache->request, 'AxKit::Apache';
+}
+
 sub TIEHANDLE {
     my($class, $r) = @_;
     $r ||= Apache->request;
@@ -927,17 +657,9 @@ sub content_type {
 
     my ($type) = @_;
 
-    if ($type && $AxKit::Charset) {
-        # don't mess with me, suckaaaa
-        unless ($type =~ s/charset=(\S|[^;])+/charset=$AxKit::Charset/) {
-            $type .= "; charset=$AxKit::Charset";
-        }
-    }
-
-    if ($type && !$AxKit::Cache->no_cache()) {
+    if ($type) {
 #        warn "Writing content type '$type'\n";
-        my $typecache = Apache::AxKit::Cache->new($self, $AxKit::Cache->key() . '.type');
-        $typecache->write($type);
+        $AxKit::Cache->set_type($type);
     }
 
     $self->SUPER::content_type(@_);
@@ -947,11 +669,12 @@ sub print {
     my $self = shift;
 
     if ($self->notes('resetstring')) {
-        $self->notes('xml_string', '');
+        $self->pnotes('xml_string', '');
         $self->notes('resetstring', 0);
     }
-
-    $self->notes()->{'xml_string'} .= join('', @_);
+    
+    my $current = $self->pnotes('xml_string');
+    $self->pnotes('xml_string', $current . join('', @_));
 }
 
 *PRINT = \&print;
@@ -1000,7 +723,7 @@ __END__
 
 =head1 NAME
 
-AxKit - an XML Delivery Toolkit for Apache
+AxKit - an XML Application Server for Apache
 
 =head1 DESCRIPTION
 
@@ -1013,8 +736,8 @@ http://axkit.org/ for details.
 In httpd.conf:
 
     # we add custom configuration directives
-    # so this *must* be in httpd.conf outside of
-    # all request based conditionals
+    # so this *must* be in httpd.conf *outside* of
+    # all run time configuration blocks (e.g. <Location>)
     PerlModule AxKit
 
 Then in any Apache configuration section (Files, Location, Directory,
@@ -1045,39 +768,12 @@ Now simply create xml files with stylesheet declarations:
     </test>
 
 And for the above, create a stylesheet in the same directory as the
-file called "test.xsl" that compiles the XML into something usable  by
+file called "test.xsl" that compiles the XML into something usable by
 the browser. If you wish to use other languages than XSLT, you can,
-provided a module exists for that language.
-
-=head1 BUILD PROBLEMS
-
-If you have trouble compiling AxKit, or apache fails to start after
-installing, it's possible to use AxKit without the built in
-configuration directives (which have been known to generate segfaults).
-To do this install as follows:
-
-    perl Makefile.PL NO_DIRECTIVES=1
-    make
-    make test
-    make install UNINST=1
-
-This removes the custom configuration directives. Note that the 
-UNINST=1 is required to make sure that old AxKit files are removed
-from the binary directory (since it has no binary component any
-more). Now you can change the directives to ordinary PerlSetVar
-directives:
-
-    PerlSetVar AxStyleMap "text/xsl => Apache::AxKit::Language::XSLT, \
-        application/x-xpathscript => Apache::AxKit::Language::XPathScript"
-
-    PerlSetVar AxCacheDir /opt/axkit/cache
-
-It's worth noting that the PerlSetVar option is available regardless of
-whether you compile with NO_DIRECTIVES set, although it is marginally
-slower to use PerlSetVar.
-
-Also note that if you go B<back> to using the compiled directives,
-you must again install with UNINST=1.
+provided a module exists for that language. AxKit does not internally
+have a built-in XSLT interpreter, instead it relies on interfaces
+to other Perl modules. We currently have interfaces in the core
+package to XML::Sablotron, XML::LibXSLT, and XML::XSLT.
 
 =head1 CONFIGURATION DIRECTIVES
 
@@ -1086,8 +782,7 @@ you to use in Apache's httpd.conf or .htaccess files. These provide very
 fine grained control over how AxKit performs transformations and sends its
 output to the user.
 
-Each directive below is listed along with how to use that directive with
-NO_DIRECTIVES=1 (i.e. via PerlSetVar).
+Each directive below is listed along with how to use that directive.
 
 =head2 AxCacheDir
 
@@ -1100,9 +795,12 @@ writable!
 
     AxCacheDir /tmp/axkit_cache
 
-or
+=head2 AxNoCache
 
-    PerlSetVar AxCacheDir /tmp/axkit_cache
+Turn off caching. This is a FLAG option - On or Off. Default is "Off". When
+this flag is set, AxKit will send out Pragma: no-cache headers.
+
+    AxNoCache On
 
 =head2 AxDebugLevel
 
@@ -1112,9 +810,27 @@ use this option on a live server.
 
     AxDebugLevel 5
 
-or
+=head2 AxStackTrace
 
-    PerlSetVar AxDebugLevel 5
+This FLAG option says whether to maintain a stack trace with every exception.
+This is slightly inefficient, as it has to call caller() several times for
+every exception thrown, but it can give better debugging information.
+
+    AxStackTrace On
+
+=head2 AxLogDeclines
+
+This option is a FLAG, it is either On, or Off (default is Off). When
+AxKit declines to process a URI, it gives a reason. Normally this reason
+is not sent to the log, however if AxLogDeclines is set, the reason is
+logged. This is useful in figuring out why a particular file is not being
+processed by AxKit.
+
+If this option is set, the reason is logged regardless of the AxDebugLevel,
+however if AxDebugLevel is 4 or higher, the file and line number of B<where>
+the DECLINE occured is logged, but not necessarily the reason.
+
+    AxLogDeclines On
 
 =head2 AxGzipOutput
 
@@ -1127,10 +843,6 @@ with mostly static pages because it reduces outgoing bandwidth significantly.
 
     AxGzipOutput On
 
-or
-
-    PerlSetVar AxGzipOutput 1
-
 =head2 AxTranslateOutput
 
 This option enables output character set translation. The default method
@@ -1139,10 +851,6 @@ Accept-Charset HTTP header, but you can also hard-code an output character
 set using AxOutputCharset (see below).
 
     AxTranslateOutput On
-
-or
-
-    PerlSetVar AxTranslateOutput 1
 
 =head2 AxOutputCharset
 
@@ -1154,10 +862,6 @@ is recommended to not use this option if you can avoid it. This option is
 only enable if you also enable AxTranslateOutput.
 
     AxOutputCharset iso-8859-1
-
-or
-
-    PerlSetVar AxOutputCharset iso-8859-1
 
 =head2 AxErrorStylesheet
 
@@ -1182,10 +886,6 @@ will occur and an error written in the Apache error log.
 
     AxErrorStylesheet text/xsl /stylesheets/error.xsl
 
-or
-
-    PerlSetVar AxErrorStylesheet "text/xsl => /stylesheets/error.xsl"
-
 =head2 AxAddXSPTaglib
 
 XSP supports two types of tag libraries. The simplest type to understand
@@ -1200,11 +900,9 @@ directive.
     AxAddXSPTaglib Apache::AxKit::Language::XSP::SQL
     AxAddXSPTaglib Apache::AxKit::Language::XSP::Util
 
-or
-
-    PerlSetVar AxAddXSPTaglibs \
-        Apache::AxKit::Language::XSP::SQL \
-        Apache::AxKit::Language::XSP::Util
+If you prefix the module name with a + sign, it will be pre-loaded on
+server startup (assuming that the config directive is in a httpd.conf,
+rather than a .htaccess file).
 
 =head2 AxStyle
 
@@ -1215,10 +913,6 @@ files specifying different AxStyle directives.
 
     AxStyle "My custom style"
 
-or
-
-    PerlSetVar AxPreferredStyle "My custom style"
-
 =head2 AxMedia
 
 Very similar to the previous directive, this sets the media type. It is
@@ -1226,10 +920,6 @@ most useful in a .htaccess file where you might have an entire directory
 for the media "handheld".
 
     AxMedia tv
-
-or
-
-    PerlSetVar AxPreferredMedia tv
 
 =head2 AxAddStyleMap
 
@@ -1244,34 +934,31 @@ functionality, for example different XSLT processors).
     AxAddStyleMap application/x-xsp \
         Apache::AxKit::Language::XSP
 
-or
-
-  PerlSetVar AxStyleMap \
-     "text/xsl => Apache::AxKit::Language::Sablot, \
-      application/x-xpathscript => Apache::AxKit::Language::XPathScript, \
-      application/x-xsp => Apache::AxKit::Language::XSP"
+If you prefix the module name with a + sign, it will be pre-loaded on
+server startup (assuming that the config directive is in a httpd.conf,
+rather than a .htaccess file).
 
 =head2 AxResetStyleMap
 
 Since the style map will continue deep into your directory tree, it may
-occasionally be useful to reset the style map (I don't have an example
-usage of this at this time).
+occasionally be useful to reset the style map, for example if you want
+a directory processed by a different XSLT engine.
 
     # option takes no arguments.
     AxResetStyleMap
 
-or
+=head1 ASSOCIATING STYLESHEETS WITH XML FILES
 
-    PerlSetVar AxStyleMap ""
-
-Note that the PerlSetVar version of resetting the style map does I<not>
-work with the custom directive version of AxAddStyleMap and vice versa.
+There are several directives specifically designed to allow you to build
+a flexible sitemap that specifies how XML files get processed on your
+system. These directives are used only if your XML file does not have the
+<?xml-stylesheet?> directives.
 
 =head2 AxAddProcessor
 
 This directive maps all XML files to a particular stylesheet to be
 processed with. You can do this in a <Files> directive if you need
-to do it by file extension:
+to do it by file extension, or on a file-by-file basis:
 
     <Files *.dkb>
     AxAddProcessor text/xsl /stylesheets/docbook.xsl
@@ -1289,8 +976,6 @@ be HTML (or WAP or whatever your chosen output format is):
     AxAddProcessor text/xsl /stylesheets/to_html.xsl
     </Files>
 
-There is no PerlSetVar equivalent of this directive.
-
 =head2 AxAddDocTypeProcessor
 
 This allows you to map all XML files conforming to a particular XML
@@ -1300,8 +985,6 @@ stylesheet(s):
     AxAddDocTypeProcessor text/xsl /stylesheets/docbook.xsl \
             "-//OASIS//DTD DocBook XML V4.1.2//EN"
 
-There is no PerlSetVar equivalent of this directive.
-
 =head2 AxAddDTDProcessor
 
 This allows you to map all XML files that specify the given DTD file or
@@ -1309,8 +992,6 @@ URI in the SYSTEM identifier to be mapped to the specified stylesheet(s):
 
     AxAddDTDProcessor text/xsl /stylesheets/docbook.xsl \
             /dtds/docbook.dtd
-
-There is no PerlSetVar equivalent of this directive.
 
 =head2 AxAddRootProcessor
 
@@ -1326,7 +1007,13 @@ Namespaces are fully supported via the following syntax:
 
 This syntax was taken from James Clark's Introduction to Namespaces article.
 
-There is no PerlSetVar equivalent of this directive.
+=head2 AxAddURIProcessor
+
+This allows you to use a Perl regular expression to match against the
+URI of the file in question:
+
+    AxAddURIProcessor text/xsl /stylesheets/book.xsl \
+            "book.*\.xml$"
 
 =head2 AxResetProcessors
 
@@ -1342,9 +1029,9 @@ get processed by AxKit.
 
 This is a configuration directive block. It allows you to have finer
 grained control over the mappings, by specifying that the mappings (which
-have to be specified using the 4 directives above) contained within the
-block are only relevant when the requested media type is as specified
-in the block parameters:
+have to be specified using the Add*Processor directives above) contained 
+within the block are only relevant when the requested media type is as 
+specified in the block parameters:
 
     <AxMediaType screen>
     AxAddProcessor text/xsl /stylesheets/webpage_screen.xsl
@@ -1358,8 +1045,6 @@ in the block parameters:
     AxAddProcessor text/xsl /stylesheets/webpage_tv.xsl
     </AxMediaType>
 
-There is no PerlSetVar equivalent of this directive block.
-
 =head2 <AxStyleName>
 
 This configuration directive block is very similar to the above, only
@@ -1367,7 +1052,9 @@ it specifies alternate stylesheets by name, which can be then requested
 via a StyleChooser:
 
     <AxMediaType screen>
-        AxAddProcessor text/xsl /styles/webpage_screen.xsl
+        <AxStyleName #default>
+            AxAddProcessor text/xsl /styles/webpage_screen.xsl
+        </AxStyleName>
         <AxStyleName printable>
             AxAddProcessor text/xsl /styles/webpage_printable.xsl
         </AxStyleName>
@@ -1376,8 +1063,6 @@ via a StyleChooser:
 This and the above directive block can be nested, and can also be
 contained within <Files> directives to give you even more control over
 how your XML is transformed.
-
-There is no PerlSetVar equivalent of this directive block.
 
 =head1 CUSTOMISING AXKIT
 
@@ -1413,26 +1098,27 @@ joining the mailing list are at http://axkit.org/mailinglist.xml
 
 =head1 KNOWN BUGS
 
-There are currently some incompatibilities between the versions of expat
-loaded by Apache when compiled with RULE_EXPAT=yes (which is a default,
-unfortunately), and XML::Parser's copy of expat. This can cause sporadic
-segmentation faults in Apache's httpd processes. The solution is to
-recompile Apache with RULE_EXPAT=no. If you have a recent mod_perl and
-use mod_perl's Makefile.PL to compile Apache for you, this option will
-be enabled automatically for you.
-
-There are a number of known bugs in XSP at this time. This is being
-re-written to use SAX2, and so we are not focusing on fixing these bugs
-until the re-write is further down the line.
+There are currently some incompatibilities between the versions of
+expat loaded by Apache when compiled with RULE_EXPAT=yes (which is a
+default, unfortunately), and XML::Parser's copy of expat. This can
+cause sporadic segmentation faults in Apache's httpd processes. The
+solution is to recompile Apache with RULE_EXPAT=no (later Apache's have
+implemented this as --disable-rule=expat). If you have a recent
+mod_perl and use mod_perl's Makefile.PL DO_HTTPD=1 to compile Apache
+for you, this option will be enabled automatically for you.
 
 =head1 AUTHOR and LICENSE
 
-AxKit is developed by AxKit.com Ltd. See http://axkit.com/ for more details.
+AxKit is developed by AxKit.com Ltd. See http://axkit.com/ for more
+details. AxKit.com offer full consultancy services and support for the
+AxKit product line, and also offer some custom solutions based on AxKit
+for doing content management, and rendering various other file formats
+using XML techniques. Contact info@axkit.com for more details.
 
 AxKit is licensed under either the GNU GPL Version 2, or the Perl Artistic
 License.
 
-Copyright AxKit.com, 2000.
+Copyright AxKit.com, 2001.
 
 =head1 MORE DOCUMENTATION
 
@@ -1454,7 +1140,5 @@ L<Apache::AxKit::Provider>,
 L<Apache::AxKit::Provider::Filter>,
 L<Apache::AxKit::Provider::File>,
 L<Apache::AxKit::Provider::Scalar>
-
-(and probably others I have forgotten about)
 
 =cut

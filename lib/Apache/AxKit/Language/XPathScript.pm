@@ -1,4 +1,4 @@
-# $Id: XPathScript.pm,v 1.47 2001/02/16 13:36:24 matt Exp $
+# $Id: XPathScript.pm,v 1.62 2001/06/05 15:12:40 matt Exp $
 
 package Apache::AxKit::Language::XPathScript;
 
@@ -7,7 +7,7 @@ use vars qw(@ISA $VERSION $stash );
 
 use Apache;
 use Apache::File;
-use XML::XPath 0.50;
+use XML::XPath 1.00;
 use XML::XPath::XMLParser;
 use XML::XPath::Node;
 use XML::XPath::NodeSet;
@@ -15,10 +15,8 @@ use XML::Parser;
 use Apache::AxKit::Provider;
 use Apache::AxKit::Language;
 use Apache::AxKit::Cache;
-use Apache::AxKit::Exception ':try';
-use Storable;
+use Apache::AxKit::Exception;
 use Apache::AxKit::CharsetConv;
-
 
 @ISA = 'Apache::AxKit::Language';
 
@@ -34,7 +32,7 @@ sub handler {
     
     my $xml_parser = XML::Parser->new(
             ErrorContext => 2,
-            Namespaces => 1,
+            Namespaces => $XML::XPath::VERSION < 1.07 ? 1 : 0,
             ParseParamEnt => 1,
             );
     
@@ -57,49 +55,17 @@ sub handler {
         $source_tree = $dom;
         delete $r->pnotes()->{'dom_tree'};
     }
-    elsif (my $xml = $r->notes('xml_string')) {
+    elsif (my $xml = $r->pnotes('xml_string')) {
 #        warn "Parsing from string : $xml\n";
-        try {
+        eval {
             $source_tree = $parser->parse($xml);
-        }
-        catch Error with {
-            my $E = shift;
-            throw Apache::AxKit::Exception::Error(-text => "Parse of xml_string failed: $E->{-text}");
         };
+        if ($@) {
+            throw Apache::AxKit::Exception::Error(-text => "Parse of xml_string failed: $@");
+        }
     }
     else {
-        AxKit::Debug(6, "XPathScript: creating stor cache");
-        my $cache = Apache::AxKit::Cache->new($r, $r->filename(), 'xpathstor');
-        if ($cache->mtime() <= $xml_provider->mtime()) {
-            AxKit::Debug(7, "XPathScript: thawing stor cache");
-            try {
-                $source_tree = Storable::thaw($cache->read());
-            }
-            catch Error with {
-                my $err = shift;
-                AxKit::Debug(7, "XPathScript: thaw failed: $err");
-            };
-        }
-        
-        if (!$source_tree) {
-            AxKit::Debug(7, "XPathScript: reparsing file");
-            $source_tree = try {
-                $parser->parse($xml_provider->get_fh());
-            }
-            catch Error with {
-                $parser->parse(${ $xml_provider->get_strref() });
-            };
-            
-            AxKit::Debug(7, "XPathScript: freezing stor cache");
-
-            try {
-                $cache->write(Storable::freeze($source_tree));
-            }
-            catch Error with {
-                my $err = shift;
-                AxKit::Debug(1, "XPathScript: freeze failed: $err");
-            };
-        }
+        $source_tree = get_source_tree($xml_provider, $parser);
     }
     
     $xpath->set_context($source_tree);
@@ -112,7 +78,7 @@ sub handler {
     AxKit::Debug(6, "Checking stylesheet mtime: $mtime\n");
     if ($stash->{$style_key}
             && exists($stash->{$style_key}{mtime})
-            && ($stash->{$style_key}{mtime} <= $mtime)
+            && !$style_provider->has_changed($stash->{$style_key}{mtime})
             && check_inc_mtime($stash->{$style_key}{mtime}, $style_provider, $stash->{$style_key}{includes})) {
         # cached... just exec.
         AxKit::Debug(7, "Using stylesheet cache\n");
@@ -136,9 +102,16 @@ sub handler {
     
     AxKit::Debug(7, "Running XPathScript script\n");
     local $^W;
-    $cv->($r, $xpath, $t);
+    eval {
+        $cv->($r, $xpath, $t);
+    };
+    if ($@) {
+        AxKit::Debug(1, "XPathScript error: $@");
+        throw $@;
+    }
     
-    if (!$r->notes('xml_string') && !$r->dir_config('XPSNoApplyTemplatesOnEmptyOutput')) { # no output? Try apply_templates
+    if (!$r->pnotes('xml_string') && 
+        !$r->dir_config('XPSNoApplyTemplatesOnEmptyOutput')) { # no output? Try apply_templates
         print Apache::AxKit::Language::XPathScript::Toys::apply_templates();
     }
     
@@ -151,17 +124,40 @@ sub handler {
     return $r->status($old_status);
 }
 
+sub get_source_tree {
+    my ($provider, $parser) = @_;
+    my $source_tree;
+    AxKit::Debug(7, "XPathScript: reparsing file");
+    eval {
+        my $fh = $provider->get_fh();
+        # warn("parsing FH $fh with parser $parser\n");
+        local $/;
+        my $contents = <$fh>;
+        # warn("FH contains: $contents\n");
+        $source_tree = $parser->parse($contents);
+        # warn("Parse completed\n");
+        close($fh);
+    };
+    if ($@) {
+        # warn("parse_fh failed\n");
+        $source_tree = $parser->parse(${ $provider->get_strref() });
+    }
+
+    # warn("get_source_tree = $source_tree\n");
+    return $source_tree;
+}
+
 sub check_inc_mtime {
     my ($mtime, $provider, $includes) = @_;
     
     for my $inc (@$includes) {
 #        warn "Checking mtime for $inc\n";
         my $inc_provider = Apache::AxKit::Provider->new(
-                Apache->request, 
+                AxKit::Apache->request, 
                 uri => $inc,
                 rel => $provider,
                 );
-        if ($inc_provider->mtime() < $mtime) {
+        if ($inc_provider->has_changed($mtime)) {
 #            warn "$inc newer (" . $inc_provider->mtime() . ") than last compile ($mtime) causing recompile\n";
             return;
         }
@@ -172,16 +168,17 @@ sub check_inc_mtime {
 sub extract {
     my ($provider,$scalar_output) = @_;
     
-    my $contents = try { 
+    my $contents;
+    eval { 
         my $fh = $provider->get_fh();
         local $/;
-        return <$fh>;
-    }
-    catch Error with {
-        return ${ $provider->get_strref() };
+        $contents = <$fh>;
     };
+    if ($@) {
+        $contents = ${ $provider->get_strref() };
+    }
     
-    my $r = $provider->apache_request;
+    my $r = AxKit::Apache->request();
     if (my $charset = $r->dir_config('XPathScriptCharset')) {
         
         AxKit::Debug(8, "XPS: got charset: $charset");
@@ -213,9 +210,9 @@ sub extract {
             $contents =~ /\G(.*?)%>/gcs || die "No terminating '%>' after line $line ($key)";
             my $perl = $1;
             if(!$scalar_output) {
-                $script .= "print( $perl );\n";
+                $script .= "print(do { $perl });\n";
             } else {
-                $script .= "\$__OUTPUT.=join('',($perl));\n";
+                $script .= "\$__OUTPUT.=join('',(do { $perl }));\n";
             }
             $line += $perl =~ tr/\n//;
         }
@@ -278,7 +275,10 @@ sub compile {
     
     AxKit::Debug(10, "Compiling script:\n$eval\n");
     eval $eval;
-    throw Apache::AxKit::Exception::Error(-text => "$@") if $@;
+    if ($@) {
+        AxKit::Debug(1, "Compilation failed: $@");
+        throw $@;
+    }
 }
 
 sub include_file {
@@ -291,7 +291,7 @@ sub include_file {
     push @{$stash->{$key}{includes}}, $filename;
     
     my $inc_provider = Apache::AxKit::Provider->new(
-            Apache->request,
+            AxKit::Apache->request,
             uri => $filename,
             rel => $provider,
             );
@@ -300,7 +300,7 @@ sub include_file {
 }
 
 sub XML::XPath::Function::document {
-#    warn "Document function called\n";
+    # warn "Document function called\n";
     return unless $Apache::AxKit::Language::XPathScript::local_ent_handler;
     my $self = shift;
     my ($node, @params) = @_;
@@ -308,31 +308,43 @@ sub XML::XPath::Function::document {
 
     my $xml_parser = XML::Parser->new(
             ErrorContext => 2,
-            Namespaces => 1,
-            ParseParamEnt => 1,
+            Namespaces => $XML::XPath::VERSION < 1.07 ? 1 : 0,
+            # ParseParamEnt => 1,
             );
 
     my $parser = XML::XPath::XMLParser->new(parser => $xml_parser);
 
     my $results = XML::XPath::NodeSet->new();
+    my $uri = $params[0];
     my $newdoc;
-    try {
-#        warn "Trying to parse $params[0]\n";
-        $newdoc = $parser->parse(
-                $Apache::AxKit::Language::XPathScript::local_ent_handler->(
-                    undef, undef, $params[0]
-                )
-            );
-#        warn "Parsed OK into $newdoc\n";
+    if ($uri =~ /^\w\w+:/) { # assume it's scheme://foo uri
+        eval {
+            # warn "Trying to parse $params[0]\n";
+            $newdoc = $parser->parse(
+                    $Apache::AxKit::Language::XPathScript::local_ent_handler->(
+                        undef, undef, $uri
+                    )
+                );
+            # warn "Parsed OK into $newdoc\n";
+        };
+        if (my $E = $@) {
+            if ($E->isa('Apache::AxKit::Exception::IO')) {
+                AxKit::Debug(2, $E);
+            }
+            else {
+                throw Apache::AxKit::Exception::Error(-text => "Parse of '$uri' failed: $E");
+            };
+        }
     }
-    catch Apache::AxKit::Exception::IO with {
-        my $E = shift;
-        AxKit::Debug(2, $E);
+    else {
+        # warn("Parsing local: $uri\n");
+        my $provider = Apache::AxKit::Provider->new(
+                    AxKit::Apache->request, 
+                    uri => $uri,
+                );
+        $newdoc = get_source_tree($provider, $parser);
     }
-    catch Error with {
-        my $E = shift;
-        throw Apache::AxKit::Exception::Error(-text => "Parse of '$params[0]' failed: $E");
-    };
+
     $results->push($newdoc) if $newdoc;
     return $results;
 }
@@ -354,13 +366,13 @@ sub get_mtime {
 
     for my $inc (@{$stash->{$filename}{includes}}) {
         my $inc_provider = Apache::AxKit::Provider->new(
-                Apache->request, 
+                AxKit::Apache->request, 
                 uri => $inc,
                 rel => $provider,
                 );
         
 #        warn "Checking mtime of $inc\n";
-        if ($inc_provider->mtime() < $mtime) {
+        if ($inc_provider->has_changed($mtime)) {
             $mtime = $inc_provider->mtime();
         }
     }
@@ -389,7 +401,7 @@ sub get_package_name {
     package Apache::AxKit::Language::XPathScript::Toys;
     
     use XML::XPath::Node;
-    use Apache::AxKit::Exception ':try';
+    use Apache::AxKit::Exception;
 
     use vars '@ISA', '@EXPORT';
     use Exporter;
@@ -412,7 +424,7 @@ sub get_package_name {
     sub DO_SELF_ONLY () { return -1; }
     sub DO_NOT_PROCESS () { return 0; }
     sub MAX_DEPTH () { return 32; }
-
+    
     sub import_template {
         my ($filename, $local_changes) = @_;
         my ($script) = Apache::AxKit::Language::XPathScript::include_file($filename,$Apache::AxKit::Language::XPathScript::style_provider, 1);
@@ -459,14 +471,16 @@ sub get_package_name {
     }
     
     sub set_namespace {
-        try {
+        eval {
             $Apache::AxKit::Language::XPathScript::xp->set_namespace(@_);
-        }
-        catch Error with {
-            my $E = shift;
-            AxKit::Debug(3, "set_namespace failed: $E");
         };
+        if ($@) {
+            AxKit::Debug(3, "set_namespace failed: $@");
+        }
     }
+    
+    # quieten warnings when compiling this module
+    sub apply_templates (;$@);
     
     sub apply_templates (;$@) {
         unless (@_) {
@@ -478,7 +492,8 @@ sub get_package_name {
         if (!ref($arg1)) {
             # called with a path to find
 #            warn "apply_templates with path '$arg1'\n";
-            return apply_templates(findnodes($arg1, @args));
+            $arg1 = findnodes($arg1, @args);
+#            return apply_templates($nodes);
         }
         
         my $retval = '';
@@ -540,14 +555,14 @@ sub get_package_name {
         if (!$node->isElementNode) {
             # don't output top-level PI's
             if ($node->isPINode) {
-                return try {
+                my $retstring = eval {
                     if ($node->getParentNode->getParentNode) {
                         return $node->toString;
                     }
                     return '';
-                } catch Error with {
-                    return '';
                 };
+                
+                return $retstring || '';
             }
             return $node->toString;
         }
@@ -567,7 +582,7 @@ sub get_package_name {
 #            warn "Default trans\n";
             if (my @children = $node->getChildNodes) {
                 return start_tag($node) . 
-                    _apply_templates($node->getChildNodes) .
+                    _apply_templates(@children) .
                     end_tag($node);
             }
             else {
@@ -730,7 +745,7 @@ sub get_package_name {
     sub interpolate {
         my ($node, $string) = @_;
         return $string if $XPathScript::DoNotInterpolate;
-        return $string unless Apache->request->dir_config('AxXPSInterpolate');
+        return $string unless AxKit::Apache->request->dir_config('AxXPSInterpolate');
         my $new = '';
         while ($string =~ m/\G(.*?)\{(.*?)\}/gcs) {
             my ($pre, $path) = ($1, $2);

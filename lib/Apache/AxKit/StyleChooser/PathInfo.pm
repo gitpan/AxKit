@@ -1,4 +1,4 @@
-# $Id: PathInfo.pm,v 1.5 2001/01/14 15:48:19 matt Exp $
+# $Id: PathInfo.pm,v 1.6 2001/04/30 21:13:48 matt Exp $
 
 package Apache::AxKit::StyleChooser::PathInfo;
 
@@ -38,6 +38,11 @@ __END__
 =head1 NAME
 
 Apache::AxKit::StyleChooser::PathInfo - Choose stylesheet using PATH_INFO
+
+=head1 SYNOPSIS
+
+	PerlHandler Apache::AxKit::StyleChooser::PathInfo \
+			AxKit
 
 =head1 DESCRIPTION
 

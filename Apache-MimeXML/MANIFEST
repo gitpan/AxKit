@@ -2,7 +2,6 @@ Changes
 MANIFEST
 Makefile.PL
 MimeXML.pm
-test.pl
 README
 testebcdic.xml
 testutf16be.xml
@@ -11,3 +10,5 @@ testzhbig50.xml
 testzhbig512.xml
 testnone.xml
 testiso.xml
+t/00basic.t
+t/01tests.t

@@ -1,10 +1,19 @@
 body {
-	color:		 #333;
-	margin:		 0px;
+    color:		 #333;
+    margin:		 0px;
+    font-family: Arial,Helvetica,Helv,sans-serif;
+    font-size: 12pt;
 }
 
 p {
     font-family: Arial,Helvetica,Helv,sans-serif;
+    font-size: 12pt;
+}
+
+.by {
+ font-family: Verdana, sans-serif; 
+ font-size: 10pt;
+ color: black;
 }
 
 H3, .hd {

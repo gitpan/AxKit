@@ -18,6 +18,35 @@
 				Ltd (the developers of AxKit). The commercial support site for
 				AxKit is <ulink url="http://axkit.com/">axkit.com</ulink>.
 			</para>
+      <para>
+      While this level of support is available, we urge you to try the
+      free support channels listed below.
+      </para>
+		</section>
+		<section>
+			<title>Free Support</title>
+			<para>
+      AxKit has excellent free community based support, where the core
+      development team regularly participate by answering questions.
+      There are two main avenues for this support: a mailing list, and
+      an IRC chat channel.
+			</para>
+      <subsection>
+        <title>Mailing List</title>
+        <para>
+        The AxKit mailing list has its <ulink url="mailinglist.xml">own
+        page</ulink> with subscription and archive details.
+        </para>
+      </subsection>
+      <subsection>
+        <title>IRC</title>
+        <para>
+        The AxKit IRC channel is available on the <ulink
+        url="http://www.openprojects.net/">OpenProjects Network</ulink>.
+        The easiest way to access it is to point your IRC software at 
+        irc.openprojects.net:6667. The channel name is #axkit.
+        </para>
+      </subsection>
 		</section>
 	</body>
 </webpage>

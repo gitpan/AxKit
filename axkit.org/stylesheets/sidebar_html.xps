@@ -1,18 +1,18 @@
 <%
-$t->{'sb:sidebar'}{pre} = q(<table width='154' border='0' cellspacing='0' cellpadding='0' bgcolor='#330066'>
+$t->{'sb:sidebar'}{pre} = q(<table width="154" border="0" cellspacing="0" cellpadding="0" bgcolor="#330066">
         <tr>
         <td>
-            <table width='100%' border='0' cellspacing='1' cellpadding='3'>);
+            <table width="100%" border="0" cellspacing="1" cellpadding="3">);
 			
 $t->{'sb:sidebar'}{post} = '</table></td></tr></table>';
 
 $t->{'sb:section'}{pre} = q(<tr>);
 $t->{'sb:section'}{post} = q(</span></td></tr>);
 
-$t->{'sb:title'}{pre} = q(<td align='left' valign='top' bgcolor='#eeddff'>
-<span class='toplevel'><b>);
-$t->{'sb:title'}{post} = q(</b></span></td></tr> <tr><td align='left' valign='top' bgcolor='#ffffff'>
-<span class='sublevel'>);
+$t->{'sb:title'}{pre} = q(<td align="left" valign="top" bgcolor="#eeddff">
+<span class="toplevel"><b>);
+$t->{'sb:title'}{post} = q(</b></span></td></tr> <tr><td align="left" valign="top" bgcolor="#ffffff">
+<span class="sublevel">);
 
 $t->{'sb:item'}{testcode} = sub {
 	my ($node, $t) = @_;
@@ -20,13 +20,13 @@ $t->{'sb:item'}{testcode} = sub {
 	my $url = findvalue('sb:url/text()', $node);
 	my $sel = '';
 	$sel = '_sel' if $r->uri eq $url;
-	$t->{pre} = "<a href=\"$url\"><img src='/img/arrow$sel.gif' width='16' height='14' border='0' 
-	vspace='0' hspace='0' alt='' align='absmiddle' />$title</a><br />";
+	$t->{pre} = qq(<a href="$url"><img src="/img/arrow$sel.gif" width="16" height="14" border="0" 
+	vspace="0" hspace="0" alt="" align="absmiddle" />$title</a><br />);
 	return -1;
 };
 
 my $sbsubpre = q(<table width="100%" border="0" cellspacing="0" cellpadding="0">
-<tr><td>) . spacer(10, 1) . q(</td><td><span class='sublevel'>); # "
+<tr><td>) . spacer(10, 1) . q(</td><td><span class="sublevel">); # "
 
 $t->{'sb:subsection'}{testcode} = sub {
 	my ($node, $t) = @_;
@@ -35,8 +35,8 @@ $t->{'sb:subsection'}{testcode} = sub {
 		my $url = findvalue('sb:url/text()', $node);
 		my $sel = '';
 		$sel = '_sel' if $r->uri eq $url;
-		$t->{pre} = "<a href=\"$url\"><img src=\"/img/arrow$sel.gif\" width='16' height='14' border='0'
-		vspace='0' hspace='0' alt='' align='absmiddle' />$title</a><br />";
+		$t->{pre} = qq(<a href="$url"><img src="/img/arrow$sel.gif" width="16" height="14" border="0"
+		vspace="0" hspace="0" alt="" align="absmiddle" />$title</a><br />);
 		if ($r->uri eq $url) {
 			$t->{pre} .= $sbsubpre;
 			return 'sb:item';

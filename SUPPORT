@@ -1,0 +1,38 @@
+What to do if it all goes pear shaped...
+========================================
+
+If you have trouble getting AxKit working how you want it to work, then
+please subscribe to and use the axkit-users mailing list. Details of this
+are available at http://axkit.org/mailinglist.xml
+
+If your problem is more serious, for example if AxKit segfaults, then
+please follow these instructions:
+
+Edit your AxKit's Makefile, find the OPTIMIZE line, and add -g to it.
+
+Recompile AxKit (run "make test install")
+
+Make sure apache is stopped.
+
+run:
+
+$ gdb /path/to/apache/bin/httpd
+gdb version blah blah...
+(gdb) run -X
+  
+Now make a request on your server. When it segfaults, gdb will stop and
+tell you where... but I need more info... so type:
+    
+(gdb) bt
+   
+That will give you a backtrace.
+
+Now email that to axkit-users@axkit.org, along with your Perl version,
+Apache version, and AxKit version. It may also be helpful to include your
+list of LoadModule lines from httpd.conf, and the section where you have
+all the Ax* directives.
+
+But please try the latest release of AxKit before sending it in - and if
+you're testing a beta, please try CVS first (see the CONTRIB file for
+details).
+
