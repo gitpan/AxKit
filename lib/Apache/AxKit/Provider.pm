@@ -1,4 +1,4 @@
-# $Id: Provider.pm,v 1.9 2002/05/31 19:22:23 matts Exp $
+# $Id: Provider.pm,v 1.12 2002/07/05 19:02:36 matts Exp $
 
 package Apache::AxKit::Provider;
 use strict;
@@ -13,14 +13,14 @@ sub new_style_provider {
     my $class = shift;
     my $apache = shift;
     my $self = bless { apache => $apache }, $class;
-    
+
     if (my $alternate = $AxKit::Cfg->StyleProviderClass()) {
-        AxKit::Debug(7, "Style Provider Override: $alternate" );
+        AxKit::Debug(8, "Style Provider Override: $alternate" );
         AxKit::reconsecrate($self, $alternate);
     }
-    
+
     $self->init(@_);
-    
+
     AxKit::add_depends($self->key());
 
     return $self;
@@ -30,14 +30,14 @@ sub new_content_provider {
     my $class = shift;
     my $apache = shift;
     my $self = bless { apache => $apache }, $class;
-    
+
     if (my $alternate = $AxKit::Cfg->ContentProviderClass()) {
-        AxKit::Debug(7, "Content Provider Override: $alternate" );
+        AxKit::Debug(8, "Content Provider Override: $alternate" );
         AxKit::reconsecrate($self, $alternate);
     }
-    
+
     $self->init(@_);
-    
+
     AxKit::add_depends($self->key());
 
     return $self;
@@ -106,7 +106,7 @@ sub get_ext_ent_handler {
 
         # create a subrequest, so we get the right AxKit::Cfg for the URI
         my $apache = AxKit::Apache->request;
-        my $sub = $apache->lookup_uri($sysid);
+        my $sub = $apache->lookup_uri(AxKit::FromUTF8($sysid));
         local $AxKit::Cfg = Apache::AxKit::ConfigReader->new($sub);
     
 #        warn "File provider ext_ent_handler called with '$sysid'\n";
@@ -479,7 +479,7 @@ you need to implement:
 
 Determine whether or not to process this URL. For example, you don't want
 to process a directory request, or if the resource doesn't exist. Return 1
-to tell AxKit to process this URL, or die with a Declined exception (with 
+to tell AxKit to process this URL, or die with a Declined exception (with
 a reason) if you do not wish to process this URL.
 
 =head2 mtime()
@@ -490,7 +490,19 @@ Return the last modification time in days before the current time.
 
 Extract the stylesheets from the XML resource. Should return an array
 ref of styles. The style entries are hashes refs with required keys
-'href' and 'type'.
+'href', 'module' and 'type'.
+
+A sample return value of get_styles() could be:
+
+  [{ type => "text/xsl",
+     href => "path/to/your/stylesheet.xsl",
+     module => "Apache::AxKit::Language::LibXSLT" }]
+
+This allows one to use a different stylemapping than the default
+server configuration. If 'module' is ommited AxKit will apply the 
+given default module for the type as it was added by 'AxAddStyleMap'
+in the configuration.
+
 
 =head2 get_fh()
 

@@ -1,4 +1,4 @@
-# $Id: XPathScript.pm,v 1.7 2002/05/31 19:22:24 matts Exp $
+# $Id: XPathScript.pm,v 1.10 2003/01/29 01:35:50 jwalt Exp $
 
 package Apache::AxKit::Language::XPathScript;
 
@@ -154,7 +154,7 @@ sub check_inc_mtime {
     
     for my $inc (@$includes) {
 #        warn "Checking mtime for $inc\n";
-        my $sub = $apache->lookup_uri($inc);
+        my $sub = $apache->lookup_uri(AxKit::FromUTF8($inc));
         local $AxKit::Cfg = Apache::AxKit::ConfigReader->new($sub);
         
         my $inc_provider = Apache::AxKit::Provider->new_style_provider($sub);
@@ -286,16 +286,19 @@ sub compile {
 }
 
 sub include_file {
-    my ($filename, $provider, $script_output) = @_;
+    my ($filename, $provider, $script_output, $ignore_cache) = @_;
 
-    # return if already included
     my $key = $provider->key();
-    return '' if grep {$_ eq $filename} @{$stash->{$key}{includes}};
 
+    unless ($ignore_cache) {
+        # return if already included
+        return '' if grep {$_ eq $filename} @{$stash->{$key}{includes}};
+    }
+    
     push @{$stash->{$key}{includes}}, $filename;
     
     my $apache = $provider->apache_request;
-    my $sub = $apache->lookup_uri($filename);
+    my $sub = $apache->lookup_uri(AxKit::FromUTF8($filename));
     local $AxKit::Cfg = Apache::AxKit::ConfigReader->new($sub);
     
     my $inc_provider = Apache::AxKit::Provider->new_style_provider($sub);
@@ -323,6 +326,8 @@ sub XML::XPath::Function::document {
     my $newdoc;
     if ($uri =~ /^axkit:/) {
         $newdoc = $parser->parse( AxKit::get_axkit_uri($uri) );
+    } elsif ($uri =~ /^xmldb:/) {
+        $newdoc = $parser->parse( Apache::AxKit::Provider::XMLDB::get_xmldb_uri($uri) );
     }
     elsif ($uri =~ /^\w\w+:/) { # assume it's scheme://foo uri
         eval {
@@ -348,7 +353,7 @@ sub XML::XPath::Function::document {
         
         # create a subrequest, so we get the right AxKit::Cfg for the URI
         my $apache = AxKit::Apache->request;
-        my $sub = $apache->lookup_uri($uri);
+        my $sub = $apache->lookup_uri(AxKit::FromUTF8($uri));
         local $AxKit::Cfg = Apache::AxKit::ConfigReader->new($sub);
         
         my $provider = Apache::AxKit::Provider->new_content_provider($sub);
@@ -383,7 +388,7 @@ sub get_mtime {
     
     for my $inc (@{$stash->{$filename}{includes}}) {
         
-        my $sub = $apache->lookup_uri($inc);
+        my $sub = $apache->lookup_uri(AxKit::FromUTF8($inc));
         local $AxKit::Cfg = Apache::AxKit::ConfigReader->new($sub);
         
         my $inc_provider = Apache::AxKit::Provider->new_style_provider(
@@ -447,7 +452,7 @@ sub get_package_name {
     
     sub import_template {
         my ($filename, $local_changes) = @_;
-        my ($script) = Apache::AxKit::Language::XPathScript::include_file($filename,$Apache::AxKit::Language::XPathScript::style_provider, 1);
+        my ($script) = Apache::AxKit::Language::XPathScript::include_file($filename,$Apache::AxKit::Language::XPathScript::style_provider, 1, 1);
         # changes may be local to this imported template, or global (default).
         my ($setup_t);
         if ($local_changes) {

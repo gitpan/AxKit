@@ -1,4 +1,4 @@
-/* $Id: CharsetConv.xs,v 1.1 2002/01/13 20:45:11 matts Exp $ */
+/* $Id: CharsetConv.xs,v 1.4 2002/08/13 17:21:57 matts Exp $ */
 /* XSUB for Perl module Apache::AxKit::CharsetConv  */
 /* Originally from Text::Iconv distribution, */
 /* all credits to Michael Piotrowski - this is a verbatim copy */
@@ -20,7 +20,7 @@ extern "C" {
 
 static int raise_error = 0;
 
-SV *do_conv(iconv_t iconv_handle, SV *string)
+SV *ax_do_conv(iconv_t iconv_handle, SV *string, int is_target_utf8)
 {
    char    *ibuf;         /* char* to the content of SV *string */
    char    *obuf;         /* temporary output buffer */
@@ -38,7 +38,7 @@ SV *do_conv(iconv_t iconv_handle, SV *string)
    char    *ocursor;      /* current position in the output buffer */
    size_t  ret;           /* iconv() return value */
    SV      *perl_str;     /* Perl return string */
-   
+
    perl_str = newSVpv("", 0);
 
    /* Get length of input string. That's why we take an SV* instead of
@@ -47,13 +47,13 @@ SV *do_conv(iconv_t iconv_handle, SV *string)
 
    inbytesleft = SvCUR(string);
    ibuf        = SvPV(string, inbytesleft);
-   
+
    /* Calculate approximate amount of memory needed for the temporary
       output buffer and reserve the memory. The idea is to choose it
       large enough from the beginning to reduce the number of copy
       operations when converting from a single byte to a multibyte
       encoding. */
-   
+
    if(inbytesleft <= MB_LEN_MAX)
    {
       outbytesleft = MB_LEN_MAX + 1;
@@ -72,12 +72,12 @@ SV *do_conv(iconv_t iconv_handle, SV *string)
    ocursor = obuf;
 
    /**************************************************************************/
-   
+
    while(inbytesleft != 0)
    {
       ret = iconv(iconv_handle, (const char**)&icursor, &inbytesleft,
 		                &ocursor, &outbytesleft);
-      
+
       if(ret == (size_t) -1)
       {
 	 switch(errno)
@@ -88,7 +88,7 @@ SV *do_conv(iconv_t iconv_handle, SV *string)
 	       if (raise_error)
 		  croak("Character not from source char set: %s",
 			strerror(errno));
-	       Safefree(obuf);   
+	       Safefree(obuf);
 	       return(&PL_sv_undef);
 	    case EINVAL:
 	       /* Stop conversion if we encounter an incomplete
@@ -96,7 +96,7 @@ SV *do_conv(iconv_t iconv_handle, SV *string)
 	       if (raise_error)
 		  croak("Incomplete character or shift sequence: %s",
 			strerror(errno));
-	       Safefree(obuf);   
+	       Safefree(obuf);
 	       return(&PL_sv_undef);
 	    case E2BIG:
 	       /* If the output buffer is not large enough, copy the
@@ -109,7 +109,7 @@ SV *do_conv(iconv_t iconv_handle, SV *string)
 	    default:
 	       if (raise_error)
 		  croak("iconv error: %s", strerror(errno));
-	       Safefree(obuf);   
+	       Safefree(obuf);
 	       return(&PL_sv_undef);
 	 }
       }
@@ -117,14 +117,25 @@ SV *do_conv(iconv_t iconv_handle, SV *string)
 
    /* Copy the converted bytes to the return string, and free the
       output buffer */
-   
+
    sv_catpvn(perl_str, obuf, l_obuf - outbytesleft);
    Safefree(obuf); /* Perl malloc */
+
+#ifdef SvUTF8_on
+   if (is_target_utf8) {
+      SvUTF8_on(perl_str);
+   } else {
+      SvUTF8_off(perl_str);
+   }
+#endif
 
    return perl_str;
 }
 
-typedef iconv_t Apache__AxKit__CharsetConv;
+typedef struct Apache__AxKit__CharsetConv_struct {
+    iconv_t iconv_handle;
+    int is_target_utf8;
+} *Apache__AxKit__CharsetConv;
 
 /*****************************************************************************/
 /* Perl interface                                                            */
@@ -149,12 +160,14 @@ new(self, fromcode, tocode)
    char *fromcode
    char *tocode
    CODE:
-   if((RETVAL = iconv_open(tocode, fromcode)) == (iconv_t)-1)
+   New(0, RETVAL, 1, struct Apache__AxKit__CharsetConv_struct);
+
+   if((RETVAL->iconv_handle = iconv_open(tocode, fromcode)) == (iconv_t)-1)
    {
       switch(errno)
       {
 	 case ENOMEM:
-	    croak("Insufficient memory to initialize conversion: %s -> %s", 
+	    croak("Insufficient memory to initialize conversion: %s -> %s",
                   fromcode, tocode);
 	 case EINVAL:
 	    croak("Unsupported conversion: %s -> %s", fromcode, tocode);
@@ -162,6 +175,7 @@ new(self, fromcode, tocode)
 	    croak("Couldn't initialize conversion: %s -> %s", fromcode, tocode);
       }
    }
+   RETVAL->is_target_utf8 =  (!strcmp(tocode,"UTF-8") || !strcmp(tocode,"utf-8"));
    OUTPUT:
       RETVAL
 
@@ -170,7 +184,7 @@ convert(self, string)
    Apache::AxKit::CharsetConv self
    SV *string
    CODE:
-      RETVAL = do_conv(self, string);
+      RETVAL = ax_do_conv(self->iconv_handle, string, self->is_target_utf8);
    OUTPUT:
       RETVAL
 
@@ -179,4 +193,6 @@ DESTROY(self)
    Apache::AxKit::CharsetConv self
    CODE:
       /* printf("Now in Apache::AxKit::CharsetConv::DESTROY\n"); */
-      (void) iconv_close(self);
+      (void) iconv_close(self->iconv_handle);
+      free(self);
+

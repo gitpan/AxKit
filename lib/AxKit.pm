@@ -1,4 +1,4 @@
-# $Id: AxKit.pm,v 1.18.2.1 2002/06/08 12:03:10 matts Exp $
+# $Id: AxKit.pm,v 1.39.2.4 2003/02/08 15:56:16 matts Exp $
 
 package AxKit;
 use strict;
@@ -23,7 +23,7 @@ use Fcntl;
 Apache::AxKit::CharsetConv::raise_error(1);
 
 BEGIN {
-    $VERSION = "1.6";
+    $VERSION = "1.61";
     if ($ENV{MOD_PERL}) {
         $AxKit::ServerString = "AxKit/$VERSION";
         @AxKit::ISA = qw(DynaLoader);
@@ -34,6 +34,27 @@ BEGIN {
 ###############################################################
 # AxKit Utility Functions
 ###############################################################
+
+sub FromUTF8($) {
+    if (!$AxKit::Cfg->{from_utf8}) {
+        return $_[0] if (exists $AxKit::Cfg->{from_utf8});
+        AxKit::Debug(9,"encoding to ".$AxKit::Cfg->ExternalEncoding());
+        $AxKit::Cfg->{from_utf8} = undef, return $_[0] if ($AxKit::Cfg->ExternalEncoding() eq "UTF-8");
+        $AxKit::Cfg->{from_utf8} = Apache::AxKit::CharsetConv->new("UTF-8",$AxKit::Cfg->ExternalEncoding()) || die "ExternalEncoding: No such charset: ".$AxKit::Cfg->ExternalEncoding();
+    }
+    return $AxKit::Cfg->{from_utf8}->convert($_[0]);
+}
+
+sub ToUTF8($) {
+    if (!$AxKit::Cfg->{to_utf8}) {
+        return $_[0] if (exists $AxKit::Cfg->{to_utf8});
+        AxKit::Debug(9,"decoding from ".$AxKit::Cfg->ExternalEncoding());
+        $AxKit::Cfg->{to_utf8} = undef, return $_[0] if ($AxKit::Cfg->ExternalEncoding() eq "UTF-8");
+        $AxKit::Cfg->{to_utf8} = Apache::AxKit::CharsetConv->new($AxKit::Cfg->ExternalEncoding(), "UTF-8") || die "ExternalEncoding: No such charset: ".$AxKit::Cfg->ExternalEncoding();
+    }
+    return $AxKit::Cfg->{to_utf8}->convert($_[0]);
+}
+
 
 sub _Debug {
     my $level = shift;
@@ -102,7 +123,7 @@ sub get_output_transformer {
             map { &{$AxOutputTransformer}( $_ ) } ($outputfunc->(@_));
         };
     }
-    
+
     # to add a new output_transformer here:
     #   enter new scope (maybe with if())
     #   copy $func to a new lexical (my) variable
@@ -191,10 +212,10 @@ sub handler {
     local $SIG{__DIE__} = sub { AxKit::prep_exception(@_)->throw };
 
     # use Carp ();
-    # local $SIG{'USR2'} = sub { 
+    # local $SIG{'USR2'} = sub {
     #     Carp::confess("caught SIGUSR2!");
     # };
-    
+
     local $AxKit::Cfg;
     local $AxKit::DebugLevel;
     local $Error::Debug;
@@ -236,6 +257,9 @@ sub main_handler {
         return $provider->decline();
     }
 
+    # setup global pnotes.
+    local $AxKit::Apache::PNOTES = $r->pnotes();
+    
     if ($r->notes('axkit_passthru')) {
         # slow passthru
         $r->send_http_header('text/xml');
@@ -249,7 +273,7 @@ sub main_handler {
         }
         return OK;
     }
-    
+
     local $AxKit::Cache;
 
     my $retcode = eval {
@@ -258,7 +282,7 @@ sub main_handler {
         chdir(File::Basename::dirname($r->filename));
 
         $AxKit::OrigType = $r->content_type('changeme');
-        
+
         reset_depends();
 
         my $result_code = run_axkit_engine($r, $provider);
@@ -283,7 +307,7 @@ sub main_handler {
         bless $r, 'Apache';
         tie *STDOUT, 'Apache', $r;
     }
-    
+
     if ($E->isa('Apache::AxKit::Exception::OK')) {
         return deliver_to_browser($r); # should return OK
     }
@@ -335,7 +359,7 @@ sub main_handler {
         return SERVER_ERROR;
 
     }
-    elsif ($E->isa('Error::Simple') || $E->isa('Apache::AxKit::Exception')) {
+    elsif ($E->isa('Apache::AxKit::Exception')) {
         $r->log->error("[AxKit] [UnCaught] $E");
 
         if ($Error::Debug) {
@@ -357,14 +381,14 @@ sub main_handler {
 }
 
 sub run_axkit_engine {
-    my ($r, $provider) = @_;
+    my ($r, $provider, $no_output) = @_;
     
     # get preferred stylesheet and media type
     my ($preferred, $media) = get_style_and_media();
     AxKit::Debug(2, "media: $media, preferred style: $preferred");
 
     # get cache object
-    my $cache = Apache::AxKit::Cache->new($r, $r->filename() . '.gzip' . ($r->path_info() || ''), $preferred, $media, $r->notes('axkit_cache_extra'));
+    my $cache = Apache::AxKit::Cache->new($r, $r->filename() . ($AxKit::Cfg->GzipOutput ? '.gzip' : '') . ($r->path_info() || ''), $preferred, $media, $r->notes('axkit_cache_extra'));
 
     my $recreate = 0; # regenerate from source (not cached)
 
@@ -377,7 +401,7 @@ sub run_axkit_engine {
             # Make sure we default the cache file, otherwise
             # we setup a potential DoS
             AxKit::Debug(3, "resetting cache with no preferred style ($preferred ne $styles->[0]{title})");
-            $cache = Apache::AxKit::Cache->new($r, $r->filename() . '.gzip' . $r->path_info(), '', $media, $r->notes('axkit_cache_extra'));
+            $cache = Apache::AxKit::Cache->new($r, $r->filename() . ($AxKit::Cfg->GzipOutput ? '.gzip' : '') . $r->path_info(), '', $media, $r->notes('axkit_cache_extra'));
         }
     }
 
@@ -398,6 +422,9 @@ sub run_axkit_engine {
 
     $AxKit::Charset = $AxKit::Cfg->OutputCharset();
 
+    # Store in package variable for other modules
+    $AxKit::Cache = $cache;
+    
     if (!$recreate) {
         AxKit::Debug(1, "delivering cached copy - all conditions met");
         return $cache->deliver();
@@ -405,13 +432,10 @@ sub run_axkit_engine {
 
     AxKit::Debug(1, "some condition failed. recreating output");
 
-    # Store in package variable for other modules
-    $AxKit::Cache = $cache;
-
     # reconsecrate Apache request object (& STDOUT) into our own class
     bless $r, 'AxKit::Apache';
     tie *STDOUT, 'AxKit::Apache', $r;
-
+    
     if (my $charset = $AxKit::Cfg->OutputCharset) {
         AxKit::Debug(5, "Different output charset: $charset");
         if (!$r->notes('axkit_passthru_type')) {
@@ -423,7 +447,7 @@ sub run_axkit_engine {
     # that we're requesting, not on the thing plus the PATH_INFO
     my $uri = $r->uri();
     my $path_info = $r->path_info();
-    $uri =~ s/\Q$path_info\E$//;
+    substr($uri, -length($path_info)) = '' if length($path_info); # trim off the end that many chars (negative offset to substr)
     $r->uri($uri);
     $ENV{PATH_INFO} = $path_info;
 
@@ -434,7 +458,12 @@ sub run_axkit_engine {
     }
     
     # Main grunt of the work done here...
-    my $return_code = process_request($r, $provider, $AxKit::_CurrentStylesheets);
+    my $return_code = process_request(
+        $r,
+        $provider,
+        $AxKit::_CurrentStylesheets,
+        $no_output,
+    );
 
     save_dependencies($r, $cache);
     
@@ -449,13 +478,32 @@ sub get_axkit_uri {
     
     my $apache = AxKit::Apache->request;
     my $r;
-    if ($uri =~ /^axkit:\/(\/.*)$/) {
-        my $abs_uri = $1;
-        $r = $apache->lookup_uri($abs_uri);
+    if ($uri =~ m|^axkit:(/.*)$|) {
+        my $blurb = $1;
+        # got "axkit:/..."
+        # first check if it's actually "axkit://host[:port]/..."
+        if ($blurb =~ m|^//(?:([\w\.-]+)(:\d+)?)?(/.*)$|) {
+            my $host = $1;
+            my $port = $2;
+            my $abs_uri = $3;
+            if ($host) {
+                throw Apache::AxKit::Exception (
+                    -text => "axkit://host[:port]/ requests not supported ($uri)"
+                );
+            }
+            AxKit::Debug(4, "get_axkit_uri looking up abs (host): '$abs_uri'");
+            $r = $apache->lookup_uri(AxKit::FromUTF8($abs_uri));
+        }
+        else {
+            my $abs_uri = $blurb;
+            AxKit::Debug(4, "get_axkit_uri looking up abs: '$abs_uri'");
+            $r = $apache->lookup_uri(AxKit::FromUTF8($abs_uri));
+        }
     }
     elsif ($uri =~ /^axkit:(.*)$/) {
         my $rel_uri = $1;
-        $r = $apache->lookup_uri($rel_uri);
+        AxKit::Debug(4, "get_axkit_uri looking up '$rel_uri'");
+        $r = $apache->lookup_uri(AxKit::FromUTF8($rel_uri));
     }
     else {
         throw Apache::AxKit::Exception (-text => "get_axkit_uri for non-axkit URIs is not yet supported");
@@ -466,24 +514,77 @@ sub get_axkit_uri {
 
     my $provider = Apache::AxKit::Provider->new_content_provider($r);
     
-    my $result_code = run_axkit_engine($r, $provider);
+    my $result_code = eval {
+        run_axkit_engine(
+            $r,
+            $provider,
+            1, # no output
+        );
+    };
+    if ($@) {
+        my $E = $@;
+        if ($E->isa('Apache::AxKit::Exception::Declined')) {
+            if ($AxKit::Cfg && $AxKit::Cfg->LogDeclines()) {
+                $r->log->warn("[AxKit] [DECLINED] $E->{reason}")
+                        if $E->{reason};
+            }
+            AxKit::Debug(4, "[DECLINED] From: $E->{-file} : $E->{-line}");
+            
+            my $str = '';
+            eval {
+                my $fh = $provider->get_fh;
+                local $/;
+                $str = <$fh>;
+                $r->pnotes('xml_string', $str);
+                $result_code = OK;
+            };
+            if ($@) {
+                eval {
+                    my $pstr = $provider->get_strref;
+                    $str = $$pstr;
+                    $r->pnotes('xml_string', $str);
+                    $result_code = OK;
+                };
+                if ($@) {
+                    $result_code = 'provider_declined';
+                }
+            }
+        }
+        else {
+            # Some other type of exception
+            $E->throw;
+        }
+    }
     
     if ($result_code == OK) {
         # results now in $r->pnotes('xml_string') - probably...
-        # warning; missing caching logic here from deliver_to_browser.
-        if (not $r->pnotes('xml_string') and $r->pnotes('dom_tree')) {
-            return $r->pnotes('dom_tree')->toString;
+        if ( my $str = $r->pnotes('xml_string') ) {
+            # NB: this is naive, but "0" isn't valid XML anyway
+            $r->pnotes('xml_string', undef);
+            AxKit::Debug(10, "get_axkit_uri returning (str): '$str'");
+            return $str;
+        }
+        elsif ($r->pnotes('dom_tree')) {
+            my $str = $r->pnotes('dom_tree')->toString;
+            $r->pnotes('dom_tree', undef);
+            AxKit::Debug(10, "get_axkit_uri returning (dom): '$str'");
+            return $str;
         }
         else {
-            return $r->pnotes('xml_string');
+            throw Apache::AxKit::Exception (
+                -text => "$uri internal request didn't store anything in dom_tree or xml_string",
+                );
         }
     }
     elsif ($result_code == DECLINED) {
         # probably came from the cache system. Try and read it.
+        AxKit::Debug(10, "get_axkit_uri cache read");
         return $AxKit::Cache->read();
     }
     else {
-        throw Apache::AxKit::Exception ( -text => "$uri internal request returned unknown result code: ".$result_code);
+        throw Apache::AxKit::Exception (
+            -text => "$uri internal request returned unknown result code: ".$result_code,
+        );
     }
 }
 
@@ -497,24 +598,8 @@ sub process_error {
     $AxKit::Cache = Apache::AxKit::Cache->new($r, 'error', '', '', '');
     
     $r->content_type("text/html; charset=UTF-8"); # set a default for errors
-    
-    my $error = '<error><file>' .
-            xml_escape($r->filename) . '</file><msg>' .
-            xml_escape($E->{-text}) . '</msg>' .
-            '<stack_trace><bt level="0">'.
-            '<file>' . xml_escape($E->{'-file'}) . '</file>' .
-            '<line>' . xml_escape($E->{'-line'}) . '</line>' .
-            '</bt>';
-    
-    my $i = 1;
-    for my $stack (@{$E->stacktrace_list}) {
-        $error .= '<bt level="' . $i++ . '">' .
-                '<file>' . xml_escape($stack->{'-file'}) . '</file>' .
-                '<line>' . xml_escape($stack->{'-line'}) . '</line>' .
-                '</bt>';
-    }
 
-    $error .= '</stack_trace></error>';
+    my $error = $E->as_xml($r->filename);
 
     my $provider = Apache::AxKit::Provider::Scalar->new(
             $r, $error, $error_styles
@@ -577,7 +662,7 @@ sub reset_stylesheets {
 }
 
 sub process_request {
-    my ($r, $provider, $styles) = @_;
+    my ($r, $provider, $styles, $no_output) = @_;
     my $result_code = OK;
 
     my $num_styles = 0;
@@ -589,14 +674,39 @@ sub process_request {
     my $interm_prefix;
     my $interm_count = 0;
     if ($AxKit::Cfg->TraceIntermediate) {
-        $interm_prefix = $r->uri;
-        $interm_prefix =~ s{/}{|}g;
-        $interm_prefix =~ s/[^0-9a-zA-Z.,_|-]/_/g;
-        $interm_prefix = $AxKit::Cfg->TraceIntermediate.'/'.$interm_prefix;
+        my $id = $r->notes('AxRequestID');
+        $interm_prefix = ($id?$id:$r->uri);
+        $interm_prefix =~ s{%}{%25}g;
+        $interm_prefix =~ s{/}{%2f}g;
+        my $ti = $AxKit::Cfg->TraceIntermediate;
+        if (defined $id) {
+                $interm_prefix = substr($interm_prefix,-1).'/'.substr($interm_prefix,-3,2).'/'.substr($interm_prefix,0,-3).'/';
+                mkdir($ti.'/'.substr($interm_prefix,0,1),0777);
+                mkdir($ti.'/'.substr($interm_prefix,0,4),0777);
+                mkdir($ti.'/'.$interm_prefix,0777);
+        } else {
+                $interm_prefix =~ s/[^0-9a-zA-Z.,_|-]/_/g;
+                $interm_prefix .= '.';
+        }
+        $interm_prefix = $ti.'/'.$interm_prefix;
+    
+        if ($interm_prefix) {
+            my $fh = Apache->gensym();
+            if (sysopen($fh, $interm_prefix.$interm_count, O_WRONLY|O_CREAT|O_TRUNC)) {
+                syswrite($fh,${$provider->get_strref});
+                close($fh);
+                $interm_count++;
+            } else {
+                AxKit::Debug(1,"could not open $interm_prefix$interm_count for writing: $!");
+            }
+        }
     }
 
     while (@$styles) {
         my $style = shift @$styles;
+        
+        my $num_left = @$styles;
+        my $output_to_browser = ($num_left == 0 && !$no_output);
 
         my $styleprovider = Apache::AxKit::Provider->new_style_provider(
                 $r,
@@ -609,9 +719,15 @@ sub process_request {
 
         my $mapto = $style->{module};
 
-        AxKit::load_module($mapto);
+        # if no module is give AxKit should use the default modules
+        # from the server config.
+        unless ( $mapto ) {
+            my $mapping = $AxKit::Cfg->StyleMap;
+            $mapto = $mapping->{$style->{type}};
+        }
 
         AxKit::Debug(3, "about to execute: $mapto\::handler");
+        AxKit::load_module($mapto);
 
         my $method = "handler";
         if (defined &{"$mapto\::$method"}) {
@@ -624,8 +740,9 @@ sub process_request {
                     $r,
                     $provider,
                     $styleprovider,
-                    !@$styles, # any more left?
+                    $output_to_browser,
                     );
+	    AxKit::Debug(5, "$mapto\::handler finished with code $retval");
             $result_code = $retval if $retval != OK;
         }
         else {
@@ -636,18 +753,39 @@ sub process_request {
 
         if ($interm_prefix) {
             my $fh = Apache->gensym();
-            if (sysopen($fh, $interm_prefix.'.'.$interm_count, O_WRONLY|O_CREAT|O_TRUNC)) {
-                if (my $dom_tree = $r->pnotes('dom_tree')) {
-                    syswrite($fh,$dom_tree->toString);
-                } elsif (my $xmlstr = $r->pnotes('xml_string')) {
-                    syswrite($fh,$xmlstr);
-                } else {
-                    syswrite($fh,"<?xml version='1.0'?>\n<empty reason='no data found'/>");
+            if (open($fh, '>'.$interm_prefix.$interm_count)) {
+                my $xmlstr;
+                if ($AxKit::Cfg->DebugTidy) {
+                    eval {
+                        require XML::LibXML;
+                        my $parser = new XML::LibXML();
+                        $parser->keep_blanks(0);
+                        if (my $dom_tree = $r->pnotes('dom_tree')) {
+                            $xmlstr = $dom_tree->toString;
+                        } elsif ($r->pnotes('xml_string')) {
+                            $xmlstr = $r->pnotes('xml_string');
+                        } else {
+                            die;
+                        }
+                        local $XML::LibXML::setTagCompression = 1;
+                        $xmlstr = $parser->parse_string($xmlstr,$r->uri)->toString(1);
+                    };
+                    AxKit::Debug(1,"AxDebugTidy unavailable for XML: $@") if $@;
                 }
+                if (!defined $xmlstr) {
+                    if (my $dom_tree = $r->pnotes('dom_tree')) {
+                        $xmlstr = $dom_tree->toString;
+                    } elsif ($r->pnotes('xml_string')) {
+                        $xmlstr = $r->pnotes('xml_string');
+                    } else {
+                        $xmlstr = "<?xml version='1.0'?>\n<empty reason='no data found'/>\n";
+                    }
+                }
+                print($fh $xmlstr);
                 close($fh);
-	        $interm_count++;
+                $interm_count++;
             } else {
-                AxKit::Debug(1,"could not open $interm_prefix.$interm_count for writing: $!");
+                AxKit::Debug(1,"could not open $interm_prefix$interm_count for writing: $!");
             }
         }
 
@@ -691,12 +829,12 @@ sub get_styles {
     else {
         AxKit::Debug(3, "styles not cached - calling \$provider->get_styles()");
         my $styles = $provider->get_styles($media, $style);
-        
+
         $AxKit::Stash{$key} = {
             styles => $styles,
             mtime => $provider->mtime(),
             };
-        
+
         return $styles;
     }
 }
@@ -748,9 +886,19 @@ sub save_dependencies {
 sub deliver_to_browser {
     my ($r, $result_code) = @_;
     $result_code ||= OK;
+    
+    AxKit::Debug(4, "delivering to browser");
 
-    if (not $r->pnotes('xml_string') and $r->pnotes('dom_tree')) {
+    if (length($r->pnotes('xml_string'))) {
+        # ok, data is in xml_string
+        AxKit::Debug(4, "Delivering xml_string");
+    }
+    elsif ($r->pnotes('dom_tree')) {
+        AxKit::Debug(4, "Delivering dom_tree");
         $r->pnotes('xml_string', $r->pnotes('dom_tree')->toString );
+    }
+    else {
+        AxKit::Debug(5, "Possible cache delivery coming up...");
     }
 
     if ($r->content_type eq 'changeme' && !$r->notes('axkit_passthru_type')) {
@@ -782,20 +930,21 @@ sub deliver_to_browser {
     }
 
     if ($AxKit::Cache->no_cache() ||
-            lc($r->dir_config('Filter')) eq 'on' ||
-            $r->method() eq 'POST') {
+        lc($r->dir_config('Filter')) eq 'on' ||
+        $r->method() eq 'POST')
+    {
         AxKit::Debug(4, "writing xml string to browser");
         my ($transformer, $doit) = get_output_transformer();
         if ($AxKit::Cfg->DoGzip) {
             AxKit::Debug(4, 'Sending gzipped xml string to browser');
             AxKit::Apache::send_http_header($r);
             if ($doit) {
-                $r->print( unpack("U0A*", Compress::Zlib::memGzip( 
+                $r->print( unpack($]>5.00555?"U0A*":"A*", Compress::Zlib::memGzip( 
                          $transformer->( $r->pnotes('xml_string') )
                          ) ) );
             }
             else {
-                $r->print( unpack("U0A*", Compress::Zlib::memGzip( $r->pnotes('xml_string') ) ) );
+                $r->print( unpack($]>5.00555?"U0A*":"A*", Compress::Zlib::memGzip( $r->pnotes('xml_string') ) ) );
             }
         }
         else {
@@ -905,7 +1054,7 @@ sub xml_escape {
 #########################################################################
 
 package AxKit::Apache;
-use vars qw/@ISA/;
+use vars qw/@ISA $PNOTES/;
 use Apache;
 use Fcntl qw(:DEFAULT);
 @ISA = ('Apache');
@@ -971,6 +1120,18 @@ sub send_http_header {
     $self->notes('headers_sent', 1);
 
     $self->SUPER::send_http_header;
+}
+
+sub pnotes {
+    my $self = shift;
+    if (!@_) {
+        return $PNOTES;
+    }
+    my $key = shift;
+    if (@_) {
+        return $PNOTES->{$key} = $_[0];
+    }
+    return $PNOTES->{$key};
 }
 
 1;
@@ -1086,6 +1247,14 @@ slashes with '|', and appending a number indicating the transformation step.
 
     AxTraceIntermediate /tmp/axkit-trace
 
+=head2 AxDebugTidy
+
+With this option you advise AxKit to tidy up debug dumps like XSP scripts or the
+XML files generated by AxTraceIntermediate. Be aware that this can slow down requests
+considerably, but often it is much easier to spot errors with this enabled.
+
+    AxDebugTidy On
+
 =head2 AxStackTrace
 
 This FLAG option says whether to maintain a stack trace with every exception.
@@ -1160,6 +1329,29 @@ only enable if you also enable AxTranslateOutput.
 
     AxOutputCharset iso-8859-1
 
+=head2 AxExternalEncoding
+
+This directive specifies the character encoding used outside of AxKit.
+Internally, AxKit strictly uses UTF-8 (remember that when you write Taglibs!),
+but file names on the file system and URIs requested by browsers may use
+a different encoding, e.g. ISO-8859-15 for most of Europe.
+
+This is a server-global directive, so only use it within <VirtualHost ...>
+containers or on the root level. As a side effect, this option allows you to
+work with non-ASCII chars in URLs even outside of AxKit. Some Browsers may
+send URLs in their local charset although the link was encoded in UTF-8, and
+others always send UTF-8 encoded URLs, regardless of link encoding. If you set
+this option, AxKit will intercept each request and check if the URL came
+encoded in UTF-8. If so, AxKit transforms it to the character encoding
+specified here before Apache gets to resolve the request, so Apache will
+find the file, even if it is a non-AxKit file.
+
+Note: This does not effect the _contents_ of documents, they have their own
+encoding specifier (in the <?xml ...?> line). For now, it only affects file
+names and URL processing.
+
+    AxExternalEncoding ISO-8859-1
+
 =head2 AxAddOutputTransformer
 
 Output transformers are applied just before output is sent to the browser.
@@ -1189,7 +1381,7 @@ down.
    # This directive takes no arguments
    AxResetOutputTransformers
 
- =head2 AxErrorStylesheet
+=head2 AxErrorStylesheet
 
 If an error occurs during processing that throws an exception, the
 exception handler will try and find an ErrorStylesheet to use to process
@@ -1240,10 +1432,14 @@ a FLAG option - On or Off. The default value is "Off".
 
 =head2 AxHandleDirs
 
-Enable this option to allow AxKit to process directories. Uses XML::Directory
-and XML::SAX::Writer to create the directory listing.
+Enable this option to allow AxKit to process directories. Creates an XML document
+with the contents of the requested directory. Look at sample output to
+discover that the format is straightforward and easy to understand.
 
   AxHandleDirs On
+
+A DTD for the output of AxHandleDirs is at 
+L<http://axkit.org/dtd/axhandledirs.dtd>
 
 =head2 AxStyle
 

@@ -2,6 +2,8 @@
 ## Load the module mapping:
 AxAddStyleMap application/x-xsp Apache::AxKit::Language::XSP
 
+AxDebugLevel 10
+
 ## Set the error document
 ErrorDocument 500 /axkit/xsp/error.html
 
@@ -12,6 +14,19 @@ AxAddRootProcessor application/x-xsp NULL {http://apache.org/xsp/core/v1}page
 AxAddXSPTaglib AxKit::XSP::ESQL
 </Files>
 
+<Files cookie.xsp>
+AxAddXSPTaglib AxKit::XSP::Cookie
+AxAddXSPTaglib AxKit::XSP::Param
+</Files>
+
+<Files simple-input-attributes.xsp>
+AxAddXSPTaglib AxKit::XSP::Demo::SimpleInputAttributes
+</Files>
+
+<Files simpletaglib-object.xsp>
+AxAddXSPTaglib AxKit::XSP::Demo::Object
+</Files>
+
 <Files simpletaglib-simple.xsp>
 AxAddXSPTaglib AxKit::XSP::Demo::Simple
 </Files>
@@ -19,8 +34,8 @@ AxAddXSPTaglib AxKit::XSP::Demo::Simple
 # Note: these require additional setup. Not sure how/if that
 # can be handled automagically
 <Files session.xsp>
-#	AxAddPlugin Apache::AxKit::Plugin::Session
-	AxAddXSPTaglib +AxKit::XSP::Session
+	AxAddPlugin Apache::AxKit::Plugin::Session
+	AxAddXSPTaglib AxKit::XSP::Session
 </Files>
 
 <Files globals.xsp>

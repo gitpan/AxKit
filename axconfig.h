@@ -1,4 +1,4 @@
-/* $Id: axconfig.h,v 1.4 2002/06/04 16:37:12 jwalt Exp $ */
+/* $Id: axconfig.h,v 1.8 2002/06/28 01:26:01 jwalt Exp $ */
 
 #ifdef WIN32
 #define _INC_DIRENT
@@ -30,6 +30,7 @@
   #include <http_log.h>
  #endif
 #endif
+#include <iconv.h>
 
 typedef struct {
     /* simple types */
@@ -42,6 +43,7 @@ typedef struct {
     char * cache_module;
     char * output_charset;
     char * trace_intermediate;
+    int    debug_tidy;
     int    debug_level;
     int    translate_output;
     int    gzip_output;
@@ -68,11 +70,19 @@ typedef struct {
 
 } axkit_dir_config;
 
+typedef struct {
+    /* simple types */
+    char * external_encoding;
+    iconv_t iconv_handle;
+} axkit_server_config;
+
 extern module MODULE_VAR_EXPORT XS_AxKit;
 
 void remove_module_cleanup(void * ignore);
 
 HV * ax_get_config (axkit_dir_config * cfg);
+
+void ax_get_server_config (axkit_server_config * cfg, HV *hash);
 
 void maybe_load_module (char * name);
 

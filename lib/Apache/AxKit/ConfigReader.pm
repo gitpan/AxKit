@@ -1,4 +1,4 @@
-# $Id: ConfigReader.pm,v 1.8 2002/06/04 17:21:30 jwalt Exp $
+# $Id: ConfigReader.pm,v 1.12.2.1 2003/02/07 16:07:37 matts Exp $
 
 package Apache::AxKit::ConfigReader;
 
@@ -9,13 +9,13 @@ use strict;
 sub new {
     my $class = shift;
     my $r = shift;
-    
+
 #    my $cfg = AxKit::get_config($r);
 #    if (!$cfg) {
 #        $cfg = {};
 #        AxKit::Debug(2, "Unable to get_config(). Using blank hashref instead");
 #    }
-    
+
 #    use Apache::Peek 'Dump';
 #    Dump($cfg);
 #     use Data::Dumper;
@@ -23,9 +23,9 @@ sub new {
 #     warn("Cfg: ", Data::Dumper->Dump([$cfg], ['cfg']));
 
     my $self = bless { apache => $r, output_charset_ok => 0 }, $class;
-    
+
     $self->get_config($r);
-    
+
     if (my $alternate = $self->{cfg}->{ConfigReader} || $r->dir_config('AxConfigReader')) {
         if ($alternate ne __PACKAGE__) {
             AxKit::reconsecrate($self, $alternate);
@@ -33,14 +33,14 @@ sub new {
             $self->get_config($r);
         }
     }
-    
+
     return $self;
 }
 
 # you may want to override this in your subclass if you write your own ConfigReader
 sub get_config {
     my $self = shift;
-    $self->{cfg} = _get_config($self->{apache});
+        $self->{cfg} = _get_config($self->{apache});
 }
 
 # sub DESTROY {
@@ -61,10 +61,13 @@ sub StyleMap {
 # returns the location of the cache dir
 sub CacheDir {
     my $self = shift;
-    if (my $cachedir = 
-            $self->{cfg}->{CacheDir} 
+    if (my $cachedir =
+            $self->{cfg}->{CacheDir}
             ||
             $self->{apache}->dir_config('AxCacheDir')) {
+        #if (substr($cachedir,0,1) ne '/') {
+        #        $self->{cfg}->{CacheDir} = $cachedir = Apache->request()->document_root.'/'.$cachedir;
+        #}
         return $cachedir;
     }
     
@@ -138,8 +141,8 @@ sub CacheModule {
 
 sub DebugLevel {
     my $self = shift;
-    return $self->{cfg}{DebugLevel} || 
-            $self->{apache}->dir_config('AxDebugLevel') || 
+    return $self->{cfg}{DebugLevel} ||
+            $self->{apache}->dir_config('AxDebugLevel') ||
             0;
 }
 
@@ -160,10 +163,20 @@ sub TraceIntermediate {
     if (my $dir = $self->{cfg}{TraceIntermediate} ||
             $self->{apache}->dir_config('AxTraceIntermediate')) {
         return undef if $dir =~ m/^\s*(?:off|none|disabled?)\s*$/i;
+        #if (substr($dir,0,1) ne '/') {
+        #        $self->{cfg}{TraceIntermediate} = $dir = Apache->request()->document_root.'/'.$dir;
+        #}
         return $dir;
     }
 
     return undef;
+}
+
+sub DebugTidy {
+    my $self = shift;
+    return $self->{cfg}{DebugTidy} ||
+            $self->{apache}->dir_config('AxDebugTidy') ||
+            0;
 }
 
 sub LogDeclines {
@@ -201,7 +214,7 @@ sub OutputCharset {
     my $self = shift;
 
     return unless $self->{output_charset_ok};
-    
+
 #    warn "OutputCharset\n";
     unless ($self->{cfg}{TranslateOutput} ||
             $self->{apache}->dir_config('AxTranslateOutput')) {
@@ -217,7 +230,7 @@ sub OutputCharset {
     
 #    warn "Checking Accept-Charset\n";
     # check HTTP_ACCEPT_CHARSET
-    if (my $ok_charsets = $ENV{HTTP_ACCEPT_CHARSET}) {
+    if (my $ok_charsets = $self->{apache}->header_in('Accept-Charset')) {
         my @charsets = split(/,\s*/, $ok_charsets);
         my $retcharset;
         my $retscore = 0;
@@ -235,18 +248,23 @@ sub OutputCharset {
         
         $retcharset =~ s/iso/ISO/;
         $retcharset =~ s/(us\-)?ascii/US-ASCII/;
-        
+
         return undef if $retcharset =~ /^utf\-?8$/;
 	return undef if $retcharset eq '*';
 # warn "Charset: '$retcharset'\n";
         return $retcharset;
     }
-    
+
+}
+
+sub ExternalEncoding {
+    my $self = shift;
+    return $self->{cfg}{ExternalEncoding} || "UTF-8";
 }
 
 sub ErrorStyles {
     my $self = shift;
-    
+
     my $style = $self->{cfg}{ErrorStylesheet};
     my ($type, $href);
     if (!$style || !@$style) {
@@ -334,10 +352,17 @@ sub GetMatchingProcessors {
     my $processors = $self->{apache}->dir_config('AxProcessors');
     if( $processors ) {
       foreach my $processor (split(/\s*,\s*/, $processors) ) {
-	my ($pmedia, $pstyle, @processor) = split(/\s+/, $processor);
-	next unless ($pmedia eq $media and $pstyle eq $style);
-	push (@$list, [ 'NORMAL', @processor ] );
+        my ($pmedia, $pstyle, @processor) = split(/\s+/, $processor);
+        next unless ($pmedia eq $media and $pstyle eq $style);
+        push (@$list, [ 'NORMAL', @processor ] );
       }
+    }
+    
+    my @processors = $self->{apache}->dir_config->get('AxProcessor');
+    foreach my $processor (@processors) {
+        my ($pmedia, $pstyle, @processor) = split(/\s+/, $processor);
+        next unless ($pmedia eq $media and $pstyle eq $style);
+        push (@$list, [ @processor ] );
     }
     
     my @results;
@@ -349,25 +374,25 @@ sub GetMatchingProcessors {
                     href => $directive->[2],
                     title => $style,
                 };
-        if ($type eq 'NORMAL') {
+        if (lc($type) eq 'normal') {
             push @results, $style_hash;
         }
-        elsif ($type eq 'DocType') {
+        elsif (lc($type) eq 'doctype') {
             if ($doctype eq $directive->[3]) {
                 push @results, $style_hash;
             }
         }
-        elsif ($type eq 'DTD') {
+        elsif (lc($type) eq 'dtd') {
             if ($dtd eq $directive->[3]) {
                 push @results, $style_hash;
             }
         }
-        elsif ($type eq 'Root') {
+        elsif (lc($type) eq 'root') {
             if ($root eq $directive->[3]) {
                 push @results, $style_hash;
             }
         }
-        elsif ($type eq 'URI') {
+        elsif (lc($type) eq 'uri') {
             my $uri = $provider->apache_request->uri;
             if ($uri =~ /$directive->[3]/) {
                 push @results, $style_hash;
@@ -379,7 +404,7 @@ sub GetMatchingProcessors {
     }
     
     # list any dynamically chosen stylesheets here
-    $list = $self->{cfg}{DynamicProcessors};
+    $list = $self->{cfg}{DynamicProcessors} || [ $self->{apache}->dir_config->get('AxDynamicProcessors') ];
     foreach my $package (@$list) {
         AxKit::load_module($package);
         no strict 'refs';

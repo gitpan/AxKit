@@ -1,9 +1,10 @@
-# $Id: SimpleTaglib.pm,v 1.2 2002/03/28 20:09:38 jwalt Exp $
+# $Id: SimpleTaglib.pm,v 1.7 2003/01/29 01:35:50 jwalt Exp $
 # Apache::AxKit::XSP::Language::SimpleTaglib - alternate taglib helper code
 package Apache::AxKit::Language::XSP::SimpleTaglib;
 require 5.006;
 use strict;
 use Apache::AxKit::Language::XSP;
+eval { require WeakRef; };
 use attributes;
 $Apache::AxKit::Language::XSP::SimpleTaglib::VERSION = 0.1;
 @Apache::AxKit::Language::XSP::SimpleTaglib::ISA = ('Apache::AxKit::Language::XSP');
@@ -26,9 +27,10 @@ use constant EXPRORNODELIST => 4;
 use constant NODELIST => 5;
 use constant STRUCT => 6;
 
-# memory leak ahead! the '&' construct may create circular references, which perl
+# Memory leak ahead! The '&' construct may create circular references, which perl
 # can't clean up. But this has only an effect if a taglib is reloaded, which shouldn't
 # happen on production machines. Moreover, '&' is rather unusual.
+# If you have the WeakRef module installed, this warning does not apply.
 sub parseChildStructSpec {
     my ($specs, $refs) = @_;
     for my $spec ($_[0]) {
@@ -51,6 +53,7 @@ sub parseChildStructSpec {
                     if ($$result{$token}{'type'} eq '*');
                 die("childStruct specification invalid. '&' may only take a reference.")
                     if $$result{'param'};
+                eval { WeakRef::weaken($$result{$token}) };
                 return $result if (!$next || $next eq '}');
                 next;
             }
@@ -121,8 +124,13 @@ sub MODIFY_CODE_ATTRIBUTES {
             $$handlerAttributes{'resultnode'} = $param[2] || 'node';
         } elsif ($attr eq 'struct') {
             $$handlerAttributes{'result'} = STRUCT;
+            $$handlerAttributes{'namespace'} = $param[0];
         } elsif ($attr eq 'nodeAttr') {
+            my %namespace;
             while (@param > 1) {
+                my ($ns, $prefix, $name) = parse_namespace($param[0]);
+                $namespace{$prefix} = $ns if $ns and $prefix;
+                $param[0] = "{$namespace{$prefix}}$prefix:$name" if $prefix;
                 $$handlerAttributes{'resultattr'}{$param[0]} = $param[1];
                 shift @param; shift @param;
             }
@@ -175,6 +183,8 @@ sub FETCH_CODE_ATTRIBUTES {
             push @attr, 'expr';
         } elsif ($$handlerAttributes{'result'} == STRUCT) {
             push @attr, 'struct';
+            $attr[-1] .= _makeAttributeQuoted($$handlerAttributes{'namespace'})
+              if defined $$handlerAttributes{'namespace'};
         }
     }
     push @attr, 'nodeAttr'._makeAttributeQuoted(%{$$handlerAttributes{'resultattr'}}) if $$handlerAttributes{'resultattr'};
@@ -218,11 +228,29 @@ sub import {
 
 # companions to start_expr
 
+sub start_expr {
+    my $e = shift;
+    my $cur = $e->{Current_Element};
+    my $rc = $e->start_expr(@_);
+    $e->{Current_Element} = $cur;
+    return $rc;
+}
+
 sub start_elem {
-    my ($e, $name, $attribs, $prefix, $ns) = @_;
+    my ($e, $nodename, $attribs, $default_prefix, $default_ns) = @_;
+    my($ns, $prefix, $name) = parse_namespace($nodename);
+    #$prefix = $e->generate_nsprefix($ns) if $ns and not $prefix;
+    if (not defined $ns and not defined $prefix) {
+        $ns = $default_ns; $prefix = $default_prefix;
+    }
     $name = $prefix.':'.$name if $prefix;
-    $e->append_to_script('{ my $elem = $document->createElementNS('.makeSingleQuoted($ns).','.makeSingleQuoted($name).');' .
-                    '$parent->appendChild($elem); $parent = $elem; }' . "\n");
+    if ($ns) {
+        $e->append_to_script('{ my $elem = $document->createElementNS('.makeSingleQuoted($ns).','.makeSingleQuoted($name).');');
+    }
+    else {
+        $e->append_to_script('{ my $elem = $document->createElement('.makeSingleQuoted($name).');');
+    }
+    $e->append_to_script('$parent->appendChild($elem); $parent = $elem; }' . "\n");
     if ($attribs) {
         while (my ($key, $value) = each %$attribs) {
             start_attr($e, $key); $e->append_to_script('.'.$value); end_attr($e);
@@ -237,9 +265,20 @@ sub end_elem {
 }
 
 sub start_attr {
-    my ($e, $name, $prefix) = @_;
+    my ($e, $attrname, $default_prefix, $default_ns) = @_;
+    my($ns, $prefix, $name) = parse_namespace($attrname);
+    #$prefix = $e->generate_nsprefix($ns) if $ns and not $prefix;
+    if (not defined $ns and not defined $prefix) {
+        $ns = $default_ns; $prefix = $default_prefix;
+    }
     $name = $prefix.':'.$name if $prefix;
-    $e->append_to_script('$parent->setAttribute('.makeSingleQuoted($name).', ""');
+
+    if ($ns and defined $prefix) {
+        $e->append_to_script('$parent->setAttributeNS('.makeSingleQuoted($ns).','.makeSingleQuoted($name).', ""');
+    }
+    else {
+        $e->append_to_script('$parent->setAttribute('.makeSingleQuoted($name).', ""');
+    }
     $e->manage_text(0);
 }
 
@@ -344,38 +383,164 @@ sub set_childStruct_value {
 }
 
 # code called from compiled XSP scripts
+sub parse_namespace {
+    local( $_ ) = shift;
+
+    # These forms will return ns and prefix as follows:
+    # *1.  {ns}prefix:name => ns specified, prefix specified (fully specified)
+    # *2a. {ns}name        => ns specified, prefix undefined (generate prefix)
+    #  2b. {ns}:name       => ns specified, prefix undefined (generate prefix)
+    # *3a. prefix:name     => ns undefined, prefix specified (lookup ns)
+    #  3b. {}prefix:name   => ns undefined, prefix specified (lookup ns)
+    # *4a. {}name          => ns is '',     prefix is ''     (no ns)
+    #  4b. {}:name         => ns is '',     prefix is ''     (no ns)
+    #  4c. :name           => ns is '',     prefix is ''     (no ns)
+    # *5.  name            => ns undefined, prefix undefined (default ns)
+    # The canonical forms are starred.
+    # (Note that neither a ns of '0' nor a prefix of '0' is allowed;
+    # they will be treated as empty strings.)
+
+    # The following tests can be used:
+    # if $ns and $prefix                         => fully specified
+    # if $ns and not $prefix                     => generate prefix
+    # if not $ns and $prefix                     => lookup ns
+    # if not $ns and defined $ns                 => no ns
+    # if not defined $ns and not defined $prefix => default ns
+
+    # This pattern match will almost give the desired results:
+    my ($ns, $prefix, $name) = m/^(?:{(.*)})? (?:([^:]*):)? (.*)$/x;
+
+    # These cases are fine with the pattern match:
+    # 1.  {ns}prefix:name => ns specified, prefix specified
+    # 2a. {ns}name        => ns specified, prefix undefined
+    # 3a. prefix:name     => ns undefined, prefix specified
+    # 4b. {}:name         => ns is '',     prefix is ''
+    # 5.  name            => ns undefined, prefix undefined
+
+    # These cases need to be adjusted:
+
+    # 2b. {ns}:name       => ns specified, prefix ''        <= actual result
+    # 2b. {ns}:name       => ns specified, prefix undefined <= desired result
+    $prefix = undef if $ns and not $prefix;
+
+    # 3b. {}prefix:name   => ns '',        prefix specified <= actual result
+    # 3b. {}prefix:name   => ns undefined, prefix specified <= desired result
+    $ns = undef if not $ns and $prefix;
+
+    # 4a. {}name,         => ns is '',     prefix undefined <= actual result
+    # 4a. {}name,         => ns is '',     prefix is ''     <= desired result
+    $prefix = '' if not $prefix and defined $ns and $ns eq '';
+
+    # 4c. :name           => ns undefined, prefix is ''     <= actual result
+    # 4c. :name           => ns is '',     prefix is ''     <= desired result
+    $ns = '' if not $ns and defined $prefix and $prefix eq '';
+
+    ($ns, $prefix, $name);
+}
+
+sub _lookup_prefix {
+    my ($ns, $namespaces) = @_;
+    my $i = 0;
+    foreach my $namespace (@$namespaces) {
+        my ($nsprefix, $nsuri) = @$namespace;
+        ++$i;
+        next unless $nsuri eq $ns;
+        #$nsprefix = "stlns$i" if $nsprefix eq '' and $nsuri ne '';
+        return $nsprefix;
+    }
+    #return "stlns$i";
+    return "";
+}
+
+sub _lookup_ns {
+    my ($prefix, $namespaces) = @_;
+    $prefix ||= '';
+    my $i = 0;
+    foreach my $namespace (@$namespaces) {
+        my ($nsprefix, $nsuri) = @$namespace;
+        #++$i;
+        next unless $nsprefix eq $prefix;
+        #$nsprefix = "stlns$i" if $nsprefix eq '' and $nsuri ne '';
+        return wantarray ? ($nsuri, $nsprefix) : $nsuri;
+    }
+    my ($nsprefix, $nsuri) = @{$namespaces->[-1]}; # default namespace
+    return wantarray ? ($nsuri, $nsprefix) : $nsuri;
+}
+
 
 sub xmlize {
-    my ($document, $parent, $prefix, $ns, @data) = @_;
+    my ($document, $parent, $namespaces, @data) = @_;
     foreach my $data (@data) {
-        die 'data is not a hash ref!' unless ref($data) eq 'HASH';
+        if (UNIVERSAL::isa($data,'XML::LibXML::Document')) {
+            $data = $data->getDocumentElement();
+        }
+        if (UNIVERSAL::isa($data,'XML::LibXML::Node')) {
+            $document->importNode($data);
+            $parent->appendChild($data);
+            next;
+        }
+        die 'data is not a hash ref or DOM fragment!' unless ref($data) eq 'HASH';
         while (my ($key, $val) = each %$data) {
+            my $outer_namespaces_added = 0;
             if (substr($key,0,1) eq '@') {
                 $key = substr($key,1);
                 die 'attribute value is not a simple scalar!' if ref($val);
-                #$key = $prefix.':'.$key if $prefix;
-                $parent->setAttribute($key,$val);
+                next if $key =~ m/^xmlns(?::|$)/; # already processed these
+                my ($ns, $prefix, $name) = parse_namespace($key);
+                #$prefix = _lookup_prefix($ns, $namespaces) if $ns and not $prefix;
+                $ns = _lookup_ns($prefix, $namespaces) if not $ns and $prefix;
+                $name = $prefix.':'.$name if $prefix;
+                if ($ns and $prefix) {
+                    $parent->setAttributeNS($ns,$name,$val);
+                } else {
+                    $parent->setAttribute($name,$val);
+                }
                 next;
             }
 
-            $key = $prefix.':'.$key if $prefix && length($key);
+            my ($ns, $prefix, $name) = parse_namespace($key);
+            $prefix = _lookup_prefix($ns, $namespaces) if $ns and not $prefix;
+            if (defined $ns) {
+                unshift @$namespaces, [ $prefix => $ns ];
+                $outer_namespaces_added++;
+            }
             my @data = ref($val) eq 'ARRAY'? @$val:$val;
             foreach my $data (@data) {
+                my $namespaces_added = 0;
+                if (ref($data) and ref($data) eq 'HASH') {
+                    # search for namespace declarations in attributes
+                    while (my ($key, $val) = each %$data) {
+                        if ($key =~ m/^\@xmlns(?::|$)(.*)/) {
+                            unshift @$namespaces, [ $1 => $val ];
+                            $namespaces_added++;
+                        }
+                    }
+                }
+
                 my $elem;
                 if (length($key)) {
-                    $elem = $document->createElementNS($ns,$key);
+                    my($nsuri, $nsprefix, $local) = ($ns, $prefix, $name);
+                    ($nsuri, $nsprefix) = _lookup_ns($nsprefix, $namespaces) if not defined $nsuri;
+                    $local = $nsprefix.':'.$local if $nsprefix;
+                    if ($nsuri) {
+                        $elem = $document->createElementNS($nsuri,$local);
+                    } else {
+                        $elem = $document->createElement($local);
+                    }
+                    $parent->appendChild($elem);
                 } else {
                     $elem = $parent;
                 }
-                #$elem->setAttribute("xmlns:$prefix", $ns) if ($ns);
-                $parent->appendChild($elem);
+
                 if (ref($data)) {
-                    xmlize($document, $elem, $prefix, $ns, $data);
+                    xmlize($document, $elem, $namespaces, $data);
                 } else {
                     my $tn = $document->createTextNode($data);
                     $elem->appendChild($tn);
                 }
+                splice(@$namespaces, 0, $namespaces_added) if $namespaces_added; # remove added namespaces
             }
+            splice(@$namespaces, 0, $outer_namespaces_added) if $outer_namespaces_added; # remove added namespaces
         }
     }
 }
@@ -459,7 +624,7 @@ sub start_element
 
         # FIXME: this can give problems with non-SimpleTaglib-taglib interaction
         # it must autodetect whether to use '.do' or not like xsp:expr, but as
-		# that one doesn't work reliably neither, it probably doesn't make any
+        # that one doesn't work reliably neither, it probably doesn't make any
         # difference
         $e->append_to_script('.') if ($globalframe[0]{'capture'});
         $e->append_to_script('do { ');
@@ -471,11 +636,11 @@ sub start_element
 
         $e->append_to_script('.') if ($globalframe[0]{'capture'});
         $e->append_to_script('do { ');
-        start_elem($e,$$handlerAttributes{'nodename'},{ 'xmlns:'.$element->{'Prefix'} => makeSingleQuoted($ns) },$element->{'Prefix'},$ns);
-        $e->start_expr($tag);
+        start_elem($e,$$handlerAttributes{'nodename'},$$handlerAttributes{'resultattr'},$element->{'Prefix'},$ns);
+        start_expr($e,$tag);
     } else {
-        $e->append_to_script('.') if ($globalframe[0]{'capture'});
-        $e->start_expr($tag);
+        $e->append_to_script('.') if ($globalframe[0]{'capture'} && $element->{Parent}->{Name} =~ /^(.*:)?(logic|expr)$/);
+        start_expr($e,$tag);
     }
 
     foreach my $attrib (keys %{$$handlerAttributes{'attribs'}}) {
@@ -557,8 +722,8 @@ sub end_element {
          $$handlerAttributes{'resultnode'})) {
 
         $e->append_to_script('}; foreach my $_res (@_res) {');
-        start_elem($e,$$handlerAttributes{'nodename'},{ %{$$handlerAttributes{'resultattr'}||{}}, 'xmlns:'.$element->{'Prefix'} => makeSingleQuoted($ns) }, $element->{'Prefix'},$ns);
-        $e->start_expr($$handlerAttributes{'nodename'});
+        start_elem($e,$$handlerAttributes{'nodename'},$$handlerAttributes{'resultattr'},$element->{'Prefix'},$ns);
+        start_expr($e,$$handlerAttributes{'nodename'});
         $e->append_to_script('$_res');
         $e->end_expr();
         end_elem($e);
@@ -571,9 +736,6 @@ sub end_element {
          $$handlerAttributes{'resultnode'})) {
 
         $e->append_to_script('}; ');
-        while (my ($key, $value) = each %{$$handlerAttributes{'resultattr'}}) {
-            start_attr($e, $key); $e->append_to_script('.'.$value); end_attr($e);
-        }
         $e->append_to_script('join("",@_res);');
         $e->end_expr($tag);
         end_elem($e);
@@ -584,14 +746,32 @@ sub end_element {
         }
     } elsif ($$handlerAttributes{'result'} == STRUCT) {
         $e->append_to_script('}; ');
+        my ($nsuri, $nsprefix);
+        if (not $$handlerAttributes{'namespace'}) {
+            $nsuri = $ns;
+            $nsprefix = $element->{'Prefix'};
+        }
+        elsif ($$handlerAttributes{'namespace'} =~ m/^{(.*)}([^:]*):?$/) {
+            # "{ns}prefix:", "{ns}prefix", "{ns}:", "{ns}", "{}:", "{}"
+            ($nsuri, $nsprefix) = ($1, $2);
+            $nsprefix = '' unless $nsuri; # assume "{}prefix" meant "{}"
+            #$nsprefix = $e->generate_nsprefix($nsuri) if $nsuri and not $nsprefix;
+        }
+        else {
+            # "ns", '""', "''"
+            $nsuri = $$handlerAttributes{'namespace'};
+            $nsuri = '' if $nsuri eq '""' or $nsuri eq "''";
+            #$nsprefix = $e->generate_nsprefix($nsuri) if $nsuri;
+            $nsprefix = '';
+        }
         if (Apache::AxKit::Language::XSP::is_xsp_namespace($element->{'Parent'}->{'NamespaceURI'})) {
             if (!$e->manage_text() || $element->{'Parent'}->{'Name'} =~ /^(.*:)?content$/) {
-                $e->append_to_script('Apache::AxKit::Language::XSP::SimpleTaglib::xmlize($document,$parent,'.makeSingleQuoted($element->{'Prefix'}).','.makeSingleQuoted($ns).',@_res); ');
+                $e->append_to_script('Apache::AxKit::Language::XSP::SimpleTaglib::xmlize($document,$parent,[['.makeSingleQuoted($nsprefix).'=>'.makeSingleQuoted($nsuri).']],@_res); ');
             } else {
                 $e->append_to_script('eval{if (wantarray) { @_res; } else { join("",@_res); }}');
             }
         } else {
-            $e->append_to_script('Apache::AxKit::Language::XSP::SimpleTaglib::xmlize($document,$parent,'.makeSingleQuoted($element->{'Prefix'}).','.makeSingleQuoted($ns).',@_res); ');
+            $e->append_to_script('Apache::AxKit::Language::XSP::SimpleTaglib::xmlize($document,$parent,[['.makeSingleQuoted($nsprefix).'=>'.makeSingleQuoted($nsuri).']],@_res); ');
         }
         if ($globalframe[0]{'capture'}) {
             $e->append_to_script("\"\"; }\n");
@@ -615,6 +795,8 @@ sub end_element {
 1;
 
 __END__
+
+=pod
 
 =head1 NAME
 
@@ -646,10 +828,16 @@ several other useful tag styles.
 
 A tag "<yourNS:foo>" will trigger a call to sub "foo" during the closing tag event.
 What happens in between can be configured in many ways
-using function attributes. In the rare cases where some action has to happen during
+using Perl function attributes. In the rare cases where some action has to happen during
 the opening tag event, you may provide a sub "foo__open" (double underscore)
 which will be called at the appropriate time. Usually you would only do that for 'if'-
 style tags which enclose some block of code.
+
+It is important to understand that your tag handler is called during the XSP parse stage,
+when the XSP script is being constructed. Therefore, it is the responsibility of the
+handler to return a I<Perl code fragment> to be appended to the XSP script, as shown
+above. Contrast this behaviour to TaglibHelper, where the handler is called when the XSP
+script is being run, and it returns I<data> to be included in the XML output.
 
 =head2 Context sensitive handler subs
 
@@ -660,18 +848,22 @@ exact tag hierarchy (within your namespace).
 
 =head2 Names, parameters, return values
 
-Names for subs and variables get created by replacing any non-alphanumeric character in the
+Names for subs and variables get created by replacing any non-alphanumeric characters in the
 original tag or attribute to underscores. For example, 'get-id' becomes 'get_id'.
 
-The called subs get passed 3 parameters: The parser object, the tag name, and an attribute
-hash. This hash only contains XML attributes declared using the 'attrib()' function
-attribute. (Try not to confuse these two meanings of 'attribute' - unfortunately XML and
-Perl both call them that way.) All other declared parameters get converted into local
-variables with prefix 'attr_'.
+The called subs get passed 3 parameters: The parser object, the tag name, and an
+attribute hash. This hash only contains XML attributes declared using the 'attrib()' Perl
+function attribute. (Try not to confuse these two meanings of 'attribute' - unfortunately
+XML and Perl both call them that way.) The other declared parameters get converted into
+local variables with prefix 'attr_', or, in the case of 'childStruct', converted into the
+'%_' hash. These local variables are only available inside your code fragment which
+becomes part of the XSP script, unlike the attribute hash which is passed directly to
+your handler as the third parameter.
 
-If a sub has any result attribute ('node', 'expr', etc.), it gets called in list context. If
-neccessary, returned lists get converted to scalars by joining them without separation. Plain
-subs (without result attribute) inherit their context and have their return value left unmodified.
+If a sub has an output attribute ('node', 'expr', etc.), the code fragment will be run
+in list context. If necessary, returned lists get converted to scalars by joining them
+without separation. Code fragments from plain subs (without an output attribute) inherit
+their context and have their return value left unmodified.
 
 =head2 Precedence
 
@@ -680,39 +872,54 @@ Remember, though, that only tags in your namespace are considered.
 
 =over 4
 
-=item 1. If the innermost tag has a 'childStruct' spec which matches, the internal childStruct
+=item 1.
+
+If the innermost tag has a 'childStruct' spec which matches, the internal childStruct
 handler takes precedence.
 
-=item 2. Otherwise, if any surrounding tag has a matching 'child' or 'attribOrChild'
+=item 2.
+
+Otherwise, if any surrounding tag has a matching 'child' or 'attribOrChild'
 attribute, the internal handler for the innermost matching tag gets chosen.
 
-=item 3. Otherwise, the handler sub with the deepest tag hierarchy gets called.
+=item 3.
+
+Otherwise, the handler sub with the deepest tag hierarchy gets called.
 
 =back
 
 =head2 Utility functions
 
-Apache::AxKit::Language::XSP contains a few handy utility subs:
+Apache::AxKit::Language::XSP contains a few handy utility subs to help build your code fragment:
 
 =over 4
 
-=item * start_elem, end_elem, start_attr, end_attr - these create elements and attributes
+=item start_elem, end_elem, start_attr, end_attr
+
+these create elements and attributes
 in the output document. Call them just like you call start_expr and end_expr.
 
-=item * makeSingleQuoted - given a scalar as input, it returns a scalar which yields
-the exact input value when evaluated; handy when using unknown text as-is in return values.
+=item makeSingleQuoted
 
-=item * makeVariableName - creates a valid, readable perl identifier from arbitrary input text.
+given a scalar as input, it returns a scalar which yields
+the exact input value when evaluated; handy when using unknown text as-is in code fragments.
+
+=item makeVariableName
+
+creates a valid, readable perl identifier from arbitrary input text.
 The return values might overlap.
 
 =back
 
-=head1 Available attributes
+=head1 PERL ATTRIBUTES
 
-Parameters to attributes get handled as if 'q()' enclosed them. Commas separate arguments, so
-values cannot contain commas.
+Perl function attributes are used to define how XML output should be generated from your
+code fragment and how XML input should be presented to your handler.  Note that
+parameters to attributes get handled as if 'q()' enclosed them (explicit quote marks are
+not needed). Furthermore, commas separate parameters (except for childStruct), so a
+parameter cannot contain a comma.
 
-=head2 Result attributes
+=head2 Output attributes
 
 Choose none or one of these to select output behaviour.
 
@@ -757,6 +964,11 @@ Finally, you may use hashrefs in place of scalars to create substructures. To cr
 tags, use a hashref that contain the attribute names prefixed by '@'. A '' (empty
 string) as key denotes the text contents of that node.
 
+You can also use a XML::LibXML::Document or XML::LibXML::Node object in place of a hashref. You
+can, for example, simply return an XML::LibXML::Document object and it gets inserted at the current
+location. You may also return an array of documents/nodes, and you may even mix plain hashrefs
+with DOM objects as you desire.
+
 In an expression context, passes on the unmodified return value.
 
 =head2 Other output attributes
@@ -776,13 +988,14 @@ These tags specify how input gets handled. Most may appear more than once, if th
 =head3 C<attrib(name,...)>
 
 Declares C<name> as a (non-mandatory) XML attribute. All attributes declared this way get
-passed to the handler subs in the attribute hash.
+passed to your handler sub in the attribute hash (the third argument to your handler).
 
 =head3 C<child(name,...)>
 
 Declares a child tag C<name>. It always lies within the same namespace as the taglib itself. The
-contents of the tag, if any, get saved in a local variable named $attr_C<name>. If the child tag
-appears more than once, the last value overrides any previous value.
+contents of the tag, if any, get saved in a local variable named $attr_C<name> and made
+available to your code fragment. If the child tag appears more than once, the last value
+overrides any previous value.
 
 =head3 C<attribOrChild(name,...)>
 
@@ -796,50 +1009,66 @@ Makes this tag preserve contained whitespace.
 
 =head3 C<captureContent>
 
-Makes this tag store the enclosed content in '$_' for later retrieval in the handler sub, instead
+Makes this tag store the enclosed content in '$_' for later retrieval in your code fragment instead
 of adding it to the enclosing element. Non-text nodes will not work as expected.
 
 =head3 C<childStruct(spec)>
 
-Marks this tag to take a complex xml fragment as input. The resulting data structure is available
-as %_ in the sub. Whitespace is always preserved.
+Marks this tag to take a complex XML fragment as input. The resulting data structure is available
+as %_ in your code fragment. Whitespace is always preserved.
 
 C<spec> has the following syntax:
 
 =over 4
 
-=item 1. A C<spec> consists of a list of tag names, separated by whitespace.
+=item 1.
 
-=item 2. Tags may appear in any order.
+A C<spec> consists of a list of tag names, separated by whitespace (not commas!).
 
-=item 3. A tag name prefixed by '@' may appear more than once in the xml document. A tag
+=item 2.
+
+Tags may appear in any order.
+
+=item 3.
+
+A tag name prefixed by '@' may appear more than once in the XML document. A tag
 name prefixed by '$' or without any prefix may only appear once.
 
-=item 4. If a '{' follows a tag name, that tag has child tags. A valid C<spec> and a
+=item 4.
+
+If a '{' follows a tag name, that tag has child tags. A valid C<spec> and a
 closing '}' must follow.
 
-=item 5. A tag name prefixed by '*' does not indicate an input tag but specifies the name
+=item 5.
+
+A tag name prefixed by '*' does not indicate an input tag but specifies the name
 for the text contents of the surrounding tag in the resulting data structure. Such a tag name may
 not bear a '{...}' block.
 
-=item 6. Any tag without child tags may also appear as attribute of the parent tag.
+=item 6.
 
-=item 7. A tag name folloewd by one or more parameter specs in parentheses means a hash
+Any tag without child tags may also appear as attribute of the parent tag.
+
+=item 7.
+
+A tag name followed by one or more parameter specs in parentheses means a hash
 gets created with the value of the corresponding attribute (or child tag) as key. This usage does
 not forbid appending a '{...}' block, which would result in a nested hash.
 
-=item 8. A tag name prefixed by '&' denotes a recursive structure. The tag name must appear
+=item 8.
+
+A tag name prefixed by '&' denotes a recursive structure. The tag name must appear
 as the name of one of the surrounding '{...}'-blocks. The innermost matching block gets chosen.
 
 =back
 
 Example:
 
-sub:
+Given the following handler sub:
 
     set_permission : childStruct(add{@permission{$type *name} $target $comment(lang)(day)} remove{@permission{$type *name} $target})
 
-XML:
+and the following XML as input:
 
     <set-permission>
         <add>
@@ -862,7 +1091,8 @@ XML:
         </remove>
     </set-permission>
 
-Result: a call to set_permission with %_ set like this:
+then the local variable '%_' will be made available to your code fragment (returned by
+your set_permission handler sub).  It will be initialized like this:
 
     %_ = (
         add => {
@@ -885,11 +1115,97 @@ Result: a call to set_permission with %_ set like this:
     );
 
 
-=head1 EXAMPLE
+=head1 XML NAMESPACES
 
-See AxKit::XSP::Sessions and AxKit::XSP::Auth source code for full-featured examples.
+By default, all output element nodes are placed in the same namespace
+as the tag library.  To specify a different namespace or no namespace,
+the desired namespace can be placed within curly braces before the
+node name in an output attribute:
 
-=head1 BUGS
+  {namespaceURI}name
+
+To specify a prefix, place it after the namespace:
+
+  {namespaceURI}prefix:name
+
+For example, to create an XML node named C<otherNS:name> and associate
+the prefix 'otherNS' with the namespace 'http://mydomain/NS/other/v1':
+
+  node({http://mydomain/NS/other/v1}otherNS:name)
+
+To create an XML node with no namespace, use an empty namespace:
+
+  node({}name)
+
+This notation for specifying namespaces can also be used in the
+C<struct> output attribute.  Alternatively, the standard "xmlns" XML
+attribute may be used to specify namespaces.  For example, the
+following are equivalent:
+
+  sub sample_struct : struct {
+    return "{ '{http://mydomain/NS/other/v1}otherNS:name' => 'value' }";
+  }
+
+  sub sample_struct : struct {
+    return q{{
+        'otherNS:name' =>
+        { '@xmlns:otherNS' => 'http://mydomain/NS/other/v1',
+          '' => 'value' }
+    }};
+  }
+
+Namespace scoping in the hashref is patterned after XML documents.
+You may refer to previously declared namespaces by using the same
+prefix, and you may override previously declared namespaces with new
+declarations (either with the curly-braced notation or by using
+"xmlns" XML attributes).
+
+To specify a default namespace for all unqualified node names in the
+hashref, state it as a parameter to the C<struct> output attribute:
+
+  struct(namespaceURI)
+
+You may also specify a prefix:
+
+  struct({namespaceURI}prefix)
+
+For example, the following is equivalent to the previous example:
+
+  sub sample_struct : struct({http://mydomain/NS/other/v1}otherNS) {
+    return "{ 'name' => 'value' }";
+  }
+
+To turn off the default namespace for all node names, use an empty
+namespace:
+
+  sub sample_struct : struct({}) {
+    return "{ 'name' => 'value' }";
+  }
+
+By default, XML attributes created with the C<nodeAttr> output
+attribute are not in a namespace.  The curly-braced notation can be
+used to specify a namespace.  For example:
+
+  nodeAttr({http://www.w3.org/TR/REC-html40}html:href,'http://www.axkit.org/')
+
+If you are specifying more than one attribute in the same namespace,
+you can refer to previously declared namespaces by using the same
+prefix:
+
+  nodeAttr({http://www.w3.org/TR/REC-html40}html:href,'http://www.axkit.org/',html:class,'link')
+
+A prefix is required to associate a namespace with an attribute. Default namespaces
+(those without a prefix) do not apply to attributes and are ignored.
+
+
+=head1 EXAMPLES
+
+Refer to the Demo tag libraries included in the AxKit distribution and look at the source
+code of AxKit::XSP::Sessions and AxKit::XSP::Auth for full-featured examples.
+
+=head1 BUGS AND HINTS
+
+=head2 Miscellaneous
 
 Because of the use of perl attributes, SimpleTaglib will only work with Perl 5.6.0 or later.
 This software is already tested quite well and works for a number of simple and complex
@@ -901,13 +1217,93 @@ If some tags don't work as expected, try surrounding the offending tag with
 <xsp:content>, this is a common gotcha (but correct and intended). If you find yourself needing
 <xsp:expr> around a tag, please contact the author, as that is probably a bug.
 
+If you use the '&' flag of childStruct and are reloading your taglib through Apache::StatINC or
+a similar method, consider installing the 'WeakRef' module from CPAN to prevent memory leaks. If
+you never use '&' or don't reload the taglib in the running server, this is not necessary.
+
+TODO: to be fixed: childStruct currently does not allow hash keys to be child nodes, they must be attributes of their
+parent node. For example, given childStruct(text(lang)), this is valid: <text lang="en">foo</text>
+but this is not: <text><lang>en</lang>foo</text>
+
+=head2 Request-time handler
+
+TODO: This shall be enhanced in a future release.
+
+If you pine for the TaglibHelper-style handlers that get called at request time, and you
+do not need the flexibility of custom-generated code fragments provided by SimpleTaglib,
+you can define a subroutine in your tag library to be called at request time instead of
+at parse time.  Just place a call to your subroutine inside the code fragment returned by
+your handler.  You can even pass it some request-time variables such as $r and $cgi.  For
+example,
+
+    package Your::XSP::Package;
+    use Apache::AxKit::Language::XSP::SimpleTaglib;
+
+    sub some_tag {
+	my($r, $cgi, $some_param) = @_;
+	# define code here to be run at request time
+    }
+
+    package Your::XSP::Package::Handlers;
+
+    sub some_tag : attribOrChild(some-param) node(result) {
+        'Your::XSP::Package::some_tag($r,$cgi,$attr_some_param);';
+    }
+
+=head2 Using attrib and childStruct together
+
+TODO: to be fixed.
+
+You may need a list-valued parameter to be specified by XML child tags for your tag
+handler, but you also want the option that a single value can be passed in as an XML
+attribute.  For example:
+
+  <yourNS:some_tag>
+    <yourNS:format>XML</yourNS:format>
+    <yourNS:format>HTML</yourNS:format>
+    <yourNS:format>PDF</yourNS:format>
+  </yourNS:some_tag>
+
+  <yourNS:some_tag format="XML"/>
+
+The 'attribOrChild' Perl attribute will not suffice here because the child tag overwrites
+the previous value each time instead of creating a list (format will be set to 'PDF').
+What you need is a combination of 'attrib' and 'childStruct':
+
+    sub some_tag : attrib(format) childStruct(@format) node(result) {
+	my ($e, $tag, %attr) = @_;
+	my $code = '';
+	if ( defined $attr{format} ) {
+	    my $quoted = Apache::AxKit::Language::XSP::makeSingleQuoted($attr{format});
+	    $code .= '$_{format} = ' . $quoted . ' unless defined $_{format};';
+	}
+        $code .= 'Your::XSP::Package::some_tag($r,$cgi,%_);';
+	$code;
+    }
+
+This technique can be generalized to support any number of parameters.  In your handler,
+iterate over the '%attr' hash (defined by 'attrib') and merge the values into the '%_'
+hash (defined by 'childStruct') inside your code fragment.  Remember that parameters
+defined in the childStruct attribute are separated by spaces, not commas.
+
+    sub some_tag : attrib(format,option) childStruct(@format @option) node(result) {
+	my ($e, $tag, %attr) = @_;
+        my $code = '';
+	while ( my($key, $value) = each %attr ) {
+	    next unless defined $value;
+	    $value = Apache::AxKit::Language::XSP::makeSingleQuoted($value);
+	    $code .= "\$_{'_$key'} = $value unless defined \$_{'_$key'};\n"
+	}
+        $code .= 'Your::XSP::Package::some_tag($r,$cgi,%_);';
+	$code;
+    }
+
 =head1 AUTHOR
 
 Jörg Walter <jwalt@cpan.org>
 
 =head1 COPYRIGHT
 
-Copyright (c) 2002 Jörg Walter. Documentation
 All rights reserved. This program is free software; you can redistribute it and/or
 modify it under the same terms as AxKit itself.
 

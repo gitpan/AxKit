@@ -3,6 +3,11 @@
 <xsp:import>Apache::File</xsp:import>
 
 <html>
+    <xsp:logic>
+      if ($r->args !~ /^\w+\.?\w+$/) {
+        die "Invalid argument: ".$r->args;
+      }
+    </xsp:logic>
     <head>
         <title>Source for <xsp:expr>$r->args</xsp:expr></title>
         <link rel="stylesheet" url="/axkit/stylesheets/style.css"/>

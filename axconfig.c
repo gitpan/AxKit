@@ -1,4 +1,4 @@
-/* $Id: axconfig.c,v 1.8.2.1 2002/06/06 20:00:19 matts Exp $ */
+/* $Id: axconfig.c,v 1.16 2002/09/20 17:00:24 jwalt Exp $ */
 
 #ifndef WIN32
 #include <modules/perl/mod_perl.h>
@@ -86,6 +86,7 @@ new_axkit_dir_config (pool *p)
     axkit_dir_config *new =
         (axkit_dir_config *) ap_palloc(p, sizeof(axkit_dir_config));
 
+    new->debug_tidy = -1;
     new->translate_output = -1;
     new->gzip_output = -1;
     new->log_declines = -1;
@@ -189,7 +190,7 @@ create_axkit_dir_config (pool *p, char *dummy)
     
     new->processors = newHV();
     ap_register_cleanup(p, (void*)new->processors, ax_cleanup_hv, ap_null_cleanup);
-    
+
     new->dynamic_processors = newAV();
     ap_register_cleanup(p, (void*)new->dynamic_processors, ax_cleanup_av, ap_null_cleanup);
     
@@ -212,9 +213,9 @@ create_axkit_dir_config (pool *p, char *dummy)
 
     new->current_plugins = newAV();
     ap_register_cleanup(p, (void*)new->current_plugins, ax_cleanup_av, ap_null_cleanup);
-    
+
     /* warn("create dir config: %d\n", new); */
-    
+
     return new;
 }
 
@@ -252,9 +253,9 @@ store_in_hv2 (HV * my_hv, SV * one, SV * two, SV * value)
         }
         sub2 = (AV*)SvRV(*sub2p);
     }
-    
+
     /* warn("adding processor in %s/%s with refs: %d\n", key1, key2, SvREFCNT(value)); */
-    
+
     av_push(sub2, value);
 }
 
@@ -264,14 +265,14 @@ merge_axkit_dir_config (pool *p, void *parent_dirv, void *subdirv)
     axkit_dir_config *parent_dir = (axkit_dir_config *)parent_dirv;
     axkit_dir_config *subdir = (axkit_dir_config *)subdirv;
     axkit_dir_config *new = new_axkit_dir_config(p);
-    
+
     /* Brian Wheeler found that sometimes parent is NULL */
     if (parent_dir == NULL) {
         parent_dir = create_axkit_dir_config(p, "");
     }
-    
+
     /* warn("merge : %d with %d\n", parent_dir, subdir); */
-    
+
 /*
     warn("[AxKit] merge: parent dir_config:\n"
         "location: %d\n"
@@ -388,21 +389,21 @@ merge_axkit_dir_config (pool *p, void *parent_dirv, void *subdirv)
     else if (parent_dir->config_reader_module) {
         new->config_reader_module = ap_pstrdup(p, parent_dir->config_reader_module);
     }
-    
+
     if (subdir->contentprovider_module) {
         new->contentprovider_module = ap_pstrdup(p, subdir->contentprovider_module);
     }
     else if (parent_dir->contentprovider_module) {
         new->contentprovider_module = ap_pstrdup(p, parent_dir->contentprovider_module);
     }
-    
+
     if (subdir->styleprovider_module) {
         new->styleprovider_module = ap_pstrdup(p, subdir->styleprovider_module);
     }
     else if (parent_dir->styleprovider_module) {
         new->styleprovider_module = ap_pstrdup(p, parent_dir->styleprovider_module);
     }
-    
+
     if (subdir->default_style) {
         new->default_style = ap_pstrdup(p, subdir->default_style);
     }
@@ -438,14 +439,18 @@ merge_axkit_dir_config (pool *p, void *parent_dirv, void *subdirv)
         new->trace_intermediate = ap_pstrdup(p, parent_dir->trace_intermediate);
     }
 
+    new->debug_tidy =
+        subdir->debug_tidy != -1 ? subdir->debug_tidy :
+                                     parent_dir->debug_tidy;
+
     new->debug_level =
         subdir->debug_level != -1 ? subdir->debug_level :
                                     parent_dir->debug_level;
-    
+
     new->translate_output =
         subdir->translate_output != -1 ? subdir->translate_output :
                                          parent_dir->translate_output;
-    
+
     new->gzip_output =
         subdir->gzip_output != -1 ? subdir->gzip_output :
                                          parent_dir->gzip_output;
@@ -453,11 +458,11 @@ merge_axkit_dir_config (pool *p, void *parent_dirv, void *subdirv)
     new->stack_trace =
         subdir->stack_trace != -1 ? subdir->stack_trace :
                                          parent_dir->stack_trace;
-    
+
     new->log_declines =
         subdir->log_declines != -1 ? subdir->log_declines :
                                      parent_dir->log_declines;
-    
+
     new->no_cache =
         subdir->no_cache != -1 ? subdir->no_cache :
                                      parent_dir->no_cache;
@@ -473,9 +478,9 @@ merge_axkit_dir_config (pool *p, void *parent_dirv, void *subdirv)
     new->handle_dirs =
         subdir->handle_dirs != -1 ? subdir->handle_dirs :
                                     parent_dir->handle_dirs;
-    
+
     /* complex types */
-    
+
     {
         /* cfg->error_stylesheet */
         AV * from = NULL;
@@ -529,10 +534,10 @@ merge_axkit_dir_config (pool *p, void *parent_dirv, void *subdirv)
             cval = ap_pstrdup(p, SvPV(val, clen));
             hv_store(new->type_map, key, len, newSVpvn(cval, clen), 0);
         }
-        
+
         ap_register_cleanup(p, (void*)new->type_map, ax_cleanup_hv, ap_null_cleanup);
     }
-    
+
     {
         /* cfg->dynamic_processors */
         new->dynamic_processors = newAV();
@@ -560,13 +565,22 @@ merge_axkit_dir_config (pool *p, void *parent_dirv, void *subdirv)
                 }
             }
         }
-        
+
         ap_register_cleanup(p, (void*)new->dynamic_processors, ax_cleanup_av, ap_null_cleanup);
     }
 
     {
         /* cfg->xsp_taglibs */
         new->xsp_taglibs = newHV();
+        if (HvKEYS(parent_dir->xsp_taglibs)) {
+            SV * val;
+            char * key;
+            I32 len;
+            hv_iterinit(parent_dir->xsp_taglibs);
+            while (val = hv_iternextsv(parent_dir->xsp_taglibs, &key, &len)) {
+                hv_store(new->xsp_taglibs, key, len, newSViv(1), 0);
+            }
+        }
         if (HvKEYS(subdir->xsp_taglibs)) {
             SV * val;
             char * key;
@@ -576,63 +590,17 @@ merge_axkit_dir_config (pool *p, void *parent_dirv, void *subdirv)
                 hv_store(new->xsp_taglibs, key, len, newSViv(1), 0);
             }
         }
-        else {
-            SV * val;
-            char * key;
-            I32 len;
-            hv_iterinit(parent_dir->xsp_taglibs);
-            while (val = hv_iternextsv(parent_dir->xsp_taglibs, &key, &len)) {
-                hv_store(new->xsp_taglibs, key, len, newSViv(1), 0);
-            }
-        }
-        
+
         ap_register_cleanup(p, (void*)new->xsp_taglibs, ax_cleanup_hv, ap_null_cleanup);
     }
-        
+
     {
         /* cfg->processors */
         SV * val;
         I32 len;
         char * key;
-        
+
         new->processors = newHV();
-        
-        if (!subdir->reset_processors) {
-            hv_iterinit(parent_dir->processors);
-            while (val = hv_iternextsv(parent_dir->processors, &key, &len)) {
-                SV * subval;
-                I32 sublen;
-                char * subkey;
-                HV * subhash = (HV*)SvRV(val);
-                
-                hv_iterinit(subhash);
-                while (subval = hv_iternextsv(subhash, &subkey, &sublen)) {
-                    SV * one;
-                    SV * two;
-                    AV * ary;
-                    I32 ary_len;
-                    I32 i;
-                    
-                    one = newSVpvn(ap_pstrdup(p, key), len);
-                    two = newSVpvn(ap_pstrdup(p, subkey), sublen);
-                    
-                    ary = (AV*)SvRV(subval);
-                    ary_len = av_len(ary);
-                    
-                    if (ary_len >= 0) {
-                        for (i = 0; i <= ary_len; i++) {
-                            SV ** elem = av_fetch(ary, i, 0);
-                            if (elem) {
-                                store_in_hv2(new->processors, one, two, newSVsv(*elem));
-                            }
-                        }
-                    }
-                    
-                    SvREFCNT_dec(one);
-                    SvREFCNT_dec(two);
-                }
-            }
-        }
 
         hv_iterinit(subdir->processors);
         while (val = hv_iternextsv(subdir->processors, &key, &len)) {
@@ -654,7 +622,7 @@ merge_axkit_dir_config (pool *p, void *parent_dirv, void *subdirv)
                 
                 ary = (AV*)SvRV(subval);
                 ary_len = av_len(ary);
-                
+
                 if (ary_len >= 0) {
                     for (i = 0; i <= ary_len; i++) {
                         SV ** elem = av_fetch(ary, i, 0);
@@ -666,6 +634,43 @@ merge_axkit_dir_config (pool *p, void *parent_dirv, void *subdirv)
                 
                 SvREFCNT_dec(one);
                 SvREFCNT_dec(two);
+            }
+        }
+
+        if (!subdir->reset_processors) {
+            hv_iterinit(parent_dir->processors);
+            while (val = hv_iternextsv(parent_dir->processors, &key, &len)) {
+                SV * subval;
+                I32 sublen;
+                char * subkey;
+                HV * subhash = (HV*)SvRV(val);
+
+                hv_iterinit(subhash);
+                while (subval = hv_iternextsv(subhash, &subkey, &sublen)) {
+                    SV * one;
+                    SV * two;
+                    AV * ary;
+                    I32 ary_len;
+                    I32 i;
+
+                    one = newSVpvn(ap_pstrdup(p, key), len);
+                    two = newSVpvn(ap_pstrdup(p, subkey), sublen);
+
+                    ary = (AV*)SvRV(subval);
+                    ary_len = av_len(ary);
+
+                    if (ary_len >= 0) {
+                        for (i = 0; i <= ary_len; i++) {
+                            SV ** elem = av_fetch(ary, i, 0);
+                            if (elem) {
+                                store_in_hv2(new->processors, one, two, newSVsv(*elem));
+                            }
+                        }
+                    }
+                    
+                    SvREFCNT_dec(one);
+                    SvREFCNT_dec(two);
+                }
             }
         }
 
@@ -700,7 +705,7 @@ merge_axkit_dir_config (pool *p, void *parent_dirv, void *subdirv)
                 }
             }
         }
-        
+
         ap_register_cleanup(p, (void*)new->output_transformers, ax_cleanup_av, ap_null_cleanup);
     }
 
@@ -732,14 +737,14 @@ merge_axkit_dir_config (pool *p, void *parent_dirv, void *subdirv)
                 }
             }
         }
-        
+
         ap_register_cleanup(p, (void*)new->current_plugins, ax_cleanup_av, ap_null_cleanup);
     }
-    
+
     new->current_styles = newAV();
     av_push(new->current_styles, newSVpv("#default", 0));
     ap_register_cleanup(p, (void*)new->current_styles, ax_cleanup_av, ap_null_cleanup);
-    
+
     new->current_medias = newAV();
     av_push(new->current_medias, newSVpv("screen", 0));
     ap_register_cleanup(p, (void*)new->current_medias, ax_cleanup_av, ap_null_cleanup);
@@ -764,7 +769,7 @@ merge_axkit_dir_config (pool *p, void *parent_dirv, void *subdirv)
         new->output_transformers
         );
 */
-    
+
     return new;
 }
 
@@ -775,15 +780,15 @@ ax_add_type_processor (cmd_parms *cmd, axkit_dir_config *ax,
                             char *mt, char *sty, char *option)
 {
     AV *processor = newAV();
-    
+
     SV **cur_media = av_fetch(ax->current_medias, 0, 0);
     SV **cur_style = av_fetch(ax->current_styles, 0, 0);
-    
+
     SV *type = newSVpv((char*)cmd->info, 0);
     SV *mime = newSVpv(mt, 0);
     SV *style = newSVpv(sty, 0);
     SV *opt_sv = newSVpv(option, 0);
-    
+
     av_push(processor, type);
     av_push(processor, mime);
     av_push(processor, style);
@@ -823,7 +828,7 @@ ax_error_stylesheet (cmd_parms *cmd, axkit_dir_config *ax, char *mime, char *sty
 {
     av_push(ax->error_stylesheet, newSVpvn(mime, strlen(mime)));
     av_push(ax->error_stylesheet, newSVpvn(stylesheet, strlen(stylesheet)));
-    
+
     return NULL;
 }
 
@@ -870,7 +875,7 @@ ax_media_type (cmd_parms *cmd, axkit_dir_config *ax, char *media)
     }
     
     ap_set_module_config(cmd->server->lookup_defaults, &XS_AxKit, oldconf);
-    
+
     return NULL;
 }
 
@@ -906,7 +911,7 @@ ax_style_name (cmd_parms *cmd, axkit_dir_config *ax, char *style)
 
     oldconf = ap_get_module_config(cmd->server->lookup_defaults, &XS_AxKit);
     ap_set_module_config(cmd->server->lookup_defaults, &XS_AxKit, (void*)ax);
-    
+
     while (!ap_cfg_getline(line, MAX_STRING_LEN, cmd->config_file)) {
         const char *errmsg;
         if (!strcasecmp(line, "</AxStyleName>")) {
@@ -962,13 +967,13 @@ CHAR_P
 ax_add_xsp_taglib (cmd_parms *cmd, axkit_dir_config *ax, char *module)
 {
     STRLEN len;
-    
+
     ax_preload_module(&module);
-    
+
     len = strlen(module);
-    
+
     hv_store(ax->xsp_taglibs, module, len, newSViv(1), 0);
-    
+
     return NULL;
 }
 
@@ -977,7 +982,7 @@ ax_add_output_transformer (cmd_parms *cmd, axkit_dir_config *ax, char *module)
 {
     SV * mod_sv = newSVpv(module, 0);
     av_push(ax->output_transformers, mod_sv);
-    
+
     return NULL;
 }
 
@@ -1058,9 +1063,9 @@ static int axkit_handler(request_rec *r)
             return DECLINED;
         }
     }
-    
+
     handler_sv = newSVpv("AxKit::fast_handler", 0);
-    
+
     cfg = perl_get_sv("AxKit::Cfg", FALSE);
     debuglevel = perl_get_sv("AxKit::DebugLevel", FALSE);
     errorlevel = perl_get_sv("Error::Debug", FALSE);
@@ -1076,7 +1081,7 @@ static int axkit_handler(request_rec *r)
     LEAVE;
 
     SvREFCNT_dec(handler_sv);
-    
+
     if (retval == DECLINED) {
         r->handler = "default-handler";
         return ap_invoke_handler(r);
@@ -1093,6 +1098,121 @@ static int axkit_ok_handler(request_rec *r)
 static int axkit_declined_handler(request_rec *r)
 {
     return DECLINED;
+}
+
+/************ server wide configuration *******************/
+
+static axkit_server_config *
+new_axkit_server_config (pool *p)
+{
+    axkit_server_config *new =
+        (axkit_server_config *) ap_palloc(p, sizeof(axkit_server_config));
+
+    new->external_encoding = 0;
+    new->iconv_handle = 0;
+
+    return new;
+}
+
+void *
+create_axkit_server_config (pool *p, server_rec *s)
+{
+    axkit_server_config *new = new_axkit_server_config(p);
+
+    return new;
+}
+
+static void *
+merge_axkit_server_config (pool *p, void *parent_dirv, void *subdirv)
+{
+    axkit_server_config *parent_dir = (axkit_server_config *)parent_dirv;
+    axkit_server_config *subdir = (axkit_server_config *)subdirv;
+    axkit_server_config *new = new_axkit_server_config(p);
+
+    if (subdir->external_encoding) {
+        new->external_encoding = ap_pstrdup(p, subdir->external_encoding);
+        if (strcmp(new->external_encoding,"UTF-8")) {
+            new->iconv_handle = iconv_open(new->external_encoding,"UTF-8");
+            ap_register_cleanup(p, (void*)new->iconv_handle, (void (*)(void *))iconv_close, ap_null_cleanup);
+        }
+    }
+    else if (parent_dir && parent_dir->external_encoding) {
+        new->external_encoding = ap_pstrdup(p, parent_dir->external_encoding);
+        if (strcmp(new->external_encoding,"UTF-8")) {
+            new->iconv_handle = iconv_open(new->external_encoding,"UTF-8");
+            ap_register_cleanup(p, (void*)new->iconv_handle, (void (*)(void *))iconv_close, ap_null_cleanup);
+        }
+    }
+
+    return new;
+}
+
+static CHAR_P
+ax_set_external_encoding (cmd_parms *cmd, void *dummy, char *encoding)
+{
+    axkit_server_config *ax = (axkit_server_config *)
+                ap_get_module_config(cmd->server->module_config, &XS_AxKit);
+    /* warn("setting encoding %s",encoding); */
+    ax->external_encoding = ap_pstrdup(cmd->pool, encoding);
+    if (strcmp(ax->external_encoding,"UTF-8")) {
+        ax->iconv_handle = iconv_open(ax->external_encoding,"UTF-8");
+        ap_register_cleanup(cmd->pool, (void*)ax->iconv_handle, (void (*)(void *))iconv_close, ap_null_cleanup);
+    }
+    return NULL;
+}
+
+static int axkit_fixup_charsets(request_rec *r)
+{
+    char *local;
+    int inbytes, outbytes;
+    char *icursor, *ocursor;
+
+    axkit_server_config * cfg;
+    /* warn("fixup: '%s'",r->uri); */
+
+    /* see comments above */
+    if (!r || !r->server || !r->server->module_config)
+        return DECLINED;
+
+    cfg = (axkit_server_config *)ap_get_module_config(r->server->module_config, &XS_AxKit);
+
+    if (!cfg || !cfg->iconv_handle)
+        return DECLINED;
+
+    /* can "UTF-8 -> anything" grow by more than a factor 4?
+     * (UTF-8 -> UCS-4 could be factor 4, add some slack to be safe)
+     */
+    inbytes = strlen(r->uri);
+    outbytes = inbytes*4+12;
+    local = ap_pcalloc(r->pool, outbytes+1);
+
+    /* reset state */
+    iconv(cfg->iconv_handle,NULL,NULL,NULL,NULL);
+
+    icursor = r->uri;
+    ocursor = local;
+    /* Try conversion */
+    if (iconv(cfg->iconv_handle,&icursor,&inbytes,&ocursor,&outbytes) == (size_t)-1) {
+        /* conversion failed - assume it was sent in target charset */
+        /*warn("not UTF-8, leaving URL '%s' untouched", r->uri);*/
+        return DECLINED;
+    }
+
+    /*warn("conversion successful: '%s'",local);*/
+    r->uri = local;
+
+    return DECLINED;
+}
+
+void axkit_child_init(server_rec *s, pool *p)
+{
+    /* create server_config objects in advance, otherwise apache might try to
+    allocate one in a per-request pool, which is a remarkably dumb thing to do. */
+    while (s) {
+    	if (ap_get_module_config(s->module_config,&XS_AxKit) == NULL)
+    		ap_set_module_config(s->module_config,&XS_AxKit,create_axkit_server_config(p,s));
+    	s = s->next;
+    }
 }
 
 static command_rec axkit_mod_cmds[] = {
@@ -1134,7 +1254,7 @@ static command_rec axkit_mod_cmds[] = {
       "End of media type block" },
 
     { "<AxStyleName", ax_style_name,
-      NULL, OR_ALL, RAW_ARGS, 
+      NULL, OR_ALL, RAW_ARGS,
       "Style name block" },
 
     { "</AxStyleName>", ax_style_name_end,
@@ -1215,6 +1335,11 @@ static command_rec axkit_mod_cmds[] = {
       OR_ALL, TAKE1,
       "location of a directory to write intermediate xml documents to (for debugging)" },
 
+    { "AxDebugTidy", ap_set_flag_slot,
+      (void *)XtOffsetOf(axkit_dir_config, debug_tidy),
+      OR_ALL, FLAG,
+      "On or Off [default] to tidy up source of debug output" },
+
     { "AxGzipOutput", ap_set_flag_slot,
       (void *)XtOffsetOf(axkit_dir_config, gzip_output),
       OR_ALL, FLAG,
@@ -1266,6 +1391,11 @@ static command_rec axkit_mod_cmds[] = {
       OR_ALL, FLAG,
       "On or Off [default] to disable xml-stylesheet PI processing" },
 
+    { "AxExternalEncoding", ax_set_external_encoding,
+      NULL,
+      RSRC_CONF, TAKE1,
+      "the character set used by the local file system and by URLs [default don't convert]" },
+
     { NULL }
 };
 
@@ -1281,11 +1411,11 @@ module MODULE_VAR_EXPORT XS_AxKit = {
     axkit_module_init,            /* module initializer */
     create_axkit_dir_config,      /* per-directory config creator */
     merge_axkit_dir_config,       /* dir config merger */
-    NULL,                         /* server config creator */
-    NULL,                         /* server config merger */
+    create_axkit_server_config,   /* server config creator */
+    merge_axkit_server_config,    /* server config merger */
     axkit_mod_cmds,               /* command table */
     axkit_handlers,               /* [7] list of handlers */
-    NULL,                         /* [2] filename-to-URI translation */
+    axkit_fixup_charsets,         /* [2] filename-to-URI translation */
     NULL,                         /* [5] check/validate user_id */
     NULL,                         /* [6] check user_id is valid *here* */
     NULL,                         /* [4] check access by host address */
@@ -1293,7 +1423,7 @@ module MODULE_VAR_EXPORT XS_AxKit = {
     NULL,                         /* [8] fixups */
     NULL,                         /* [10] logger */
     NULL,                         /* [3] header parser */
-    NULL,                         /* process initializer */
+    axkit_child_init,                         /* process initializer */
     NULL,                         /* process exit/cleanup */
     NULL,                         /* [1] post read_request handling */
 };
@@ -1305,7 +1435,7 @@ ax_get_config (axkit_dir_config * cfg)
 
     retval = newHV();
     if (cfg->cache_dir) {
-        hv_store(retval, "CacheDir", 
+        hv_store(retval, "CacheDir",
                 8, (newSVpv(cfg->cache_dir, 0)), 0);
     }
     if (cfg->config_reader_module) {
@@ -1339,6 +1469,10 @@ ax_get_config (axkit_dir_config * cfg)
     if (cfg->trace_intermediate) {
         hv_store(retval, "TraceIntermediate",
                 17, (newSVpv(cfg->trace_intermediate, 0)), 0);
+    }
+    if (cfg->debug_tidy != -1) {
+        hv_store(retval, "DebugTidy",
+                9, (newSViv(cfg->debug_tidy)), 0);
     }
     if (cfg->debug_level) {
         hv_store(retval, "DebugLevel",
@@ -1396,8 +1530,18 @@ ax_get_config (axkit_dir_config * cfg)
             10, newRV_inc((SV*)cfg->xsp_taglibs), 0);
     hv_store(retval, "Plugins",
             7, newRV_inc((SV*)cfg->current_plugins), 0);
-    
+
     return retval;
+}
+
+void
+ax_get_server_config (axkit_server_config * cfg, HV *retval)
+{
+    /* see comments above */
+    if (cfg->external_encoding) {
+        hv_store(retval, "ExternalEncoding",
+                16, (newSVpv(cfg->external_encoding, 0)), 0);
+    }
 }
 
 void remove_module_cleanup(void * ignore)
@@ -1408,6 +1552,7 @@ void remove_module_cleanup(void * ignore)
     /* make sure BOOT section is re-run on restarts */
     (void)hv_delete(GvHV(incgv), "AxKit.pm", 8, G_DISCARD);
 }
+
 
 /* Diff for styles being relative to .htaccess:
 Index: axconfig.c
@@ -1453,7 +1598,7 @@ diff -r1.2 axconfig.c
 >     else {
 >         style = newSVpv(sty, 0);
 >     }
->     
+>
 >     warn("style: %s\n", SvPV_nolen(style));
 >     
 674,675c703,725

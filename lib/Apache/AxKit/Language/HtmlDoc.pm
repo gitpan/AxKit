@@ -1,4 +1,4 @@
-# $Id: HtmlDoc.pm,v 1.2 2002/05/26 16:47:58 matts Exp $
+# $Id: HtmlDoc.pm,v 1.3 2002/06/17 23:15:47 jwalt Exp $
 # Apache::AxKit::Language::HtmlDoc - xhtml->pdf renderer
 package Apache::AxKit::Language::HtmlDoc;
 
@@ -68,9 +68,9 @@ EOX
     $input =~ s{ href="(?!/|.{0,5}:)}{ href="http://$host$path}g;
     AxKit::Debug(8, "About to shell out to htmldoc - hope you have it installed...");
     AxKit::Debug(10, $input);
-    my $rc = run(['htmldoc','--quiet','--format','pdf13','--truetype','--size','a4','--color','--charset','8859-15','--webpage',$r->dir_config->get('AxHtmlDocOptions'),'-'],\$input,\$result);
+    run(['htmldoc','--quiet','--format','pdf13','--truetype','--size','a4','--color','--charset','8859-15','--webpage',$r->dir_config->get('AxHtmlDocOptions'),'-'],\$input,\$result);
 
-    if (!$rc) {
+    if (substr($result,0,5) ne '%PDF-') {
         throw Apache::AxKit::Exception::Error(-text => 'htmldoc returned error: '.$result);
     }
 

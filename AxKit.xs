@@ -1,4 +1,4 @@
-/* $Id: AxKit.xs,v 1.5 2002/06/04 07:51:54 matts Exp $ */
+/* $Id: AxKit.xs,v 1.6 2002/06/05 23:59:19 jwalt Exp $ */
 
 #ifdef __cplusplus
 extern "C" {
@@ -62,7 +62,7 @@ call_method_int(SV * obj, char * method)
     PUTBACK;
     
     cnt = perl_call_method(method, G_SCALAR);
-    
+
     SPAGAIN;
     
     if (cnt != 1) {
@@ -215,8 +215,9 @@ _get_config (r=NULL)
     CODE:
     {
         axkit_dir_config * cfg;
+        axkit_server_config * scfg;
         HV * config;
-        
+
         if (r == NULL) {
             croak("_get_config: Unexpected request_rec = NULL");
         }
@@ -224,10 +225,10 @@ _get_config (r=NULL)
         if (r->per_dir_config == NULL) {
             croak("_get_config: Unexpected per_dir_config = NULL");
         }
-        
+
         cfg = (axkit_dir_config *)
                 ap_get_module_config(r->per_dir_config, &XS_AxKit);
-        
+
         if (!cfg) {
             config = newHV();
         }
@@ -237,6 +238,16 @@ _get_config (r=NULL)
                 config = newHV();
             }
         }
+
+        if (r->server == NULL || r->server->module_config == NULL) {
+            croak("_get_config: Unexpected r->server->module_config = NULL");
+        }
+
+        scfg = (axkit_server_config *)
+                ap_get_module_config(r->server->module_config, &XS_AxKit);
+
+        if (scfg) ax_get_server_config(scfg,config);
+
         RETVAL = newRV_noinc((SV*)config);
     }
     OUTPUT:
@@ -451,7 +462,7 @@ xs_get_styles_str(r, xmlstring)
         if (!ptr || len < 4) {
             XSRETURN_UNDEF;
         }
-        
+
         ret = xmlSAXUserParseMemory(axkitSAXHandler, (void*)&results, ptr, len);
         
         sv_2mortal(error_str);

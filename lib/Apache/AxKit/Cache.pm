@@ -1,4 +1,4 @@
-# $Id: Cache.pm,v 1.5.2.1 2002/06/06 20:00:19 matts Exp $
+# $Id: Cache.pm,v 1.9 2002/12/25 17:59:21 matts Exp $
 
 package Apache::AxKit::Cache;
 use strict;
@@ -25,7 +25,7 @@ sub new {
     local $^W; # suppress "Use of uninitialized value" warnings
     my $key = Digest::MD5->new->add(
             join(':', 
-                $r->get_server_name,
+                $r->hostname,
                 $r->get_server_port,
                 $xmlfile,
                 @extras
@@ -210,7 +210,7 @@ sub deliver {
             $r->content_type($type);
         }
     }
-    
+
     if ($r->content_type eq 'changeme' && !$r->notes('axkit_passthru_type')) {
         $AxKit::Cfg->AllowOutputCharset(1);
         $r->content_type('text/html; charset=' . ($AxKit::Cfg->OutputCharset || "UTF-8"));
@@ -219,14 +219,13 @@ sub deliver {
         $r->content_type($AxKit::OrigType);
     }
 
-    
+
     my ($transformer, $doit) = AxKit::get_output_transformer();
-    
+
     if ($doit) {
         AxKit::Debug(4, "Cache: Transforming content and printing to browser");
-        $r->send_http_header() unless lc($r->dir_config('Filter')) eq 'on';
-        $r->print( $transformer->( $self->read() ) );
-        return OK;
+        $r->pnotes('xml_string',$self->read());
+        return OK; # upstream deliver_to_browser should handle the rest
     }
     else {
         AxKit::Debug(4, "Cache: Sending untransformed content to browser");
@@ -234,7 +233,7 @@ sub deliver {
         # Make sure we unset PATH_INFO or wierd things can happen!
         $ENV{PATH_INFO} = '';
         $r->path_info('');
-        
+
         if ($self->{gzip} && $AxKit::Cfg->DoGzip) {
             AxKit::Debug(4, 'Cache: Delivering gzipped output');
             $r->filename($self->{file}.'.gz');
@@ -242,10 +241,10 @@ sub deliver {
         else {
             $r->filename($self->{file});
         }
-        
+
         return DECLINED;
     }
-    
+
 }
 
 sub reset {

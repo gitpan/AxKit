@@ -2,10 +2,18 @@
 DirectoryIndex index.xml index.html
 
 ## AxKit handles .xml, .xsp, .axp (axpoint) and .dkb (docbook) files
-AddHandler axkit .xml
-AddHandler axkit .xsp
-AddHandler axkit .axp
-AddHandler axkit .dkb
+<Files *.xml>
+SetHandler axkit
+</Files>
+<Files *.xsp>
+SetHandler axkit
+</Files>
+<Files *.axp>
+SetHandler axkit
+</Files>
+<Files *.dkb>
+SetHandler axkit
+</Files>
 
 ## Text files handled by default-handler (I forget why I need this)
 AddHandler default-handler .txt

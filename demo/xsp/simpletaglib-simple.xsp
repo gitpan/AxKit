@@ -17,7 +17,7 @@
 <li>expr in perl context: <xsp:expr>'perl '.<demo:calculate-something/></xsp:expr></li>
 <li>exprOrNode in xml context: <demo:first-time/></li>
 <li>exprOrNode in xml context as node: <demo:first-time as="node"/></li>
-<li>exprOrNode in perl context as string: <xsp:expr>'time: '.<demo:first-time as="node"/></xsp:expr></li>
+<li>exprOrNode in perl context as string: <xsp:expr>'time: '.<demo:first-time as="string"/></xsp:expr></li>
 <li>node list in xml context: <demo:times/></li>
 <li>node list in perl array context: <xsp:expr>join(", ",<demo:times/>)</xsp:expr></li>
 <li>node list in perl scalar context: <xsp:expr>scalar(<demo:times/>)</xsp:expr></li>
@@ -29,7 +29,7 @@
 <li>last access time of this page in this process: <demo:last-time as="string"/></li>
 <li>input as attribute, no output: <demo:set-custom-time time="1234567890"/></li>
 <li>last access time of this page in this process: <demo:last-time as="string"/></li>
-<li>input as child element, no output: <demo:set-custom-time><time>1000000000</time></demo:set-custom-time></li>
+<li>input as child element, no output: <demo:set-custom-time><demo:time>1000000000</demo:time></demo:set-custom-time></li>
 <li>last access time of this page in this process: <demo:last-time as="string"/></li>
 <li>input as content: <demo:set-custom-time-content>9876543210</demo:set-custom-time-content></li>
 <li>last access time of this page in this process: <demo:last-time as="string"/></li>

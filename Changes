@@ -1,5 +1,19 @@
 AxKit Changes
 
+1.6.1
+ - Added AxExternalEncoding option including TransHandler
+ - Made AxHandleDirs work as documented (updated File provider)
+ - Re-architecture of XSP:
+   - All node building is done in separate functions
+   - Major memory and size reduction of XSP generated perl code
+   - XSP pages can inherit from a different base class and implement 
+     wrapper code easily
+ - Major fixes to axkit: URIs (i.e. they actually work now for most cases)
+ - Fixed caching when AxGzipOutput is off
+ - Slightly improved demo site code
+ - Added AxDebugTidy option to use Perl::Tidy on XSP debug dumps
+ - Many bug fixes, debug log improvements, and code cleanups
+
 1.6
  - Added SAXMachines Language module.
  - Seperated ContentProviders and StyleProviders into separate entities
@@ -12,17 +26,11 @@ AxKit Changes
    URI through AxKit's engine without the need for doing a full http request.
  - Made most of AxKit warnings clean.
  - Made ConfigReader class a little easier to override
- - Use direct gzwrite() routines when writing the cache - should be 
-   slightly faster.
+ - Use direct gzwrite() routines when writing the cache - should be slightly faster.
  - "Fixed" strange error with Gzipped output related to perl unicode support
- - Made passthru sane with alternate providers (reduces security 
-   risks - esp. with Filter)
+ - Made passthru sane with alternate providers (reduces security risks - esp. with Filter)
  - Fixed some of the demo XSP pages
  - Added AxTraceIntermediate config option to aid debugging
-
-1.5.2-dev
- - Added SAXMachines Language module.
- - Seperated ContentProviders from StyleProviders
 
 1.5.2
  - Allow AxKit to handle directory requests.

@@ -1,4 +1,4 @@
-# $Id: Fragment.pm,v 1.3 2002/03/11 13:37:21 darobin Exp $
+# $Id: Fragment.pm,v 1.3.2.1 2003/02/07 16:07:37 matts Exp $
 
 package Apache::AxKit::Plugin::Fragment;
 
@@ -18,7 +18,7 @@ sub handler {
 	my $mtime = -M $r->finfo;
 	my $xmlfile = $r->filename;
 	
-	my $qs = $ENV{QUERY_STRING};
+	my $qs = $r->args();
 	return DECLINED unless $qs;
 	return DECLINED if ($qs =~ /^\w+=/);
 	

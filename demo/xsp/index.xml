@@ -114,6 +114,7 @@ my @errors;
                 <li>Sending Email Example unavailable (see below for details)</li>
             }
 
+AxKit::Debug(1, "Util\n");
             eval {
                 require AxKit::XSP::Util;
             };
@@ -126,6 +127,7 @@ my @errors;
                 <li>Util Taglib Example unavailable (see below for details)</li>
             }
 
+AxKit::Debug(1, "WebUtils\n");
             eval {
                 require AxKit::XSP::WebUtils;
             };
@@ -138,6 +140,7 @@ my @errors;
                 <li>WebUtils Taglib Example unavailable (see below for details)</li>
             }
 
+AxKit::Debug(1, "Session\n");
             eval {
                 require AxKit::XSP::Session;
             };
@@ -150,6 +153,7 @@ my @errors;
                 <li>Session Taglib Example unavailable (see below for details)</li>
             }
 
+AxKit::Debug(1, "Global\n");
             eval {
                 require AxKit::XSP::Global;
             };
@@ -162,6 +166,7 @@ my @errors;
                 <li>Globals Taglib Example unavailable (see below for details)</li>
             }
 
+AxKit::Debug(1, "Auth\n");
             eval {
                 require AxKit::XSP::Auth;
             };
@@ -174,6 +179,7 @@ my @errors;
                 <li>Authorization Taglib Example unavailable (see below for details)</li>
             }
 
+AxKit::Debug(1, "SimpleTaglib\n");
             eval {
                 require Apache::AxKit::Language::XSP::SimpleTaglib;
                 require Time::Piece;
@@ -181,12 +187,15 @@ my @errors;
             if (!$@) {
                 <li><a href="simpletaglib-simple.xsp">SimpleTaglib Simple Taglib Example</a></li>
                 <li><a href="simpletaglib-object.xsp">SimpleTaglib OO Taglib Example</a></li>
+                <li><a href="simple-input-attributes.xsp">SimpleTaglib Input Attributes Example</a></li>
             }
             else {
                 AxKit::Debug(1, "SimpleTaglib failed to load: $@");
                 push @errors, $@;
                 <li>SimpleTaglib Taglib Example unavailable (see below for details)</li>
             }
+
+AxKit::Debug(1, "Done\n");
 
             </xsp:logic>
             </ul>

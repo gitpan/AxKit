@@ -1,4 +1,4 @@
-# $Id: XSP.pm,v 1.13.2.2 2002/06/08 08:41:53 matts Exp $
+# $Id: XSP.pm,v 1.34.2.1 2003/02/07 12:22:25 matts Exp $
 
 package Apache::AxKit::Language::XSP;
 
@@ -7,6 +7,7 @@ use Apache::AxKit::Language;
 use Apache::Request;
 use Apache::AxKit::Exception;
 use Apache::AxKit::Cache;
+use Fcntl;
 
 use vars qw/@ISA/;
 
@@ -36,15 +37,15 @@ my $cache;
 sub handler {
     my $class = shift;
     my ($r, $xml, undef, $last_in_chain) = @_;
-    
+
     _register_me_and_others();
-    
+
 #    warn "XSP Parse: $xmlfile\n";
-    
+
     my $key = $xml->key();
-    
+
     my $package = get_package_name($key);
-    
+
     my $handler = AxKit::XSP::SAXHandler->new_handler(
             XSP_Package => $package,
             XSP_Line => $key,
@@ -53,11 +54,11 @@ sub handler {
             provider => $xml,
             Handler => $handler,
             );
-    
+
     local $Apache::AxKit::Language::XSP::ResNamespaces = $r->dir_config('XSPResNamespaces');
-    
+
     my $to_eval;
-    
+
     eval {
         if (my $dom_tree = $r->pnotes('dom_tree')) {
             AxKit::Debug(5, 'XSP: parsing dom_tree');
@@ -66,7 +67,7 @@ sub handler {
         }
         elsif (my $xmlstr = $r->pnotes('xml_string')) {
             if ($r->no_cache()
-                    || !defined &{"${package}::handler"}) {
+                    || !defined &{"${package}::xml_generator"}) {
                 AxKit::Debug(5, 'XSP: parsing xml_string');
                 $to_eval = $parser->parse($xmlstr);
             }
@@ -80,7 +81,7 @@ sub handler {
             no strict 'refs';
             if (exists($cache->{$key})
                     && !$xml->has_changed($cache->{$key}{mtime})
-                    && defined &{"${package}::handler"}
+                    && defined &{"${package}::xml_generator"}
                     )
             {
                 # cached
@@ -91,7 +92,7 @@ sub handler {
                 $to_eval = eval {
                     $parser->parse($xml->get_fh());
                 } || $parser->parse(${ $xml->get_strref() });
-                
+
                 $cache->{$key}{mtime} = $mtime;
             }
         }
@@ -101,9 +102,42 @@ sub handler {
                 -text => "Parse of '$key' failed: $@"
                 );
     }
-    
+
     if ($to_eval) {
-        undef &{"${package}::handler"};
+        eval {
+            require Perl::Tidy;
+            AxKit::Debug(5,'Running PerlTidy...');
+
+            my $errors;
+	    my $res;
+            Perl::Tidy::perltidy(
+                source => \$to_eval,
+                destination => \$res,
+                stderr => \$errors,
+                argv => '-se -npro -f -nsyn -pt=2 -sbt=2 -csc -csce=2 -vt=1 -lp -cab=3 -iob');
+            if ($errors) {
+                AxKit::Debug(1,"PerlTidy warnings: $errors");
+            } else {
+                AxKit::Debug(5,"PerlTidy successful");
+            }
+	    $to_eval = $res;
+        } if $AxKit::Cfg->DebugTidy;
+        AxKit::Debug(1,"AxDebugTidy unavailable for Perl code: $@") if $@;
+
+        if ($AxKit::Cfg->TraceIntermediate) {
+            my $interm_prefix = $r->uri;
+            $interm_prefix =~ s{/}{|}g;
+            $interm_prefix =~ s/[^0-9a-zA-Z.,_|-]/_/g;
+            $interm_prefix = $AxKit::Cfg->TraceIntermediate.'/'.$interm_prefix;
+            my $fh = Apache->gensym();
+            if (open($fh, '>'.$interm_prefix.'.XSP')) {
+                print($fh $to_eval);
+            } else {
+                AxKit::Debug(1,"could not open $interm_prefix.XSP for writing: $!");
+            }
+        }
+
+        undef &{"${package}::xml_generator"};
         AxKit::Debug(5, 'Recompiling XSP script');
         AxKit::Debug(10, $to_eval);
         eval $to_eval;
@@ -111,41 +145,42 @@ sub handler {
             my $line = 1;
             $to_eval =~ s/\n/"\n".++$line." "/eg;
             warn("Script:\n1 $to_eval\n");
-	        throw Apache::AxKit::Exception::Error(
+            throw Apache::AxKit::Exception::Error(
                 -text => "Compilation failed: $@"
             );
         }
         AxKit::Debug(5, 'XSP Compilation finished');
     }
-    
+
     no strict 'refs';
-    my $cv = \&{"$package\::handler"};
-    
+    # make sure we use inheritance to get this
+    my $cv = $package->can('handler');
+
     my $cgi = Apache::Request->instance($r);
-    
+
     $r->no_cache(1);
-    
+
     my $xsp_cache = Apache::AxKit::Cache->new($r, $package, $package->cache_params($r, $cgi));
-    
-    if (!$package->has_changed($xsp_cache->mtime()) && 
+
+    if (!$package->has_changed($xsp_cache->mtime()) &&
                 !$xml->has_changed($xsp_cache->mtime())) {
         AxKit::Debug(3, "XSP results cached");
         $r->print($xsp_cache->read);
         return;
     }
-    
+
     my $dom = XML::LibXML::Document->createDocument("1.0", "UTF-8");
-    my $rc = eval { $cv->($r, $cgi, $dom); };
+    my $rc = eval { $package->$cv($r, $cgi, $dom); };
     if ($@) {
-    	die $@ if (ref($@));
-	    if ($to_eval) {
-        	my $line = 1;
-        	$to_eval =~ s/\n/"\n".++$line." "/eg;
-        	warn("Script:\n1 $to_eval\n");
-	    }
-	    throw Apache::AxKit::Exception::Error(
-        	-text => "Execution failed: $@"
-	    );
+        die $@ if (ref($@));
+        if ($to_eval) {
+            my $line = 1;
+            $to_eval =~ s/\n/"\n".++$line." "/eg;
+            warn("Script:\n1 $to_eval\n");
+        }
+        throw Apache::AxKit::Exception::Error(
+            -text => "Execution failed: $@"
+        );
     }
     $r->pnotes('dom_tree', $dom);
     $r->print($dom->toString) if $last_in_chain;
@@ -172,15 +207,15 @@ sub _register_me_and_others {
 sub register_taglib {
     my $class = shift;
     my $namespace = shift;
-    
+
 #    warn "Register taglib: $namespace => $class\n";
-    
+
     $Apache::AxKit::Language::XSP::tag_lib{$namespace} = $class;
 }
 
 sub is_xsp_namespace {
     my ($ns) = @_;
-    
+
     # a uri of the form "res:perl/<spec>" turns into an implicit loading of
     # the module indicated by <spec> (after slashes are turned into
     # double-colons). an example uri is "res:perl/My/Cool/Module".
@@ -223,7 +258,7 @@ sub makeSingleQuoted($) {
 package AxKit::XSP::SAXHandler;
 
 sub new_handler {
-    my ($type, %self) = @_; 
+    my ($type, %self) = @_;
     return bless \%self, $type;
 }
 
@@ -297,12 +332,13 @@ sub start_document {
     my $e = shift;
     
     $e->{XSP_Script} = join("\n", 
-                "package $e->{XSP_Package}; \@$e->{XSP_Package}::ISA = ('Apache::AxKit::Language::XSP::Page');",
+                "package $e->{XSP_Package};",
                 # "#line 2 ".$e->{XSP_Line}."\n", # This is wrong. Currently, line numbers are unrelated to the source file's lines.
                                                   # Better leave it out, it makes debug output confusing.
                 "use Apache;",
                 "use Apache::Constants qw(:common);",
                 "use XML::LibXML;",
+                "Apache::AxKit::Language::XSP::Page->import( qw(__mk_text_node __mk_comment_node __mk_ns_element_node __mk_element_node) );",
                 );
     
     foreach my $ns (keys %Apache::AxKit::Language::XSP::tag_lib) {
@@ -333,8 +369,19 @@ sub end_document {
         }
     }
 
-    $e->{XSP_Script} .= "return OK;\n}\n";
-    
+    ## we assume that if $e->{XSP_User_Root} is true, somebody, somewhere
+    ## (most likely the default start_element() sub) must have started the
+    ## "sub xml_generator {" declaration, and that we need to close it
+    if ($e->{XSP_User_Root}) {
+        $e->{XSP_Script} .= "return OK;\n}\n";
+    }
+    else {
+        throw Apache::AxKit::Exception::Error(
+                -text => "No user root element found"
+                )
+           unless $Apache::AxKit::Language::XSP::AllowNoUserRoot;
+    }
+
     return $e->{XSP_Script};
 }
 
@@ -343,7 +390,7 @@ sub start_element {
     my $element = shift;
     
     $element->{Parent} ||= $e->{Current_Element};
-    
+
     $e->{Current_Element} = $element;
 
     my $ns = $element->{NamespaceURI};
@@ -436,7 +483,7 @@ sub characters {
     my $e = shift;
     my $text = shift;
     my $ns = $e->{Current_Element}->{NamespaceURI};
-    
+
 #    warn "CHAR-NS: $ns\n";
     
     if (!defined($ns) || 
@@ -559,14 +606,11 @@ sub characters {
 # output through a characters SAX event."
 
     if ($e->current_element() =~ /^(content)$/) {
-        $text = makeSingleQuoted($text);
-
-        return <<"EOT";
-{
-    my \$text = \$document->createTextNode($text);
-    \$parent->appendChild(\$text); 
-}
-EOT
+        if ($text =~ /\S/ || $e->{XSP_Indent}) {
+            $text = makeSingleQuoted($text);
+            return "__mk_text_node(\$document,\$parent,$text);";
+        }
+        return '';
     }
     elsif ($e->current_element() =~ /^(attribute|comment|name)$/) {
         return '' if ($e->current_element() eq 'attribute' && !$e->{attrib_seen_name});
@@ -599,6 +643,9 @@ sub start_element {
         if ($attribs{'indent-result'} eq 'yes') {
             $e->{XSP_Indent} = 1;
         }
+        if (exists $attribs{'base-class'}) {
+            $e->{XSP_Base_Class} = $attribs{'base-class'};
+        }
     }
     elsif ($tag eq 'structure') {
     }
@@ -615,10 +662,16 @@ sub start_element {
         return "use ";
     }
     elsif ($tag eq 'element') {
+        if ($node->{Parent}->{Name} eq 'attribute' &&
+            Apache::AxKit::Language::XSP::is_xsp_namespace($node->{Parent}->{NamespaceURI}))
+        {
+            throw Apache::AxKit::Exception(
+                  -text => "[Core] Can't have element as child of attributes!"
+            );
+        }
         if (my $name = $attribs{name}) {
             $e->manage_text(0);
-            return '{ my $elem = $document->createElement(' . makeSingleQuoted($name) . ');' .
-                    '$parent->appendChild($elem); $parent = $elem; }' . "\n";
+            return '$parent = __mk_element_node($document, $parent, ' . makeSingleQuoted($name) . ');';
         }
     }
     elsif ($tag eq 'attribute') {
@@ -629,40 +682,46 @@ sub start_element {
         $e->{attrib_seen_name} = 0;
     }
     elsif ($tag eq 'name') {
-        return '{ my $name = ""';
+        if ($node->{Parent}->{Name} =~ /^(.*:)?element$/) {
+            return '$parent = __mk_element_node($document, $parent, ""';
+        }
+        elsif ($node->{Parent}->{Name} =~ /^(.*:)?attribute$/) {
+            $e->{attrib_seen_name} = 1;
+            return '__mk_attribute_node($document, $parent, $name, ""';
+        }
+        else {
+            die "xsp:name parent node: $node->{Parent}->{Name} not valid";
+        }
     }
     elsif ($tag eq 'pi') {
     }
     elsif ($tag eq 'comment') {
-        return '{ my $comment = $document->createComment(""';
+        return '__mk_comment_node($document, $parent, ""';
     }
     elsif ($tag eq 'text') {
-        return '{ my $text = $document->createTextNode(""';
+        return '__mk_text_node($document, $parent, ""';
     }
     elsif ($tag eq 'expr') {
 #        warn "expr: -2 = {", $node->{Parent}->{NamespaceURI}, "}", $node->{Parent}->{Name}, "\n";
         if (Apache::AxKit::Language::XSP::is_xsp_namespace($node->{Parent}->{NamespaceURI})) {
             if (!$e->manage_text() || $node->{Parent}->{Name} =~ /^(.*:)?content$/) {
-                return <<'EOT';
-{
-    my $text = $document->createTextNode("".do {
-EOT
+                return '__mk_text_node($document, $parent, "" . do {';
             }
             elsif ($node->{Parent}->{Name} =~ /^(.*:)?(logic|expr)$/) {
                 return 'do {';
             }
+            return ' . do {';
         }
         else {
-            return <<'EOT';
-{
-    my $text = $document->createTextNode("".do {
-EOT
+            return '__mk_text_node($document, $parent, "" . do {';
         }
-        
-        return '. do {';
+        warn("EEEK - Should never get here!!!");
 #        warn "start Expr: CurrentEl: ", $e->current_element, "\n";
     }
-    
+    else {
+        warn("Unrecognised tag: $tag");
+    }
+
     return '';
 }
 
@@ -670,7 +729,7 @@ sub end_element {
     my ($e, $node) = @_;
     
     my $tag = $node->{Name};
-    
+
     if ($tag eq 'page') {
     }
     elsif ($tag eq 'structure') {
@@ -691,52 +750,37 @@ sub end_element {
         return '$parent = $parent->getParentNode;' . "\n";
     }
     elsif ($tag eq 'attribute') {
-        return ');' . "\n";
+        # ends function from either start('attribute') or end('name)
+        # as in either <xsp:attribute name="foo">
+        #           vs <xsp:attrubute><xsp:name>foo</xsp:name>
+        return ");\n";
     }
     elsif ($tag eq 'name') {
-        if ($node->{Parent}->{Name} =~ /^(.*:)?element$/) {
-            $e->manage_text(0, 1);
-            return '; my $elem = $document->createElement($name);' .
-                    '$parent->appendChild($elem); $parent = $elem; }' . "\n";
-        }
-        elsif ($node->{Parent}->{Name} =~ /^(.*:)?attribute$/) {
-            $e->{attrib_seen_name} = 1;
-            return '; my $attr = $document->createAttribute($name, ""';
-        }
-        else {
-            die "xsp:name parent node: $node->{Parent}->{Name} not valid";
-        }
     }
     elsif ($tag eq 'pi') {
     }
     elsif ($tag eq 'comment') {
-        return '); $parent->appendChild($comment); }' . "\n";
+        return ");\n";
     }
     elsif ($tag eq 'text') {
-        return '); $parent->appendChild($text); }' . "\n";
+        return ");\n";
     }
     elsif ($tag eq 'expr') {
 #        warn "expr: -2 = {", $node->{Parent}->{NamespaceURI}, "}", $node->{Parent}->{Name}, "\n";
         if (Apache::AxKit::Language::XSP::is_xsp_namespace($node->{Parent}->{NamespaceURI})) {
             if (!$e->manage_text() || $node->{Parent}->{Name} =~ /^(.*:)?content$/) {
-                return <<'EOT';
-}); # xsp tag
-    $parent->appendChild($text); 
-}
-EOT
+                return "}); # xsp tag\n";
             }
             elsif ($node->{Parent}->{Name} =~ /^(.*:)?(logic|expr)$/) {
                 return '}';
             }
+            else {
+                return '}';
+            }
         }
         else {
-            return <<'EOT';
-}); # non xsp tag
-    $parent->appendChild($text); 
-}
-EOT
+            return "}); # non xsp tag\n";
         }
-        return '}';
     }
     
     return '';
@@ -754,96 +798,91 @@ package AxKit::XSP::DefaultHandler;
 
 sub start_element {
     my ($e, $node) = @_;
-    
+
     my $code;
     if (!$e->{XSP_User_Root}) {
+        my $base_class = $e->{XSP_Base_Class} ||
+          'Apache::AxKit::Language::XSP::Page';
         $e->{XSP_Script} .= join("\n",
-                'sub handler {',
-                'my ($r, $cgi, $document) = @_;',
-                'my ($parent);',
+                "\@$e->{XSP_Package}::ISA = ('$base_class');",
+                'sub xml_generator {',
+                'my $class = shift;',
+                'my ($r, $cgi, $document, $parent) = @_;',
                 "\n",
                 );
         $e->{XSP_User_Root} = 1;
-#        $code = '{ my $elem = $document->createElement(q(' . $node->{Name} . '));' .
-#        $code = '{ my $elem = $document->createElementNS(q(' . ($node->{NamespaceURI} || "") . '), q(' . $node->{Name} . '));' .
 
-        $e->{XSP_Random_Prefix} = join("",map { ('a'..'z','A'..'Z','0'..'9','-','_')[rand(64)] } 1..5 );
-        $e->{XSP_Random_Sequence} = "aaaa";
-        $e->{XSP_Random_Map} = {};
+        foreach my $ns (keys %Apache::AxKit::Language::XSP::tag_lib) {
+            my $pkg = $Apache::AxKit::Language::XSP::tag_lib{$ns};
+            local $AxKit::XSP::TaglibPkg = $pkg;
+            if (my $sub = $pkg->can("start_xml_generator")) {
+                $e->{XSP_Script} .= $sub->($e);
+            }
+        }
+
         if ($node->{NamespaceURI}) {
-	    	if ($node->{Name} !~ m/:/) {
-	    		if (exists $e->{XSP_Random_Map}{$node->{NamespaceURI}}) {
-				    $node->{Name} = $e->{XSP_Random_Map}{$node->{NamespaceURI}}.$e->{XSP_Random_Prefix}.':'.$node->{Name};
-	    		} 
-                else {
-				    $node->{Name} = $e->{XSP_Random_Sequence}.$e->{XSP_Random_Prefix}.':'.$node->{Name};
-				    $e->{XSP_Random_Map}{$node->{NamespaceURI}} = $e->{XSP_Random_Sequence};
-				    $e->{XSP_Random_Sequence}++;
-			    }
-	    	}
-		$code = '{ my $elem = $document->createElementNS('.makeSingleQuoted($node->{NamespaceURI}).','.makeSingleQuoted($node->{Name}).');' .
-                '$document->setDocumentElement($elem); $parent = $elem; }' . "\n";
-	    }
+            $code = '$parent = __mk_ns_element_node($document, $parent, '.
+              makeSingleQuoted($node->{NamespaceURI}).','.
+              makeSingleQuoted($node->{Name}).");\n";
+        }
         else {
-            $code = '{ my $elem = $document->createElement('.makeSingleQuoted($node->{Name}).');' .
-        	        '$document->setDocumentElement($elem); $parent = $elem; }' . "\n";
-	    }
-    }
-    else {
-#        $code = '{ my $elem = $document->createElement(q(' . $node->{Name} . '));' .
-        if ($node->{NamespaceURI}) {
-	    	if ($node->{Name} !~ m/:/) {
-	    		if (exists $e->{XSP_Random_Map}{$node->{NamespaceURI}}) {
-				    $node->{Name} = $e->{XSP_Random_Map}{$node->{NamespaceURI}}.$e->{XSP_Random_Prefix}.':'.$node->{Name};
-	    		} 
-                else {
-				    $node->{Name} = $e->{XSP_Random_Sequence}.$e->{XSP_Random_Prefix}.':'.$node->{Name};
-    				$e->{XSP_Random_Map}{$node->{NamespaceURI}} = $e->{XSP_Random_Sequence};
-	    			$e->{XSP_Random_Sequence}++;
-		    	}
-	    	}
-        	$code = '{ my $elem = $document->createElementNS('.makeSingleQuoted($node->{NamespaceURI}).','.makeSingleQuoted($node->{Name}).');' .
-                '$parent->appendChild($elem); $parent = $elem; }' . "\n";
-	    } 
-        else {
-        	$code = '{ my $elem = $document->createElement('.makeSingleQuoted($node->{Name}).');' .
-                '$parent->appendChild($elem); $parent = $elem; }' . "\n";
+            $code = '$parent = __mk_element_node($document, $parent, '.
+              makeSingleQuoted($node->{Name}).");\n";
         }
     }
-    
+    else {
+        if ($node->{Parent}->{Name} eq 'attribute' &&
+            Apache::AxKit::Language::XSP::is_xsp_namespace($node->{Parent}->{NamespaceURI}))
+        {
+            throw Apache::AxKit::Exception(
+                  -text => "[Default] Can't have element as child of attributes!"
+            );
+        }
+        if ($node->{NamespaceURI}) {
+            $code = '$parent = __mk_ns_element_node($document, $parent, ' .
+              makeSingleQuoted($node->{NamespaceURI}).','.
+              makeSingleQuoted($node->{Name}).");\n";
+        }
+        else {
+            $code = '$parent = __mk_element_node($document, $parent, ' .
+              makeSingleQuoted($node->{Name}).");\n";
+        }
+    }
+
     for my $attr (@{$node->{Attributes}}) {
-#        $code .= '$parent->setAttribute(q(' . $attr->{Name} . 
-#                '), q(' . $attr->{Value} . 
+#        $code .= '$parent->setAttribute(q(' . $attr->{Name} .
+#                '), q(' . $attr->{Value} .
 #                '));' . "\n";
         $code .= '$parent->setAttribute('.makeSingleQuoted($attr->{Name}).
-                ','.makeSingleQuoted($attr->{Value}).');' . "\n";
+                ','.makeSingleQuoted($attr->{Value}).");\n";
     }
 
     for my $ns (keys %{$e->{Current_NS}}) {
 #        $code .= '$parent->setAttribute("xmlns:" . q(' . $ns .'), q(' .
 #                $e->{Current_NS}{$ns} . '));';
-    	if ($ns eq '#default') {
-	        $code .= '$parent->setAttribute("xmlns",' .
-        	        makeSingleQuoted($e->{Current_NS}{$ns}) . ');';
-      	} 
+        if ($ns eq '#default') {
+            $code .= '$parent->setAttribute("xmlns",' .
+                    makeSingleQuoted($e->{Current_NS}{$ns}) . ');';
+        }
+
         else {
-	        $code .= '$parent->setAttribute("xmlns:" . '.makeSingleQuoted($ns).',' .
-        	        makeSingleQuoted($e->{Current_NS}{$ns}) . ');';
-      	}
+            $code .= '$parent->setAttribute("xmlns:" . '.makeSingleQuoted($ns).',' .
+                    makeSingleQuoted($e->{Current_NS}{$ns}) . ');';
+        }
 
     }
-    
+
     push @{ $e->{NS_Stack} },
             { %{ $e->{Current_NS} || {} } };
-    
+
     $e->{Current_NS} = {};
-    
+
     return $code;
 }
 
 sub end_element {
     my ($e, $element) = @_;
-    
+
     $e->{Current_NS} = pop @{ $e->{NS_Stack} };
 
     return '$parent = $parent->getParentNode;' . "\n";
@@ -851,7 +890,7 @@ sub end_element {
 
 sub characters {
     my ($e, $node) = @_;
-    
+
     my $text = $node->{Data};
     
     return '' unless $e->{XSP_User_Root}; # should not happen!
@@ -860,10 +899,7 @@ sub characters {
         return '' unless $text =~ /\S/;
     }
     
-    $text =~ s/\|/\\\|/g;
-    
-    return '{ my $text = $document->createTextNode('.makeSingleQuoted($text).');' .
-            '$parent->appendChild($text); }' . "\n";
+    return '__mk_text_node($document, $parent, '.makeSingleQuoted($text).");\n";
 }
 
 sub comment {
@@ -907,6 +943,7 @@ sub parse {
     else {
         $doc = $parser->parse_string($thing);
     }
+    AxKit::Debug(10, 'XSP: Parser returned doc');
     $doc->process_xinclude;
     
     my $encoding = $doc->getEncoding() || 'UTF-8';
@@ -924,28 +961,30 @@ sub parse {
 sub match_uri {
     my $uri = shift;
     AxKit::Debug(8, "XSP match_uri: $uri");
-    return 1 if $uri =~ /^axkit:/;
+    return 1 if $uri =~ /^(axkit|xmldb):/;
     return $uri !~ /^\w+:/; # only handle URI's without a scheme
 }
 
 sub open_content_uri {
     my $uri = shift || './';
     AxKit::Debug(8, "XSP open_content_uri: $uri");
-    
+
     if ($uri =~ /^axkit:/) {
         return AxKit::get_axkit_uri($uri);
+    } elsif ($uri =~ /^xmldb:/) {
+        return Apache::AxKit::Provider::XMLDB::get_xmldb_uri($uri);
     }
-    
+
     # create a subrequest, so we get the right AxKit::Cfg for the URI
     my $apache = AxKit::Apache->request;
-    my $sub = $apache->lookup_uri($uri);
+    my $sub = $apache->lookup_uri(AxKit::FromUTF8($uri));
     local $AxKit::Cfg = Apache::AxKit::ConfigReader->new($sub);
-    
+
     my $provider = Apache::AxKit::Provider->new_content_provider($sub);
-    
+
     AxKit::add_depends($provider->key());
     my $str = $provider->get_strref;
-    
+
     undef $provider;
     undef $apache;
     undef $sub;
@@ -963,14 +1002,14 @@ sub read_uri {
 sub process_node {
     my ($handler, $node, $encoding) = @_;
 
-    
+
     my $node_type = $node->getType();
     if ($node_type == XML_COMMENT_NODE) {
         $handler->comment( { Data => $node->getData } );
     }
     elsif ($node_type == XML_TEXT_NODE || $node_type == XML_CDATA_SECTION_NODE) {
         # warn($node->getData . "\n");
-	    $handler->characters( { Data => encodeToUTF8($encoding,$node->getData()) } );
+        $handler->characters( { Data => encodeToUTF8($encoding,$node->getData()) } );
     }
     elsif ($node_type == XML_ELEMENT_NODE) {
         # warn("<" . $node->getName . ">\n");
@@ -992,6 +1031,9 @@ sub process_node {
             }
         }
     }
+    elsif ($node_type == XML_XINCLUDE_START || $node_type == XML_XINCLUDE_END) {
+    	# ignore
+    }
     else {
         warn("unknown node type: $node_type");
     }
@@ -999,9 +1041,9 @@ sub process_node {
 
 sub process_element {
     my ($handler, $element, $encoding) = @_;
-    
+
     my @attr;
-    
+
     foreach my $attr ($element->getAttributes) {
         push @attr, {
             Name => encodeToUTF8($encoding,$attr->getName),
@@ -1011,7 +1053,7 @@ sub process_element {
             LocalName => encodeToUTF8($encoding,$attr->getLocalName),
         };
     }
-    
+
     my $node = {
         Name => encodeToUTF8($encoding,$element->getName),
         Attributes => \@attr,
@@ -1021,7 +1063,7 @@ sub process_element {
     };
     
     $handler->start_element($node);
-    
+
     foreach my $child ($element->getChildnodes) {
         process_node($handler, $child, $encoding);
     }
@@ -1034,6 +1076,10 @@ sub process_element {
 ############################################################
 
 package Apache::AxKit::Language::XSP::Page;
+use Exporter;
+@Apache::AxKit::Language::XSP::Page::ISA = qw(Exporter);
+@Apache::AxKit::Language::XSP::Page::EXPORT_OK = 
+  qw(__mk_text_node __mk_element_node __mk_comment_node __mk_ns_element_node);
 
 sub has_changed {
     my $class = shift;
@@ -1045,6 +1091,61 @@ sub cache_params {
     my $class = shift;
     my ($r, $cgi) = @_;
     return '';
+}
+
+sub handler {
+    my $class = shift;
+    $class->xml_generator(@_);
+}
+
+sub __mk_text_node {
+    my ($document, $parent, $text) = @_;
+    my $node = $document->createTextNode($text);
+    $parent->appendChild($node);
+}
+
+sub __mk_element_node {
+    my ($document, $parent, $name) = @_;
+    my $elem = $document->createElement($name);
+    if ($parent) {
+        $parent->appendChild($elem);
+    }
+    else {
+        $document->setDocumentElement($elem);
+    }
+    return $elem;
+}
+
+sub __mk_ns_element_node {
+    my ($document, $parent, $ns, $name) = @_;
+    my $elem = $document->createElementNS($ns, $name);
+    if ($parent) {
+        $parent->appendChild($elem);
+    }
+    else {
+        $document->setDocumentElement($elem);
+    }
+    return $elem;
+}
+
+sub __mk_comment_node {
+    my ($document, $parent, $text) = @_;
+    my $node = $document->createCommentNode($text);
+    $parent->appendChild($node);
+}
+
+# helper class for PerlTidy
+
+package Apache::AxKit::Language::XSP::StringWriter;
+
+sub new {
+    $_[1] = '';
+    return bless \$_[1], $_[0];
+}
+
+sub print {
+    my $self = shift;
+    $$self .= join("",@_);
 }
 
 1;
@@ -1093,11 +1194,34 @@ way of providing an environment for dynamic pages. XSP is originally part
 of the Apache Cocoon project, and so you will see some Apache namespaces
 used in XSP.
 
-A warning to namespace users: Do not expect your namespace _prefixes_ to
-come out of an XSP transformation as they were fed in. But since you are using
-namespaces, this doesn't really matter. You just have to make sure that
-each and every step in your transformation process is namespaces aware
-and uses the correct namespace declarations.
+Also, use only one XSP processor in a pipeline.  XSP is powerful enough
+that you should only need one stage, and this implementation allows only
+one stage.  If you have two XSP processors, perhaps in a pipeline that
+looks like:
+
+    ... => XSP => XSLT => XSLT => XSP => ...
+
+it is pretty likely that the functionality of the intermediate XSLT
+stages can be factored in to either upstream or downstream XSLT:
+
+    ... => XSLT => XSP => XSLT => ...
+
+This design is likely to lead to a clearer and more maintainable
+implementation, if only because generating code, especially embedded
+Perl code, in one XSP processor and consuming it in another is often
+confusing and even more often a symptom of misdesign.
+
+Likewise, you may want to lean towards using Perl taglib modules instead
+of upstream XSLT "LogicSheets".  Upstream XSLT LogicSheets work fine,
+mind you, but using Perl taglib modules results in a simpler pipeline,
+simpler configuration (just load the taglib modules in httpd.conf, no
+need to have the correct LogicSheet XSLT page included whereever you
+need that taglib), a more flexible coding environment, the ability to
+pretest your taglibs before installing them on a server, and better
+isolation of interface (the taglib API) and implementation (the Perl
+module behind it).  LogicSheets work, and can be useful, but are often
+the long way home.  That said, people used to the Cocoon environment may
+prefer them.
 
 =head2 Result Code
 
@@ -1106,15 +1230,26 @@ go inside a <xsp:logic> tag.
 
 If you want to completely abort the current request, throw an exception:
 
-	throw Apache::AxKit::Exception::Retval(return_code => FORBIDDEN);
+    throw Apache::AxKit::Exception::Retval(return_code => FORBIDDEN);
 
 If you want to send your page but have a custom result code, return it:
 
-	return FORBIDDEN;
+    return FORBIDDEN;
 
 In that case, only the part of the document that was processed so far gets
 sent/processed further.
 
+=head2 Debugging
+
+If you have PerlTidy installed (get it from L<http://perltidy.sourceforge.net>),
+the compiled XSP scripts can be formatted nicely to spot errors easier. Enable
+AxDebugTidy for this, but be warned that reformatting is quite slow, it can
+take 20 seconds or more I<on each XSP run> for large scripts.
+
+If you enable AxTraceIntermediate, your script will be dumped alongside the
+other intermediate files, with an extension of ".XSP". These are unnumbered,
+thus only get one dump per request. If you have more than one XSP run in a
+single request, the last one will overwrite the dumps of earlier runs.
 
 =head1 Tag Reference
 
@@ -1368,7 +1503,7 @@ context.
 
 Solution:
 
-use start_expr(), append_to_script(), end_expr().
+use $e->start_expr(), $e->append_to_script(), $e->end_expr().
 
 Example:
 
@@ -1377,7 +1512,7 @@ Example:
 in parse_start:
 
   if ($tag eq 'get-datetime') {
-    start_expr($e, $tag); # creates a new { ... } block
+    $e->start_expr($tag); # creates a new { ... } block
     my $local_format = lc($attribs{format}) || '%a, %d %b %Y %H:%M:%S %z';
     return 'my ($format); $format = q|' . $local_format . '|;';
   }
@@ -1385,8 +1520,8 @@ in parse_start:
 in parse_end:
 
   if ($tag eq 'get-datetime') {
-    append_to_script($e, 'use Time::Object; localtime->strftime($format);');
-    end_expr($e);
+    $e->append_to_script('use Time::Object; localtime->strftime($format);');
+    $e->end_expr();
     return '';
   }
 
@@ -1395,7 +1530,7 @@ Explanation:
 This is more complex than the first 2 examples, so it warrants some 
 explanation. I'll go through it step by step.
 
-  start_expr(...)
+  $e->start_expr($tag)
 
 This tells XSP that this really generates a <xsp:expr> tag. Now we don't
 really generate that tag, we just execute the handler for it. So what
@@ -1420,7 +1555,7 @@ Now we immediately receive an end_expr, because this is an empty element
 (we'll see why we formatted it this way in #5 below). The first thing we
 get is:
 
-  append_to_script($e, 'use Time::Object; localtime->strftime($format);');
+  $e->append_to_script('use Time::Object; localtime->strftime($format);');
 
 This does exactly what it says, and the script becomes:
 
@@ -1430,7 +1565,7 @@ This does exactly what it says, and the script becomes:
 
 Finally, we call:
 
-  end_expr($e);
+  $e->end_expr();
 
 which closes the do {} block, leaving us with:
 
@@ -1442,12 +1577,6 @@ which closes the do {} block, leaving us with:
 Now if you execute that in Perl, you'll see the do {} returns the last
 statement executed, which is the C<localtime->strftime()> bit there,
 thus doing exactly what we wanted.
-
-Note that start_expr, end_expr and append_to_script aren't exported
-by default, so you need to do:
-
-  use Apache::AxKit::Language::XSP 
-        qw(start_expr end_expr append_to_script);
 
 =head2 4. Your tag can take as an option either an attribute, or a child tag.
 
@@ -1524,7 +1653,7 @@ This is a combination of patterns 3 and 4. What we need to do is change
 in parse_start:
 
   if ($tag eq 'get-column') {
-    start_expr($e, $tag);
+    $e->start_expr($tag);
     my $code = 'my ($col);'
     if ($attribs{col}) {
       $code .= '$col = q|' . $attribs{col} . '|;';
@@ -1541,8 +1670,8 @@ in parse_end:
     return ';';
   }
   if ($tag eq 'get-column') {
-    append_to_script($e, 'Full::Package::get_column($col)');
-    end_expr($e);
+    $e->append_to_script('Full::Package::get_column($col)');
+    $e->end_expr();
     return '';
   }
 

@@ -1,4 +1,4 @@
-# $Id: LibXSLT.pm,v 1.13 2002/06/04 07:52:17 matts Exp $
+# $Id: LibXSLT.pm,v 1.18 2003/01/29 13:51:29 matts Exp $
 
 package Apache::AxKit::Language::LibXSLT;
 
@@ -73,7 +73,7 @@ sub handler {
 
     my $stylesheet;
     my $cache = $style_cache{$style->key()};
-    if ($cache && !$style->has_changed($cache->{mtime}) && ref($cache->{depends}) eq 'ARRAY') {
+    if (ref($cache) eq 'HASH' && !$style->has_changed($cache->{mtime}) && ref($cache->{depends}) eq 'ARRAY') {
         AxKit::Debug(8, "[LibXSLT] checking if stylesheet is cached");
         my $changed = 0;
         DEPENDS:
@@ -108,8 +108,10 @@ sub handler {
         
         $stylesheet = XML::LibXSLT->parse_stylesheet($style_doc);
         
-        $style_cache{$style->key()} = 
+        unless ($r->dir_config('AxDisableXSLTStylesheetCache')) {
+            $style_cache{$style->key()} = 
                 { style => $stylesheet, mtime => time, depends => [ get_depends() ] };
+        }
     }
 
     # get request form/querystring parameters
@@ -119,16 +121,21 @@ sub handler {
 
     my $results = $stylesheet->transform($xml_doc, @params);
     
-    if ($last_in_chain && $XML::LibXSLT::VERSION >= 1.03) {
-        my $encoding = $stylesheet->output_encoding;
-        my $type = $stylesheet->media_type;
-        $r->content_type("$type; charset=$encoding");
+    AxKit::Debug(7, "[LibXSLT] transformation finished, creating $results");
+    
+    if ($last_in_chain) {
+        AxKit::Debug(8, "[LibXSLT] outputting to \$r");
+        if ($XML::LibXSLT::VERSION >= 1.03) {
+            my $encoding = $stylesheet->output_encoding;
+            my $type = $stylesheet->media_type;
+            $r->content_type("$type; charset=$encoding");
+        }
+        $stylesheet->output_fh($results, $r);
     }
 
-    $stylesheet->output_fh($results, $r) if $last_in_chain;
-
+    AxKit::Debug(7, "[LibXSLT] storing results in pnotes(dom_tree) ($r)");
     $r->pnotes('dom_tree', $results);
-
+    
 #         warn "LibXSLT returned $output \n";
 #         print $stylesheet->output_string($results);
     return Apache::Constants::OK;
@@ -148,7 +155,7 @@ sub fixup_params {
 sub match_uri {
     my $uri = shift;
     AxKit::Debug(8, "LibXSLT match_uri: $uri");
-    return 1 if $uri =~ /^axkit:/;
+    return 1 if $uri =~ /^(axkit|xmldb):/;
     return $uri !~ /^\w+:/; # only handle URI's without a scheme
 }
 
@@ -158,11 +165,13 @@ sub open_content_uri {
     
     if ($uri =~ /^axkit:/) {
         return AxKit::get_axkit_uri($uri);
+    } elsif ($uri =~ /^xmldb:/) {
+        return Apache::AxKit::Provider::XMLDB::get_xmldb_uri($uri);
     }
     
     # create a subrequest, so we get the right AxKit::Cfg for the URI
     my $apache = AxKit::Apache->request;
-    my $sub = $apache->lookup_uri($uri);
+    my $sub = $apache->lookup_uri(AxKit::FromUTF8($uri));
     local $AxKit::Cfg = Apache::AxKit::ConfigReader->new($sub);
     
     my $provider = Apache::AxKit::Provider->new_content_provider($sub);
@@ -183,11 +192,13 @@ sub open_stylesheet_uri {
     
     if ($uri =~ /^axkit:/) {
         return AxKit::get_axkit_uri($uri);
+    } elsif ($uri =~ /^xmldb:/) {
+        return Apache::AxKit::Provider::XMLDB::get_xmldb_uri($uri);
     }
     
     # create a subrequest, so we get the right AxKit::Cfg for the URI
     my $apache = AxKit::Apache->request;
-    my $sub = $apache->lookup_uri($uri);
+    my $sub = $apache->lookup_uri(AxKit::FromUTF8($uri));
     local $AxKit::Cfg = Apache::AxKit::ConfigReader->new($sub);
     
     my $provider = Apache::AxKit::Provider->new_style_provider($sub);

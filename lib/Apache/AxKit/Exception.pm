@@ -1,4 +1,4 @@
-# $Id: Exception.pm,v 1.2 2002/04/02 16:27:54 matts Exp $
+# $Id: Exception.pm,v 1.4 2003/01/29 01:35:49 jwalt Exp $
 
 package Apache::AxKit::Exception;
 use Error 0.14;
@@ -8,7 +8,7 @@ sub new {
     my $class = shift;
     my $self = $class->SUPER::new(@_);
     
-    if ($AxKit::Cfg->StackTrace) {
+    if ($AxKit::Cfg && $AxKit::Cfg->StackTrace) {
         my $i = $Error::Depth + 1;
         my ($pkg, $file, $line) = caller($i++);
         my @stacktrace;
@@ -25,6 +25,34 @@ sub new {
 sub stacktrace_list {
     my $E = shift;
     return $E->{'stacktrace'} || [];
+}
+
+sub as_xml {
+    my $E = shift;
+    my $filename = shift || $E->filename;
+
+    my $error = '<error><file>' .
+            AxKit::xml_escape($filename) . '</file><msg>' .
+            AxKit::xml_escape($E->{-text}) . '</msg>' .
+            '<stack_trace><bt level="0">'.
+            '<file>' . AxKit::xml_escape($E->{'-file'}) . '</file>' .
+            '<line>' . AxKit::xml_escape($E->{'-line'}) . '</line>' .
+            '</bt>';
+    
+    my $i = 1;
+    for my $stack (@{$E->stacktrace_list}) {
+        $error .= '<bt level="' . $i++ . '">' .
+                '<file>' . AxKit::xml_escape($stack->{'-file'}) . '</file>' .
+                '<line>' . AxKit::xml_escape($stack->{'-line'}) . '</line>' .
+                '</bt>';
+    }
+
+    $error .= '</stack_trace></error>';
+    return $error;
+}
+
+sub filename {
+    # Overload this if you don't want to pass $r->filename to as_xml
 }
 
 use overload 'bool' => 'bool';

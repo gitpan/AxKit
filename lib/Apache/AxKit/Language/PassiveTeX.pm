@@ -1,4 +1,4 @@
-# $Id: PassiveTeX.pm,v 1.2 2002/03/25 14:06:09 jwalt Exp $
+# $Id: PassiveTeX.pm,v 1.3 2002/06/11 06:28:57 matts Exp $
 
 package Apache::AxKit::Language::PassiveTeX;
 
@@ -68,10 +68,10 @@ sub handler {
     }
 
     chdir($tempdir) || fail("Cannot cd: $!");
-
-    local $ENV{TEXINPUTS} = dirname($r->filename());
+    
+    local $ENV{TEXINPUTS} = dirname($r->filename()) . ":";
     AxKit::Debug(8, "About to shell out to pdfxmltex - hope you have passivetex installed...");
-    my $retval = system("pdfxmltex temp.fo");
+    my $retval = system("pdfxmltex --interaction=batchmode --shell-escape temp.fo");
     $retval >>= 8;
 
     if ($retval) {

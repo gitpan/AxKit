@@ -1,4 +1,4 @@
-# $Id: FileSuffix.pm,v 1.2 2002/02/01 14:45:07 matts Exp $
+# $Id: FileSuffix.pm,v 1.3 2002/07/30 10:33:42 jwalt Exp $
 
 package Apache::AxKit::StyleChooser::FileSuffix;
 
@@ -30,8 +30,7 @@ Apache::AxKit::StyleChooser::FileSuffix - Choose stylesheet using file suffix
 =head1 SYNOPSIS
 
 	PerlTypeHandler Apache::AxKit::StyleChooser::FileSuffix
-	SetHandler perl-script
-	PerlHandler AxKit
+	SetHandler AxKit
 
 =head1 DESCRIPTION
 
@@ -39,8 +38,7 @@ This module lets you pick a stylesheet based on the filename suffix. To use
 it, simply add this module to the list of PerlTypeHandlers:
 
 	PerlTypeHandler Apache::AxKit::StyleChooser::FileSuffix
-	SetHandler perl-script
-	PerlHandler AxKit
+	SetHandler AxKit
 
 Then simply by referencing your xml files as follows:
 

@@ -1,4 +1,4 @@
-# $Id: Object.pm,v 1.2 2002/03/25 14:30:41 jwalt Exp $
+# $Id: Object.pm,v 1.3 2002/06/25 05:07:52 jwalt Exp $
 package AxKit::XSP::Demo::Object;
 
 # Always use strict. Do it. I mean it. And turn on warnings as well.
@@ -20,7 +20,7 @@ $AxKit::XSP::Demo::Object::NS = 'http://www.creITve.de/2002/XSP/Demo/Object';
 sub start_document {
     # We are using a Time::Piece object as example. Look at it's man page, it is
     # very straighforward, and a useful module as well.
-    return "use Time::Piece;\n".
+    return "use Time::Piece;\n";
 }
 
 package AxKit::XSP::Demo::Object::Handlers;

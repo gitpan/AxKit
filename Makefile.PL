@@ -1,14 +1,13 @@
-# $Id: Makefile.PL,v 1.8.4.2 2002/06/10 11:41:44 jwalt Exp $
+# $Id: Makefile.PL,v 1.13.2.2 2003/02/08 13:49:21 matts Exp $
 
-package AxKit;
+# package AxKit;
 # file Makefile.PL
 use strict;
-
-use ExtUtils::MakeMaker;
 
 use Text::Wrap ();
 use Cwd;
 use Config;
+use ExtUtils::MakeMaker qw(prompt);
 
 use vars qw($DEBUG $is_Win32 $DEVNULL);
 
@@ -25,115 +24,75 @@ sub wrap ($)
 my @DIRS = ('./lib/Apache/AxKit');
 my $from_dir = cwd;
 
+eval { require ExtUtils::AutoInstall };
+if ($@ || $ExtUtils::AutoInstall::VERSION < 0.32) {
+  warn( "\n",
+        "==================================================================\n",
+        "\n",
+        "AxKit's installer magic requires ExtUtils::AutoInstall. AxKit comes\n",
+        "with an older version, but it will not be installed.  You should\n",
+        "install the most recent ExtUtils::AutoInstall at your convenience.\n",
+        "\n",
+        "==================================================================\n",
+        "\n",
+      );
+  require lib; lib->import('./install');
+  require './install/ExtUtils/AutoInstall.pm';
+}
+
 ######################################################
 # Standard bits required for have_library and friends
 my %config;
 
 $|=1; # flush output
 
-while($_ = shift @ARGV) {
-    my ($k, $v) = split /=/, $_, 2;
-    $config{$k} = $v;
-}
+# while($_ = shift @ARGV) {
+#     my ($k, $v) = split /=/, $_, 2;
+#     $config{$k} = $v;
+# }
 
 $DEBUG = delete $config{DEBUG};
 ######################################################
 
-if (!have_module('mod_perl', '1.17')) {
-    die wrap(<<DEATH);
-AxKit requires mod_perl to be able to even run. You do not appear to
-have mod_perl installed (or your mod_perl is earlier than version 1.17).
-
-You can download mod_perl from http://perl.apache.org/
-
-DEATH
-}
+ExtUtils::AutoInstall->import
+  ( -version => '0.32',
+    -core => [
+        mod_perl          => '1.17',
+        'Digest::MD5'     => '2.09',
+        'Compress::Zlib'  => '',
+        'Error'           => '0.14',
+        'Apache::Request' => '0.31_03',
+        'File::Basename'  => '',
+        'File::Spec'      => '',
+    ],
+    "Optional modules for using XPathScript" => [
+        -default => 0,
+        'XML::Parser'     => '2.27',
+        'XML::XPath'      => '1.00',
+    ],
+    "Recommended module for speeding up URI requests" => [
+        -default => 0,
+        'HTTP::GHTTP'     => '1.00',
+    ],
+    "Optional module for using Sablotron XSLT engine" => [
+        -default => 0,
+        'XML::Sablotron'  => '0.40',
+    ],
+    "Optional modules required for XSP and LibXSLT engine" => [
+        -default => 0,
+        'XML::LibXML'     => '1.51',
+    ],
+    "Optional module required for LibXSLT engine" => [
+        -default => 0,
+        'XML::LibXSLT'    => '1.49',
+    ],
+    
+  );
 
 require Apache::src;
 require Apache::MyConfig;
 
-my $xml_parser_found = 0;
-
-test_module('Digest::MD5', '2.09', <<"REASON") || die;
-***** ERROR *****
-
-Digest::MD5 2.09 or higher required. This module is used 
-to create hash entries for the AxKit cache, and
-in a number of other parts of the code for MD5 hashing. You will
-need to install that module before installing AxKit.
-REASON
-
-test_module('Compress::Zlib', 0, <<"REASON") || die;
-***** ERROR *****
-
-Compress::Zlib (any version) required. This module is required
-for AxKit's facility for gzipping the
-output before delivery to the browser. You will need to install
-that module before installing AxKit.
-REASON
-
-test_module('Error', '0.14', <<"REASON") || die;
-***** ERROR *****
-
-Error 0.14 or higher required. This module is required for 
-AxKit's internal exception handling
-routines. You will need to install that module before installing
-AxKit.
-REASON
-
-test_module('Apache::Request', '0.31_03', <<"REASON") || die;
-***** ERROR *****
-
-Apache::Request 0.32 or higher required. This module is used 
-throughout AxKit for querystring and form value
-parsing. You will need to install that module before installing AxKit.
-REASON
-
-test_module('XML::Parser', '2.27', <<"REASON") and ($xml_parser_found++);
-[Warning]
-XML::Parser 2.27 may be required if we cannot find libxml2 installed
-below, or if you intend to use XML::Parser based modules from
-within AxKit. It is not required that you install this module, but
-it is sometimes advisable.
-REASON
-
-test_module('XML::XPath', '1.00', <<"REASON");
-[Warning]
-XML::XPath 1.00 or higher is required for XPathScript
-to work. You don't have to install it, but you won't be able
-to use XPathScript stylesheets without it.
-REASON
-
-test_module('HTTP::GHTTP', '1.00', <<"REASON");
-[Warning]
-HTTP::GHTTP is used for retrieving remote URIs within AxKit.
-We use HTTP::GHTTP because it is significantly faster and lighter
-than LWP, however AxKit will use LWP if it cannot locate
-HTTP::GHTTP.
-REASON
-
-
-test_module('XML::Sablotron', '0.40', <<"REASON");
-[Warning]
-XML::Sablotron 0.40 or higher is required for our Sablotron 
-XSLT processor to work. You don't have to install it, 
-but you won't be able to use Apache::AxKit::Language::Sablot without it.
-REASON
-
-test_module('XML::LibXML', '1.50', <<"REASON");
-[Warning]
-XML::LibXML 1.50 or higher is required for the XSP engine
-to work. You don't have to install it, but you won't
-be able to use XSP pages without it.
-REASON
-        
-test_module('XML::LibXSLT', '1.49', <<"REASON");
-[Warning]
-XML::LibXSLT 1.49 or higher is required for our LibXSLT 
-XSLT processor to work. You don't have to install it, 
-but you won't be able to use Apache::AxKit::Language::LibXSLT without it.
-REASON
-
+my $xml_parser_found = eval "require XML::Parser";
 
 eval {
     print "running xml2-config... ";
@@ -159,7 +118,9 @@ elsif (!$is_Win32) {
 
 We will now check if your apache has XML symbols in it, to be sure that
 AxKit will work under your version of Apache. If you do not wish to 
-perform this check, please just enter 0 (zero) below.
+perform this check (it shouldn't be necessary if you installed Apache
+*after* installing Expat), then please just enter 0 (zero) below and
+these tests will be skipped.
 
 EOT
 
@@ -219,6 +180,23 @@ will need to install one of these before AxKit can function properly.
 REASON
 }
 
+if (eval { require XML::LibXML }) {
+    if (XML::LibXML->VERSION eq '1.53') {
+        die <<"REASON";
+
+***** ERROR *****
+
+XML::LibXML 1.53 found. This version does not work with AxKit and
+has serious bugs which mean we cannot recommend it.
+
+Please either upgrade to 1.54_03 (available on CPAN via a manual
+download), downgrade to 1.52 which is stable, or upgrade to a higher
+version when they are released.
+
+REASON
+    }
+}
+
 $config{INC} .= ' ' . Apache::src->new->inc;
 
 if ($DEBUG) {
@@ -228,7 +206,7 @@ if ($DEBUG) {
     }
 }
 
-my %prereq_pm = %{delete $config{PREREQ_PM}||{}};
+# my %prereq_pm = %{delete $config{PREREQ_PM}||{}};
 
 unless ($Apache::MyConfig::Setup{PERL_USELARGEFILES} == 1) {
     $config{CCFLAGS} = strip_lfs($config{CCFLAGS});
@@ -242,14 +220,14 @@ foreach my $k (keys %config) {
 rm_f($DEVNULL) if $is_Win32;
 
 WriteMakefile(
-        'NAME' => __PACKAGE__,
+        'NAME' => 'AxKit',
         'VERSION_FROM' => 'lib/AxKit.pm',
         'AUTHOR' => 'AxKit.com Limited - http://axkit.com/',
         'ABSTRACT' => 'AxKit is an XML Application Server for mod_perl',
         'DIR' => [ @DIRS ],
         'OBJECT' => '$(O_FILES)',
         %config,
-        PREREQ_PM => \%prereq_pm,
+        # PREREQ_PM => \%prereq_pm,
 );
 
 #################################################################

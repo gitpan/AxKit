@@ -93,6 +93,9 @@ sub handler {
 
 }
 
+# SAX Machines ignores stylesheets
+sub stylesheet_exists { 0 }
+
 1;
 
 __END__

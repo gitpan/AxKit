@@ -1,4 +1,4 @@
-# $Id: UserAgent.pm,v 1.2 2002/02/01 14:45:07 matts Exp $
+# $Id: UserAgent.pm,v 1.4 2002/07/31 19:50:26 matts Exp $
 
 package Apache::AxKit::StyleChooser::UserAgent;
 
@@ -17,10 +17,10 @@ sub handler {
         push (@UAMap, [ split /\s*=>\s*/, $_ ]);
     }
 
-#    warn "checking UA: $ENV{HTTP_USER_AGENT}\n";
+#    warn "checking UA: ", $r->header_in('User-Agent'), "\n";
 
     UA: foreach my $ua (@UAMap) {
-        if ($ENV{HTTP_USER_AGENT} =~ /$ua->[1]/g) {
+        if ($r->header_in('User-Agent') =~ /$ua->[1]/g) {
 #            warn "found UA $ua->[1], setting 'preferred_style' to $ua->[0]\n";
             $r->notes('preferred_style', $ua->[0]);
             last UA;
@@ -41,8 +41,7 @@ Apache::AxKit::StyleChooser::UserAgent - Choose stylesheets based on the user ag
 
     In your .conf or .htaccess file(s):
     
-    PerlHandler Apache::AxKit::StyleChooser::UserAgent \
-                AxKit
+    AxAddPlugin Apache::AxKit::StyleChooser::UserAgent
 
     PerlSetVar AxUAStyleMap "lynx     => Lynx,\
                              explorer => MSIE,\
@@ -53,9 +52,13 @@ Apache::AxKit::StyleChooser::UserAgent - Choose stylesheets based on the user ag
 
 This module sets the internal preferred style based on the user agent
 string presented by the connecting client.
+To use it, simply add this module as an AxKit plugin that 
+will be run before main AxKit processing is done.
 
-Remember, use the B<title> attribute in your stylesheet PI to define a
-matching style.
+  AxAddPlugin Apache::AxKit::StyleChooser::UserAgent
+
+See the B<AxStyleName> AxKit configuration directive
+for more information on how to setup named styles.
 
 =head1 AUTHOR
 

@@ -1,4 +1,4 @@
-# $Id: File.pm,v 1.8 2002/05/31 19:22:24 matts Exp $
+# $Id: File.pm,v 1.12 2003/01/04 18:11:08 matts Exp $
 
 package Apache::AxKit::Provider::File;
 use strict;
@@ -11,8 +11,9 @@ use Apache::Constants qw(HTTP_OK);
 use Apache::AxKit::Exception;
 use Apache::AxKit::Provider;
 use AxKit;
-use File::Basename;
+use File::Spec;
 use Fcntl qw(O_RDONLY LOCK_SH);
+
 
 sub init {
     my $self = shift;
@@ -20,7 +21,8 @@ sub init {
 
     my $stats_done;
     if ($p{key}) {
-        AxKit::Debug(8, "File Provider instantiated by key: $p{key}");
+        AxKit::Debug(7, "File Provider instantiated by key: $p{key}");
+        # assumed already UTF-8
         $self->{file} = $p{key};
     }
     else {
@@ -31,31 +33,33 @@ sub init {
         if ($p{uri}) {
             my $r = $self->apache_request();
 
-            AxKit::Debug(8, "[uri] File Provider looking up uri $p{uri}");
+            AxKit::Debug(7, "[uri] File Provider looking up uri $p{uri}");
 
-            $self->{apache} = $r->lookup_uri($p{uri});
+            # assumed already UTF-8
+            $self->{apache} = $r->lookup_uri(AxKit::FromUTF8($p{uri}));
             my $status = $self->{apache}->status();
             if ($status != HTTP_OK) {
                 throw Apache::AxKit::Exception::Error(-text => "Subrequest failed with status: " . $status);
             }
-            $self->{file} = $self->{apache}->filename();
+            $self->{file} = AxKit::ToUTF8($self->{apache}->filename());
 
-            AxKit::Debug(8, "[uri] File Provider set filename to $self->{file}");
+            AxKit::Debug(7, "[uri] File Provider set filename to $self->{file}");
         }
         elsif ($p{file}) {
-            AxKit::Debug(8, "[file] File Provider given file: $p{file}");
+            AxKit::Debug(7, "[file] File Provider given file: $p{file}");
+            # assumed already UTF-8
             $self->{file} = $p{file};
         }
         else {
-            $self->{file} = $self->{apache}->filename();
-            AxKit::Debug(8, "[req] File Provider given \$r: $self->{file}");
-            my @stats = stat($self->{apache}->finfo());
+            $self->{file} = AxKit::ToUTF8($self->{apache}->filename());
+            AxKit::Debug(7, "[req] File Provider given \$r: $self->{file}");
+            my @stats = stat( $self->{apache}->filename() );
             $self->{mtime} = $stats[9];
             if (-e _) {
                 if (-r _ ) {
                     $self->{file_exists} = 1;
                 }
-    
+
                 if (-d _) {
                     $self->{is_dir} = 1;
                 }
@@ -68,7 +72,7 @@ sub init {
     }
 
     if (!$stats_done) {
-        my @stats = stat($self->{file});
+        my @stats = stat(AxKit::FromUTF8($self->{file}));
         $self->{mtime} = $stats[9];
         if (-e _) {
             if (-r _ ) {
@@ -88,7 +92,7 @@ sub init {
 sub _is_dir {
     my $self = shift;
     return $self->{is_dir} if exists $self->{is_dir};
-    return -d $self->{file};
+    return $self->{is_dir} = -d AxKit::FromUTF8($self->{file});
 }
 
 sub key {
@@ -99,7 +103,7 @@ sub key {
 sub exists {
     my $self = shift;
     return $self->{file_exists} if exists $self->{file_exists};
-    if (-e $self->{file}) {
+    if (-e AxKit::FromUTF8($self->{file})) {
         if (-r _ ) {
             $self->{file_exists} = 1;
             return 1;
@@ -110,6 +114,39 @@ sub exists {
         }
     }
     return;
+}
+
+sub get_dir_xml {
+	my $self = shift;
+	local (*DIR);
+	my $dir = AxKit::FromUTF8($self->{file});
+	if (opendir(DIR, $dir)) {
+		my $output = '<?xml version="1.0" encoding="UTF-8"?>
+<filelist xmlns="http://axkit.org/2002/filelist">
+';
+		while(my $line = readdir(DIR)) {
+			my $xmlline = AxKit::ToUTF8($line);
+			$xmlline =~ s/&/&amp;/;
+			$xmlline =~ s/</&lt;/;
+			my @stat = stat(File::Spec->catfile($dir,$line));
+			my $attr = "size=\"$stat[7]\" atime=\"$stat[8]\" mtime=\"$stat[9]\" ctime=\"$stat[10]\"";
+			$attr .= ' readable="1"' if (-r _);
+			$attr .= ' writable="1"' if (-w _);
+			$attr .= ' executable="1"' if (-x _);
+			
+			if (-f _) {
+				$output .= "<file $attr>$xmlline</file>\n";
+			} elsif (-d _) {
+				$output .= "<directory $attr>$xmlline</directory>\n";
+			} else {
+				$output .= "<unknown $attr>$xmlline</unknown>\n";
+			}
+		}
+		$output .= "</filelist>\n";
+		AxKit::Debug(8,"Generated file list: $output");
+		return $output;
+	}
+	return undef;
 }
 
 sub process {
@@ -124,6 +161,9 @@ sub process {
 
     if ( $self->_is_dir ) {
         if ($AxKit::Cfg->HandleDirs()) {
+	    my $output = $self->get_dir_xml();
+	    return 0 if (!defined $output);
+	    $self->{dir_xml} = $output;
             return 1;
         }
         # else
@@ -153,7 +193,7 @@ sub process {
 sub mtime {
     my $self = shift;
     return $self->{mtime} if defined $self->{mtime};
-    return ($self->{mtime} = (stat($self->{file}))[9]);
+    return ($self->{mtime} = (stat(AxKit::FromUTF8($self->{file})))[9]);
 }
 
 sub get_fh {
@@ -162,9 +202,9 @@ sub get_fh {
         throw Apache::AxKit::Exception::IO(-text => "File '$self->{file}' does not exist or is not readable");
     }
     if ($self->_is_dir()) {
-        throw Apache::AxKit::Exception::IO(-text => "$self->{file} is a directory");
+        throw Apache::AxKit::Exception::IO(-text => "Can't get filehandle on directory. ($self->{file})");
     }
-    my $filename = $self->{file};
+    my $filename = AxKit::FromUTF8($self->{file});
     # chdir(dirname($filename));
     my $fh = Apache->gensym();
     if (sysopen($fh, $filename, O_RDONLY)) {
@@ -177,8 +217,10 @@ sub get_fh {
 sub get_strref {
     my $self = shift;
     if ($self->_is_dir()) {
+        my $xml = $self->{dir_xml} || $self->get_dir_xml();
+        return \$xml if $xml;
         throw Apache::AxKit::Exception::IO(
-          -text => "$self->{file} is a directory - please overload File provider and use AxContentProvider option");
+          -text => "directory $self->{file} cannot be read");
     }
     my $fh = $self->get_fh();
     local $/;

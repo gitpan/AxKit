@@ -1,4 +1,4 @@
-# $Id: Simple.pm,v 1.2 2002/03/15 00:24:49 jwalt Exp $
+# $Id: Simple.pm,v 1.3 2002/06/25 05:07:52 jwalt Exp $
 package AxKit::XSP::Demo::Simple;
 
 # Always use strict. Do it. I mean it. And turn on warnings as well.
@@ -35,7 +35,7 @@ sub do_long_and_complex_calculation {
 ################################################################
 # package for the handler subs - here the taglib really begins #
 ################################################################
-package AxKit::XSP::Simple::Handlers;
+package AxKit::XSP::Demo::Simple::Handlers;
 
 # a very simple tag: <demo:set-time/>
 sub set_time

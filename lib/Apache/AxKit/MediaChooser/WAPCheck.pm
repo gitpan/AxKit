@@ -1,4 +1,4 @@
-# $Id: WAPCheck.pm,v 1.2 2002/02/01 14:47:21 matts Exp $
+# $Id: WAPCheck.pm,v 1.2.2.1 2003/02/07 16:07:37 matts Exp $
 
 package Apache::AxKit::MediaChooser::WAPCheck;
 
@@ -9,15 +9,16 @@ sub handler {
 	my $r = shift;
 	my $type;
 	
-#	warn "WAP Check on $ENV{HTTP_ACCEPT}\n";
-#	warn " and $ENV{HTTP_USER_AGENT}\n";
+        my $accept = $r->header_in('Accept') || '';
+        my $ua = $r->header_in('User-Agent') || '';
+	AxKit::Debug(3, "WAP Check on '$accept' and '$ua'");
 	
 	local $^W;
 	
-	if ($ENV{HTTP_ACCEPT} =~ /vnd.wap.wml/i) {
+	if ($accept =~ /vnd.wap.wml/i) {
 		$r->notes('preferred_media', 'handheld');
 	}
-	elsif (substr($ENV{HTTP_USER_AGENT},0,4) =~ 
+	elsif (substr($ua,0,4) =~ 
 			/(
 			Noki
 			| Eric
@@ -41,7 +42,7 @@ sub handler {
 			| ALAV
 			| Wapa
 			)/x) {
-#		warn "set media to handheld!\n";
+		AxKit::Debug(3, "set media to handheld!");
 		$r->notes('preferred_media', 'handheld');
 	}
 	
@@ -49,3 +50,26 @@ sub handler {
 }
 
 1;
+
+__END__
+
+=head1 NAME
+
+Apache::AxKit::MediaChooser::WAPCheck - WAP device media chooser
+
+=head1 SYNOPSIS
+
+  AxAddPlugin Apache::AxKit::MediaChooser::WAPCheck
+
+=head1 DESCRIPTION
+
+This module sets the preferred media type in AxKit to B<handheld> if
+it detects that a WAP device made the request. This way you can specify
+different stylesheets for WAP devices automatically.
+
+The selection is performed either based on the C<Accept> header being
+sent, or based on the C<User-Agent> header (see the source code for
+a list of the supported user agent strings).
+
+=cut
+

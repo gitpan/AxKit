@@ -2,7 +2,7 @@ AxKit.spec
 AxKit.xs
 CONTRIB
 Changes
-INSTALL
+INSTALL.txt
 MANIFEST
 MANIFEST.SKIP
 Makefile.PL
@@ -78,6 +78,7 @@ axkit.org/support.xml
 demo/.htaccess
 demo/AxKit/XSP/Demo/Object.pm
 demo/AxKit/XSP/Demo/Simple.pm
+demo/AxKit/XSP/Demo/SimpleInputAttributes.pm
 demo/axkit.conf
 demo/axpoint/.htaccess
 demo/axpoint/error.html
@@ -124,6 +125,7 @@ examples/docbook_tags.xps
 examples/index.xml
 getstyles.c
 getstyles.h
+install/ExtUtils/AutoInstall.pm
 lib/Apache/AxKit/Cache.pm
 lib/Apache/AxKit/CharsetConv.pm
 lib/Apache/AxKit/CharsetConv.xs
@@ -135,11 +137,11 @@ lib/Apache/AxKit/Language/HtmlDoc.pm
 lib/Apache/AxKit/Language/LibXSLT.pm
 lib/Apache/AxKit/Language/PassiveTeX.pm
 lib/Apache/AxKit/Language/Query.pm
+lib/Apache/AxKit/Language/SAXMachines.pm
 lib/Apache/AxKit/Language/Sablot.pm
 lib/Apache/AxKit/Language/XMLNewsNITF.pm
 lib/Apache/AxKit/Language/XMLNewsRDF.pm
 lib/Apache/AxKit/Language/XPathScript.pm
-lib/Apache/AxKit/Language/SAXMachines.pm
 lib/Apache/AxKit/Language/XSP.pm
 lib/Apache/AxKit/Language/XSP/SimpleTaglib.pm
 lib/Apache/AxKit/Language/XSP/TaglibHelper.pm
@@ -150,6 +152,7 @@ lib/Apache/AxKit/Plugin/Passthru.pm
 lib/Apache/AxKit/Plugin/QueryStringCache.pm
 lib/Apache/AxKit/Provider.pm
 lib/Apache/AxKit/Provider/File.pm
+lib/Apache/AxKit/Provider/FileWrite.pm
 lib/Apache/AxKit/Provider/Filter.pm
 lib/Apache/AxKit/Provider/Scalar.pm
 lib/Apache/AxKit/StyleChooser/Cookie.pm
