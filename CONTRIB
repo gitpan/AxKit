@@ -5,6 +5,7 @@ Vincent Cagnard (Apache::Filter support (although it was re-done))
 Owen Stenseth (output filtering single point of exit, and others)
 Honza Pazdziora (many small patches)
 Brian Wheeler (Filter fixes, XPathScript improvements, AxAddDynamicProcessor)
+Jason Johnston (AxAddDynamicProcessor ordering fix)
 
 If I've missed anyone, please correct this list as my memory
 is poor.

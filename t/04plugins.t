@@ -1,7 +1,8 @@
 use Test;
 BEGIN { plan tests => 3 }
+use lib 't';
 
-require "t/test_module.pl";
+require "test_module.pl";
 
 test_module("Apache::AxKit::Plugin::Fragment", "XML::XPath");
 

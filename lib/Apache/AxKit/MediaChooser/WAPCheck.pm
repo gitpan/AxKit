@@ -1,4 +1,4 @@
-# $Id: WAPCheck.pm,v 1.2.2.1 2003/02/07 16:07:37 matts Exp $
+# $Id: WAPCheck.pm,v 1.3 2003/02/07 16:21:44 matts Exp $
 
 package Apache::AxKit::MediaChooser::WAPCheck;
 

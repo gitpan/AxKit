@@ -1,4 +1,4 @@
-# $Id: HtmlDoc.pm,v 1.3 2002/06/17 23:15:47 jwalt Exp $
+# $Id: HtmlDoc.pm,v 1.4.2.1 2003/07/28 22:51:19 matts Exp $
 # Apache::AxKit::Language::HtmlDoc - xhtml->pdf renderer
 package Apache::AxKit::Language::HtmlDoc;
 
@@ -10,8 +10,9 @@ use Apache;
 use Apache::Constants qw(:common);
 use Apache::Request;
 use Apache::AxKit::Language;
-use Apache::AxKit::Language::LibXSLT;
+use Apache::AxKit::LibXMLSupport;
 use Apache::AxKit::Provider;
+use XML::LibXSLT;
 use IPC::Run qw(run);
 use Cwd;
 
@@ -25,10 +26,9 @@ sub handler {
     my ($r, $xml_provider, undef, $last_in_chain) = @_;
 
     my $parser = XML::LibXML->new();
-    local $XML::LibXML::match_cb = \&Apache::AxKit::Language::LibXSLT::match_uri;
-    local $XML::LibXML::open_cb = \&Apache::AxKit::Language::LibXSLT::open_content_uri;
-    local $XML::LibXML::read_cb = \&Apache::AxKit::Language::LibXSLT::read_uri;
-    local $XML::LibXML::close_cb = \&Apache::AxKit::Language::LibXSLT::close_uri;
+    local($XML::LibXML::match_cb, $XML::LibXML::open_cb,
+        $XML::LibXML::read_cb, $XML::LibXML::close_cb);
+    Apache::AxKit::LibXMLSupport->reset();
 
     my $dom;
     my $source_text;

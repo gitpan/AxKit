@@ -1,4 +1,4 @@
-# $Id: SimpleTaglib.pm,v 1.7 2003/01/29 01:35:50 jwalt Exp $
+# $Id: SimpleTaglib.pm,v 1.8 2003/06/18 13:30:08 jwalt Exp $
 # Apache::AxKit::XSP::Language::SimpleTaglib - alternate taglib helper code
 package Apache::AxKit::Language::XSP::SimpleTaglib;
 require 5.006;
@@ -36,10 +36,11 @@ sub parseChildStructSpec {
     for my $spec ($_[0]) {
         my $result = {};
         while (length($spec)) {
-            (my ($type, $token, $next) = ($spec =~ m/^([\&\@\*\$]?)([^ {}]+)(.|$)/))
+            $spec = substr($spec,1), return $result if (substr($spec,0,1) eq '}');
+            (my ($type, $token, $next) = ($spec =~ m/^([!\&\@\*\$]?)([^ {}]+)(.|$)/))
                  || die("childStruct specification invalid. Parse error at: '$spec'");
             substr($spec,0,length($token)+1+($type?1:0)) = '';
-            #warn("type: $type, token: $token, next: $next");
+            #warn("type: $type, token: $token, next: $next, spec: $spec");
             my ($realtoken, $params);
             if ((($realtoken,$params) = ($token =~ m/^([^\(]+)((?:\([^ \)]+\))+)$/))) {
                 my $i = 0;
@@ -58,8 +59,12 @@ sub parseChildStructSpec {
                 next;
             }
             $$result{$token}{'type'} = $type || '$';
-            die("childStruct specification invalid. '*' cannot be used with '{'.")
-                if ($next eq '{' and $type eq '*');
+            die("childStruct specification invalid. '${type}' cannot be used with '{'.")
+                if ($next eq '{' and ($type eq '*' || $type eq '!'));
+            die("childStruct specification invalid. '${type}' cannot be used with '(,,,)'.")
+                if ($$result{$token}{'param'} and ($type eq '*' || $type eq '!'));
+            die("childStruct specification invalid. '**' is not supported.")
+                if ($token eq '*' and $type eq '*');
             $$result{''}{'name'} = $token if ($type eq '*');
             $$result{$token}{'name'} = $token;
             return $result if (!$next || $next eq '}');
@@ -151,7 +156,8 @@ sub MODIFY_CODE_ATTRIBUTES {
             my $spec = $param[0];
             #warn("parsing $spec");
             $spec =~ s/\s+/ /g;
-            $spec =~ s/ ?([{}]) ?/$1/g;
+            $spec =~ s/ ?{ ?/{/g;
+            $spec =~ s/ ?} ?/}/g;
             $$handlerAttributes{'struct'} = parseChildStructSpec($spec,{});
             #warn("parsed $param[0], got ".serializeChildStructSpec($$handlerAttributes{'struct'}));
             die("childStruct parse error") unless $$handlerAttributes{'struct'};
@@ -307,6 +313,7 @@ sub set_attribOrChild_value : keepWhitespace {
     return '; ';
 }
 
+my @ignore;
 sub set_childStruct_value__open {
     my ($e, $tag, %attribs) = @_;
     my $var = '$_{'.makeSingleQuoted($tag).'}';
@@ -316,6 +323,13 @@ sub set_childStruct_value__open {
         return '';
     }
     my $desc = $$structStack[0][0]{'sub'}{$tag};
+    if (!$desc) {
+        $desc = $$structStack[0][0]{'sub'}{'*'};
+        #warn("$tag desc: ".Data::Dumper::Dumper($desc));
+    }
+    die("Tag $tag not found in childStruct specification.") if (!$desc);
+    push(@ignore, 1), return '' if ($$desc{'type'} eq '!');
+    push @ignore, 0;
     unshift @{$$structStack[0]},$desc;
     if ($$desc{'param'}) {
         $e->append_to_script("{ \n");
@@ -363,6 +377,8 @@ sub set_childStruct_value {
         return '';
     }
     my $desc = $$structStack[0][0];
+    my $ignore = pop @ignore;
+    return '' if ($ignore);
     shift @{$$structStack[0]};
     if ($$desc{'sub'}) {
         $e->append_to_script(' \%_; }; ');
@@ -576,14 +592,16 @@ sub start_element
     if ($$structStack[0][0]{'param'} && exists $$structStack[0][0]{'param'}{$tag}) {
         $sub = \&set_childStruct_value;
         $subOpen = \&set_childStruct_value__open;
-    } elsif ($$structStack[0][0]{'sub'} && exists $$structStack[0][0]{'sub'}{$tag}) {
-        if ($$structStack[0][0]{'sub'}{$tag}{'sub'}) {
-            foreach my $key (keys %{$$structStack[0][0]{'sub'}{$tag}{'sub'}}) {
+    } elsif ($$structStack[0][0]{'sub'} && (exists $$structStack[0][0]{'sub'}{$tag} || exists $$structStack[0][0]{'sub'}{'*'})) {
+        my $tkey = $tag;
+        $tkey = '*' if (!exists $$structStack[0][0]{'sub'}{$tag});
+        if ($$structStack[0][0]{'sub'}{$tkey}{'sub'}) {
+            foreach my $key (keys %{$$structStack[0][0]{'sub'}{$tkey}{'sub'}}) {
                 $$attribs{$key} = $attribs{$key} if exists $attribs{$key};
             }
         }
-        if ($$structStack[0][0]{'sub'}{$tag}{'param'}) {
-            foreach my $key (keys %{$$structStack[0][0]{'sub'}{$tag}{'param'}}) {
+        if ($$structStack[0][0]{'sub'}{$tkey}{'param'}) {
+            foreach my $key (keys %{$$structStack[0][0]{'sub'}{$tkey}{'param'}}) {
                 $$attribs{$key} = $attribs{$key} if exists $attribs{$key};
             }
         }

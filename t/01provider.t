@@ -1,7 +1,8 @@
 use Test;
 BEGIN { plan tests => 4 }
+use lib 't';
 
-require "t/test_module.pl";
+require "test_module.pl";
 
 test_module("Apache::AxKit::Provider");
 

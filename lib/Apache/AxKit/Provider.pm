@@ -1,11 +1,10 @@
-# $Id: Provider.pm,v 1.12 2002/07/05 19:02:36 matts Exp $
+# $Id: Provider.pm,v 1.14.2.1 2003/07/28 22:51:19 matts Exp $
 
 package Apache::AxKit::Provider;
 use strict;
 
 use Apache::AxKit::Exception;
 use Apache::Constants qw(OK DECLINED);
-#use XML::Parser;
 
 # use vars qw/$COUNT/;
 
@@ -21,7 +20,7 @@ sub new_style_provider {
 
     $self->init(@_);
 
-    AxKit::add_depends($self->key());
+    AxKit::add_depends("{style}".$self->key());
 
     return $self;
 }
@@ -38,7 +37,7 @@ sub new_content_provider {
 
     $self->init(@_);
 
-    AxKit::add_depends($self->key());
+    AxKit::add_depends("{content}".$self->key());
 
     return $self;
 }
@@ -55,6 +54,43 @@ sub init {
 # sub DESTROY {
 #     AxKit::Debug(7, "Provider->DESTROY Count: " . --$COUNT);
 # }
+
+sub get_strref {
+    throw Apache::AxKit::Exception::Error (
+        -text => "Subclass must implement get_strref"
+        );
+}
+
+sub get_fh {
+    throw Apache::AxKit::Exception::Error (
+        -text => "Subclass must implement get_fh"
+        );
+}
+
+sub get_dom {
+    my $self = shift;
+    require Apache::AxKit::LibXMLSupport;
+    
+    my $parser = XML::LibXML->new();
+    $parser->expand_entities(1);
+    local($XML::LibXML::match_cb, $XML::LibXML::open_cb,
+          $XML::LibXML::read_cb, $XML::LibXML::close_cb);
+    Apache::AxKit::LibXMLSupport->reset($parser);
+    
+    my $xml_doc;
+    eval {
+        my $fh = $self->get_fh();
+        $xml_doc = $parser->parse_fh($fh, $self->{apache}->uri());
+    };
+    if ($@) {
+        my $xmlstring = ${$self->get_strref()};
+        $xml_doc = $parser->parse_string($xmlstring, $self->{apache}->uri()) || 
+            throw Apache::AxKit::Exception::Error(
+                -text => "XML::LibXML->parse_string returned nothing!"
+                );
+    }
+    return $xml_doc;
+}
 
 sub apache_request {
     my $self = shift;
@@ -85,17 +121,9 @@ sub get_ext_ent_handler {
             if ($pubid) {
                 return ''; # do not bring in public DTD's
             }
-            eval {
-                require HTTP::GHTTP;
-            };
-            if ($@) {
-                require LWP::Simple;
-                import LWP::Simple;
-                return get($sysid) || die "Cannot get $sysid";
-            }
-            my $r = HTTP::GHTTP->new($sysid);
-            $r->process_request;
-            return $r->get_body;
+            require LWP::Simple;
+            import LWP::Simple;
+            return get($sysid) || die "Cannot get $sysid";
         }
         elsif ($sysid =~ /^(https|ftp):/) {
             if ($pubid) {

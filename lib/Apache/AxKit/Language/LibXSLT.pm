@@ -1,4 +1,4 @@
-# $Id: LibXSLT.pm,v 1.18 2003/01/29 13:51:29 matts Exp $
+# $Id: LibXSLT.pm,v 1.20.2.1 2003/07/28 22:51:19 matts Exp $
 
 package Apache::AxKit::Language::LibXSLT;
 
@@ -10,6 +10,7 @@ use Apache;
 use Apache::Request;
 use Apache::AxKit::Language;
 use Apache::AxKit::Provider;
+use Apache::AxKit::LibXMLSupport;
 use File::Basename qw(dirname);
 
 @ISA = 'Apache::AxKit::Language';
@@ -48,20 +49,20 @@ sub handler {
     
     my $parser = XML::LibXML->new();
     $parser->expand_entities(1);
-    local $XML::LibXML::match_cb = \&match_uri;
-    local $XML::LibXML::open_cb = \&open_content_uri;
-    local $XML::LibXML::read_cb = \&read_uri;
-    local $XML::LibXML::close_cb = \&close_uri;
+    local($XML::LibXML::match_cb, $XML::LibXML::open_cb,
+          $XML::LibXML::read_cb, $XML::LibXML::close_cb);
+    Apache::AxKit::LibXMLSupport->reset();
+    warn("parser match_cb: ", $parser->match_callback);
+    local $Apache::AxKit::LibXMLSupport::provider_cb = 
+        sub {
+            my $r = shift;
+            my $provider = Apache::AxKit::Provider->new_content_provider($r);
+            add_depends($provider->key());
+            return $provider;
+        };
 
     if (!$xml_doc && !$xmlstring) {
-        eval {
-            my $fh = $xml->get_fh();
-            $xml_doc = $parser->parse_fh($fh, $r->uri());
-        };
-        if ($@) {
-            $xmlstring = ${$xml->get_strref()};
-            $xml_doc = $parser->parse_string($xmlstring, $r->uri());
-        }
+        $xml_doc = $xml->get_dom();
     } 
     elsif ($xmlstring) {
         $xml_doc = $parser->parse_string($xmlstring, $r->uri());
@@ -91,21 +92,22 @@ sub handler {
     }
     
     if (!$stylesheet || ref($stylesheet) ne 'XML::LibXSLT::Stylesheet') {
-        my $style_doc;
         reset_depends();
         my $style_uri = $style->apache_request->uri();
         AxKit::Debug(7, "[LibXSLT] parsing stylesheet $style_uri");
-        eval {
-            my $fh = $style->get_fh();
-            $style_doc = $parser->parse_fh($fh, $style_uri);
-        };
-        if ($@) {
-            my $stylestring = $style->get_strref();
-            $style_doc = $parser->parse_string($$stylestring, $style_uri);
-        }
+        my $style_doc = $style->get_dom();
         
-        local $XML::LibXML::open_cb = \&open_stylesheet_uri;
-        
+        local($XML::LibXML::match_cb, $XML::LibXML::open_cb,
+            $XML::LibXML::read_cb, $XML::LibXML::close_cb);
+        Apache::AxKit::LibXMLSupport->reset();
+        local $Apache::AxKit::LibXMLSupport::provider_cb = 
+            sub {
+                my $r = shift;
+                my $provider = Apache::AxKit::Provider->new_style_provider($r);
+                add_depends($provider->key());
+                return $provider;
+            };
+    
         $stylesheet = XML::LibXSLT->parse_stylesheet($style_doc);
         
         unless ($r->dir_config('AxDisableXSLTStylesheetCache')) {
@@ -150,74 +152,6 @@ sub fixup_params {
                 );
     }
     return @results;
-}
-
-sub match_uri {
-    my $uri = shift;
-    AxKit::Debug(8, "LibXSLT match_uri: $uri");
-    return 1 if $uri =~ /^(axkit|xmldb):/;
-    return $uri !~ /^\w+:/; # only handle URI's without a scheme
-}
-
-sub open_content_uri {
-    my $uri = shift || './';
-    AxKit::Debug(8, "LibXSLT open_content_uri: $uri");
-    
-    if ($uri =~ /^axkit:/) {
-        return AxKit::get_axkit_uri($uri);
-    } elsif ($uri =~ /^xmldb:/) {
-        return Apache::AxKit::Provider::XMLDB::get_xmldb_uri($uri);
-    }
-    
-    # create a subrequest, so we get the right AxKit::Cfg for the URI
-    my $apache = AxKit::Apache->request;
-    my $sub = $apache->lookup_uri(AxKit::FromUTF8($uri));
-    local $AxKit::Cfg = Apache::AxKit::ConfigReader->new($sub);
-    
-    my $provider = Apache::AxKit::Provider->new_content_provider($sub);
-    
-    add_depends($provider->key());
-    my $str = $provider->get_strref;
-    
-    undef $provider;
-    undef $apache;
-    undef $sub;
-    
-    return $$str;
-}
-
-sub open_stylesheet_uri {
-    my $uri = shift || './';
-    AxKit::Debug(8, "LibXSLT open_stylesheet_uri: $uri");
-    
-    if ($uri =~ /^axkit:/) {
-        return AxKit::get_axkit_uri($uri);
-    } elsif ($uri =~ /^xmldb:/) {
-        return Apache::AxKit::Provider::XMLDB::get_xmldb_uri($uri);
-    }
-    
-    # create a subrequest, so we get the right AxKit::Cfg for the URI
-    my $apache = AxKit::Apache->request;
-    my $sub = $apache->lookup_uri(AxKit::FromUTF8($uri));
-    local $AxKit::Cfg = Apache::AxKit::ConfigReader->new($sub);
-    
-    my $provider = Apache::AxKit::Provider->new_style_provider($sub);
-    
-    add_depends($provider->key());
-    my $str = $provider->get_strref;
-    
-    undef $provider;
-    undef $apache;
-    undef $sub;
-    
-    return $$str;
-}
-
-sub close_uri {
-}
-
-sub read_uri {
-    return substr($_[0], 0, $_[1], "");
 }
 
 1;

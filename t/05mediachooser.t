@@ -1,6 +1,7 @@
 use Test;
 BEGIN { plan tests => 1 }
+use lib 't';
 
-require "t/test_module.pl";
+require "test_module.pl";
 
 test_module("Apache::AxKit::MediaChooser::WAPCheck");

@@ -1,4 +1,4 @@
-# $Id: File.pm,v 1.12 2003/01/04 18:11:08 matts Exp $
+# $Id: File.pm,v 1.14 2003/02/17 10:47:00 matts Exp $
 
 package Apache::AxKit::Provider::File;
 use strict;
@@ -149,6 +149,15 @@ sub get_dir_xml {
 	return undef;
 }
 
+sub decline {
+    my $self = shift;
+    if ($self->_is_dir) {
+        $self->{apache}->header_out('Location' => $self->{apache}->uri . "/");
+        return 302;
+    }
+    return $self->SUPER::decline();
+}
+
 sub process {
     my $self = shift;
 
@@ -160,7 +169,12 @@ sub process {
     }
 
     if ( $self->_is_dir ) {
+        # process directories if AxHandleDirs is On and dir ends in /
+        # (otherwise we decline and let apache redirect)
         if ($AxKit::Cfg->HandleDirs()) {
+            if ($self->{apache}->uri !~ /\/$/) {
+                return 0;
+            }
 	    my $output = $self->get_dir_xml();
 	    return 0 if (!defined $output);
 	    $self->{dir_xml} = $output;

@@ -1,4 +1,4 @@
-/* $Id: axconfig.c,v 1.16 2002/09/20 17:00:24 jwalt Exp $ */
+/* $Id: axconfig.c,v 1.18 2003/07/07 22:29:50 matts Exp $ */
 
 #ifndef WIN32
 #include <modules/perl/mod_perl.h>
@@ -113,7 +113,6 @@ new_axkit_dir_config (pool *p)
     /* complex types */
     new->type_map = NULL;
     new->processors = NULL;
-    new->dynamic_processors = NULL;
     new->xsp_taglibs = NULL;
     new->current_styles = NULL;
     new->current_medias = NULL;
@@ -140,7 +139,6 @@ new_axkit_dir_config (pool *p)
         "new.debug_level: %d\n"
         "new.type_map: %d\n"
         "new.processors: %d\n"
-        "new.dynamic_processors: %d\n"
         "new.xsp_taglibs: %d\n"
         "new.current_styles: %d\n"
         "new.current_medias: %d\n"
@@ -164,7 +162,6 @@ new_axkit_dir_config (pool *p)
         new->debug_level,
         new->type_map,
         new->processors,
-        new->dynamic_processors,
         new->xsp_taglibs,
         new->current_styles,
         new->current_medias,
@@ -190,9 +187,6 @@ create_axkit_dir_config (pool *p, char *dummy)
     
     new->processors = newHV();
     ap_register_cleanup(p, (void*)new->processors, ax_cleanup_hv, ap_null_cleanup);
-
-    new->dynamic_processors = newAV();
-    ap_register_cleanup(p, (void*)new->dynamic_processors, ax_cleanup_av, ap_null_cleanup);
     
     new->xsp_taglibs = newHV();
     ap_register_cleanup(p, (void*)new->xsp_taglibs, ax_cleanup_hv, ap_null_cleanup);
@@ -201,7 +195,7 @@ create_axkit_dir_config (pool *p, char *dummy)
     ap_register_cleanup(p, (void*)new->output_transformers, ax_cleanup_av, ap_null_cleanup);
     
     new->current_styles = newAV();
-    av_push(new->current_styles, newSVpv("#default", 0));
+    av_push(new->current_styles, newSVpv("#global", 0));
     ap_register_cleanup(p, (void*)new->current_styles, ax_cleanup_av, ap_null_cleanup);
 
     new->current_medias = newAV();
@@ -292,7 +286,6 @@ merge_axkit_dir_config (pool *p, void *parent_dirv, void *subdirv)
         "parent_dir.debug_level: %d\n"
         "parent_dir.type_map: %d\n"
         "parent_dir.processors: %d\n"
-        "parent_dir.dynamic_processors: %d\n"
         "parent_dir.xsp_taglibs: %d\n"
         "parent_dir.current_styles: %d\n"
         "parent_dir.current_medias: %d\n"
@@ -316,7 +309,6 @@ merge_axkit_dir_config (pool *p, void *parent_dirv, void *subdirv)
         parent_dir->debug_level,
         parent_dir->type_map,
         parent_dir->processors,
-        parent_dir->dynamic_processors,
         parent_dir->xsp_taglibs,
         parent_dir->current_styles,
         parent_dir->current_medias,
@@ -342,7 +334,6 @@ merge_axkit_dir_config (pool *p, void *parent_dirv, void *subdirv)
         "subdir.debug_level: %d\n"
         "subdir.type_map: %d\n"
         "subdir.processors: %d\n"
-        "subdir.dynamic_processors: %d\n"
         "subdir.xsp_taglibs: %d\n"
         "subdir.current_styles: %d\n"
         "subdir.current_medias: %d\n"
@@ -366,7 +357,6 @@ merge_axkit_dir_config (pool *p, void *parent_dirv, void *subdirv)
         subdir->debug_level,
         subdir->type_map,
         subdir->processors,
-        subdir->dynamic_processors,
         subdir->xsp_taglibs,
         subdir->current_styles,
         subdir->current_medias,
@@ -536,37 +526,6 @@ merge_axkit_dir_config (pool *p, void *parent_dirv, void *subdirv)
         }
 
         ap_register_cleanup(p, (void*)new->type_map, ax_cleanup_hv, ap_null_cleanup);
-    }
-
-    {
-        /* cfg->dynamic_processors */
-        new->dynamic_processors = newAV();
-        if (av_len(subdir->dynamic_processors) >= 0) {
-            I32 key = 0;
-            for(key = 0; key <= av_len(subdir->dynamic_processors); key++) {
-                SV ** val = av_fetch(subdir->dynamic_processors, key, 0);
-                if (val != NULL) {
-                    char * cval;
-                    STRLEN len;
-                    cval = ap_pstrdup(p, SvPV(*val, len));
-                    av_push(new->dynamic_processors, newSVpvn(cval, strlen(cval)));
-                }
-            }
-        }
-        else {
-            I32 key = 0;
-            for(key = 0; key <= av_len(parent_dir->dynamic_processors); key++) {
-                SV ** val = av_fetch(parent_dir->dynamic_processors, key, 0);
-                if (val != NULL) {
-                    char * cval;
-                    STRLEN len;
-                    cval = ap_pstrdup(p, SvPV(*val, len));
-                    av_push(new->dynamic_processors, newSVpvn(cval, strlen(cval)));
-                }
-            }
-        }
-
-        ap_register_cleanup(p, (void*)new->dynamic_processors, ax_cleanup_av, ap_null_cleanup);
     }
 
     {
@@ -742,7 +701,7 @@ merge_axkit_dir_config (pool *p, void *parent_dirv, void *subdirv)
     }
 
     new->current_styles = newAV();
-    av_push(new->current_styles, newSVpv("#default", 0));
+    av_push(new->current_styles, newSVpv("#global", 0));
     ap_register_cleanup(p, (void*)new->current_styles, ax_cleanup_av, ap_null_cleanup);
 
     new->current_medias = newAV();
@@ -753,7 +712,6 @@ merge_axkit_dir_config (pool *p, void *parent_dirv, void *subdirv)
     warn("merge results: %d\n"
         "typemap: %d\n"
         "processors: %d\n"
-        "dynamic: %d\n"
         "taglibs: %d\n"
         "c_styles: %d\n"
         "c_medias: %d\n"
@@ -762,7 +720,6 @@ merge_axkit_dir_config (pool *p, void *parent_dirv, void *subdirv)
         new,
         new->type_map,
         new->processors,
-        new->dynamic_processors,
         new->xsp_taglibs,
         new->current_styles,
         new->current_medias,
@@ -809,10 +766,7 @@ CHAR_P
 ax_add_dynamic_processor (cmd_parms *cmd, axkit_dir_config *ax,
                             char *module)
 {
-    SV * mod_sv = newSVpv(module, 0);
-    av_push(ax->dynamic_processors, mod_sv);
-    
-    return NULL;
+    return ax_add_type_processor(cmd, ax, "", "", module); 
 }
 
 CHAR_P
@@ -1230,7 +1184,7 @@ static command_rec axkit_mod_cmds[] = {
       "a mime type, a stylesheet, and a dtd filename" },
 
     { "AxAddDynamicProcessor", ax_add_dynamic_processor,
-      NULL, OR_ALL, TAKE1,
+      (void*)"Dynamic", OR_ALL, TAKE1,
       "a package name" },
 
     { "AxAddRootProcessor", ax_add_type_processor,
@@ -1524,8 +1478,6 @@ ax_get_config (axkit_dir_config * cfg)
             8, newRV_inc((SV*)cfg->type_map), 0);
     hv_store(retval, "Processors",
             10, newRV_inc((SV*)cfg->processors), 0);
-    hv_store(retval, "DynamicProcessors",
-            17, newRV_inc((SV*)cfg->dynamic_processors), 0);
     hv_store(retval, "XSPTaglibs",
             10, newRV_inc((SV*)cfg->xsp_taglibs), 0);
     hv_store(retval, "Plugins",

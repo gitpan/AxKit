@@ -1,0 +1,7 @@
+use strict;
+use warnings;
+BEGIN {
+    use lib "@ServerRoot@/lib";
+}
+
+1;

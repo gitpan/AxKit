@@ -1,0 +1,55 @@
+PerlModule AxKit
+
+# AxKit globals
+AxNoCache On
+AxDebugLevel 10
+AxStackTrace On
+
+# Language processors
+<Perl>
+my $has_libxslt = 0;
+
+eval { require XML::LibXSLT; };
+unless ($@) {
+    $AxAddStyleMap = "text/xsl Apache::AxKit::Language::LibXSLT";
+    $has_libxslt = 1;
+}
+
+unless ( $has_xslt == 1 ) {
+   eval { require XML::Sablot; };
+   unless ( $@ ) { 
+        $AxAddStyleMap = "text/xsl Apache::AxKit::Language::Sablot";
+   }
+}
+</Perl> 
+AxAddStyleMap application/x-xsp Apache::AxKit::Language::XSP;
+
+#######################################
+# Directives that control the individual configs
+#######################################
+
+<Location "/xslt-basic/01.xml">
+    SetHandler axkit
+    AxResetProcessors
+    AxAddProcessor text/xsl /style/xslt-basic/01.xsl
+</Location>
+
+<Location "/xslt-basic/02_include.xml">
+    SetHandler axkit
+    AxResetProcessors
+    AxAddProcessor text/xsl /style/xslt-basic/02_include.xsl
+</Location>
+
+<Location "/xslt-basic/03_document_1arg.xml">
+    SetHandler axkit
+    AxResetProcessors
+    AxAddProcessor text/xsl /style/xslt-basic/03_document_1arg.xsl
+</Location>
+
+
+<Location "/xslt-basic/04_document_2args.xml">
+    SetHandler axkit
+    AxResetProcessors
+    AxAddProcessor text/xsl /style/xslt-basic/04_document_2args.xsl
+</Location>
+

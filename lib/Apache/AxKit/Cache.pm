@@ -1,4 +1,4 @@
-# $Id: Cache.pm,v 1.9 2002/12/25 17:59:21 matts Exp $
+# $Id: Cache.pm,v 1.11 2003/06/18 14:11:56 jwalt Exp $
 
 package Apache::AxKit::Cache;
 use strict;
@@ -9,6 +9,8 @@ use Apache::AxKit::Exception;
 use Digest::MD5 ();
 use Compress::Zlib qw(gzopen);
 use Fcntl qw(:flock O_RDWR O_WRONLY O_CREAT O_RDONLY);
+BEGIN { $INC{'bytes.pm'}++ if $] < 5.006 }
+use bytes;
 
 # use vars qw/$COUNT/;
 
@@ -110,7 +112,7 @@ sub write {
     AxKit::Debug(7, "[Cache] writing cache file $self->{file}");
     my $fh = Apache->gensym();
     my $tmp_filename = $self->{file}."new$$";
-    if (sysopen($fh, $tmp_filename, O_WRONLY|O_CREAT)) {
+    if (AxKit::sysopen($fh, $tmp_filename, O_WRONLY|O_CREAT, 'raw')) {
         # flock($fh, LOCK_EX);
         # seek($fh, 0, 0);
         # truncate($fh, 0);
@@ -141,7 +143,7 @@ sub read {
     my $self = shift;
     return if $self->{no_cache};
     my $fh = Apache->gensym();
-    if (sysopen($fh, $self->{file}, O_RDONLY)) {
+    if (AxKit::sysopen($fh, $self->{file}, O_RDONLY, 'raw')) {
         flock($fh, LOCK_SH);
         local $/;
         return <$fh>;
@@ -155,7 +157,7 @@ sub get_fh {
     my $self = shift;
     return if $self->{no_cache};
     my $fh = Apache->gensym();
-    if (sysopen($fh, $self->{file}, O_RDONLY)) {
+    if (AxKit::sysopen($fh, $self->{file}, O_RDONLY, 'raw')) {
         flock($fh, LOCK_SH);
         return $fh;
     }
@@ -169,7 +171,7 @@ sub set_type {
     return if $self->{no_cache};
     
     my $fh = Apache->gensym();
-    if (sysopen($fh, $self->{file}.'newtype', O_RDWR|O_CREAT)) {
+    if (AxKit::sysopen($fh, $self->{file}.'newtype', O_RDWR|O_CREAT, 'raw')) {
         flock($fh, LOCK_EX);
         seek($fh, 0, 0);
         truncate($fh, 0);
@@ -187,7 +189,7 @@ sub get_type {
     my $self = shift;
     return if $self->{no_cache};
     my $fh = Apache->gensym();
-    if (sysopen($fh, $self->{file}.'.type', O_RDONLY)) {
+    if (AxKit::sysopen($fh, $self->{file}.'.type', O_RDONLY, 'raw')) {
         flock($fh, LOCK_SH);
         local $/;
         return <$fh>;

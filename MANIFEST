@@ -110,6 +110,7 @@ demo/xsp/perform.xsp
 demo/xsp/sendmail.xsp
 demo/xsp/session.xsp
 demo/xsp/showsource.xsp
+demo/xsp/simple-input-attributes.xsp
 demo/xsp/simpletaglib-object.xsp
 demo/xsp/simpletaglib-simple.xsp
 demo/xsp/tlh.xsp
@@ -145,6 +146,7 @@ lib/Apache/AxKit/Language/XPathScript.pm
 lib/Apache/AxKit/Language/XSP.pm
 lib/Apache/AxKit/Language/XSP/SimpleTaglib.pm
 lib/Apache/AxKit/Language/XSP/TaglibHelper.pm
+lib/Apache/AxKit/LibXMLSupport.pm
 lib/Apache/AxKit/Makefile.PL
 lib/Apache/AxKit/MediaChooser/WAPCheck.pm
 lib/Apache/AxKit/Plugin/Fragment.pm
@@ -162,6 +164,7 @@ lib/Apache/AxKit/StyleChooser/QueryString.pm
 lib/Apache/AxKit/StyleChooser/UserAgent.pm
 lib/Apache/AxKit/typemap
 lib/AxKit.pm
+t/TEST.PL
 t/00basic.t
 t/01provider.t
 t/02language.t
@@ -169,4 +172,22 @@ t/03stylechooser.t
 t/04plugins.t
 t/05mediachooser.t
 t/test_module.pl
+t/lib/Provider/Tiny.pm
+t/conf/extra.last.conf.in
+t/conf/startup.pl.in
+t/htdocs/style/xslt-basic/01.xsl
+t/htdocs/style/xslt-basic/02_include.xsl
+t/htdocs/style/xslt-basic/02_include_inc.xsl
+t/htdocs/style/xslt-basic/03_document_1arg.xsl
+t/htdocs/style/xslt-basic/03_document.xml
+t/htdocs/style/xslt-basic/04_document_2args.xsl
+t/htdocs/xslt-basic/01.xml
+t/htdocs/xslt-basic/02_include.xml
+t/htdocs/xslt-basic/03_document_1arg.xml
+t/htdocs/xslt-basic/04_document_2args.xml
+t/htdocs/xslt-basic/04_document.xml
+t/xslt-basic/01.t
+t/xslt-basic/02_include.t
+t/xslt-basic/03_document_1arg.t
+t/xslt-basic/04_document_2args.t
 typemap

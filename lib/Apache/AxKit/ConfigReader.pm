@@ -1,4 +1,4 @@
-# $Id: ConfigReader.pm,v 1.12.2.1 2003/02/07 16:07:37 matts Exp $
+# $Id: ConfigReader.pm,v 1.17 2003/07/11 16:03:54 matts Exp $
 
 package Apache::AxKit::ConfigReader;
 
@@ -65,9 +65,9 @@ sub CacheDir {
             $self->{cfg}->{CacheDir}
             ||
             $self->{apache}->dir_config('AxCacheDir')) {
-        #if (substr($cachedir,0,1) ne '/') {
-        #        $self->{cfg}->{CacheDir} = $cachedir = Apache->request()->document_root.'/'.$cachedir;
-        #}
+        if (substr($cachedir,0,1) eq '+') {
+                $self->{cfg}->{CacheDir} = $cachedir = Apache->request()->document_root.'/'.substr($cachedir,1);
+        }
         return $cachedir;
     }
     
@@ -163,9 +163,9 @@ sub TraceIntermediate {
     if (my $dir = $self->{cfg}{TraceIntermediate} ||
             $self->{apache}->dir_config('AxTraceIntermediate')) {
         return undef if $dir =~ m/^\s*(?:off|none|disabled?)\s*$/i;
-        #if (substr($dir,0,1) ne '/') {
-        #        $self->{cfg}{TraceIntermediate} = $dir = Apache->request()->document_root.'/'.$dir;
-        #}
+        if (substr($dir,0,1) eq '+') {
+                $self->{cfg}{TraceIntermediate} = $dir = Apache->request()->document_root.'/'.substr($dir,1);
+        }
         return $dir;
     }
 
@@ -340,6 +340,42 @@ sub DoGzip {
     return $can_gzip;
 }
 
+sub _extract_dir_config_processors {
+    my $self = shift;
+    my ($style, $media) = @_;
+
+    my @list;
+    
+    my $processors = $self->{apache}->dir_config('AxProcessors');
+    my $found_non_global_style = 0;
+    if( $processors ) {
+      foreach my $processor (split(/\s*,\s*/, $processors) ) {
+        my ($pmedia, $pstyle, @processor) = split(/\s+/, $processor);
+        next unless ($pmedia eq $media and ($pstyle eq $style or $pstyle eq '#global'));
+        $found_non_global_style++ if $pstyle ne '#global';
+        push (@list, [ 'NORMAL', @processor ] );
+      }
+    }
+    
+    my @processors = $self->{apache}->dir_config->get('AxProcessor');
+    foreach my $processor (@processors) {
+        my ($pmedia, $pstyle, @processor) = split(/\s+/, $processor);
+        next unless ($pmedia eq $media and ($pstyle eq $style or $pstyle eq '#global'));
+        $found_non_global_style++ if $pstyle ne '#global';
+        push (@list, [ 'NORMAL', @processor ] );
+    }
+
+    return @list if $style eq '#default';
+
+    if ($found_non_global_style) {
+        return @list;
+    }
+    else {
+        return $self->_extract_dir_config_processors('#default', $media);
+    }
+}
+
+
 sub GetMatchingProcessors {
     my $self = shift;
     my ($media, $style, $doctype, $dtd, $root, $styles, $provider) = @_;
@@ -347,23 +383,19 @@ sub GetMatchingProcessors {
     
     $style ||= '#default';
 
-    my $list = $self->{cfg}{Processors}{$media}{$style};
+    # Add global styles
+    my $list = $self->{cfg}{Processors}{$media}{'#global'} || [];
 
-    my $processors = $self->{apache}->dir_config('AxProcessors');
-    if( $processors ) {
-      foreach my $processor (split(/\s*,\s*/, $processors) ) {
-        my ($pmedia, $pstyle, @processor) = split(/\s+/, $processor);
-        next unless ($pmedia eq $media and $pstyle eq $style);
-        push (@$list, [ 'NORMAL', @processor ] );
-      }
+    # Add styles matching this style
+    if (exists($self->{cfg}{Processors}{$media}{$style})) {
+        push @$list, @{ $self->{cfg}{Processors}{$media}{$style} || [] };
     }
-    
-    my @processors = $self->{apache}->dir_config->get('AxProcessor');
-    foreach my $processor (@processors) {
-        my ($pmedia, $pstyle, @processor) = split(/\s+/, $processor);
-        next unless ($pmedia eq $media and $pstyle eq $style);
-        push (@$list, [ @processor ] );
+    else {
+        # if the style didn't exist, push the #default styles
+        push @$list, @{ $self->{cfg}{Processors}{$media}{'#default'} || [] };
     }
+
+    push @$list, $self->_extract_dir_config_processors($style, $media);   
     
     my @results;
     
@@ -398,21 +430,19 @@ sub GetMatchingProcessors {
                 push @results, $style_hash;
             }
         }
+        elsif (lc($type) eq 'dynamic') {
+            my $package = $directive->[3];
+            AxKit::load_module($package);
+            no strict 'refs';
+            my($handler) = $package.'::handler';
+            push @results, $handler->($provider, $media, $style,
+                                      $doctype, $dtd, $root);
+        } 
         else {
             warn "Unrecognised directive type: $type";
         }
     }
-    
-    # list any dynamically chosen stylesheets here
-    $list = $self->{cfg}{DynamicProcessors} || [ $self->{apache}->dir_config->get('AxDynamicProcessors') ];
-    foreach my $package (@$list) {
-        AxKit::load_module($package);
-        no strict 'refs';
-        my($handler) = $package.'::handler';
-        push @results, $handler->($provider, $media, $style, 
-                                  $doctype, $dtd, $root);
-    }   
-    
+
     return @results;
 }
 

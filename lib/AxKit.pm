@@ -1,4 +1,4 @@
-# $Id: AxKit.pm,v 1.39.2.4 2003/02/08 15:56:16 matts Exp $
+# $Id: AxKit.pm,v 1.49 2003/07/21 15:29:50 matts Exp $
 
 package AxKit;
 use strict;
@@ -23,7 +23,7 @@ use Fcntl;
 Apache::AxKit::CharsetConv::raise_error(1);
 
 BEGIN {
-    $VERSION = "1.61";
+    $VERSION = "1.62";
     if ($ENV{MOD_PERL}) {
         $AxKit::ServerString = "AxKit/$VERSION";
         @AxKit::ISA = qw(DynaLoader);
@@ -34,6 +34,17 @@ BEGIN {
 ###############################################################
 # AxKit Utility Functions
 ###############################################################
+
+sub open(*$;$) {
+	my $res = CORE::open($_[0],$_[1]);
+	binmode($_[0],($] >= 5.008?(':'.($_[2]||'utf8')):()));
+	return $res;
+}
+sub sysopen(*$$;$) {
+	my $res = CORE::sysopen($_[0],$_[1],$_[2]);
+	binmode($_[0],($] >= 5.008?(':'.($_[2]||'utf8')):()));
+	return $res;
+}
 
 sub FromUTF8($) {
     if (!$AxKit::Cfg->{from_utf8}) {
@@ -263,6 +274,7 @@ sub main_handler {
     if ($r->notes('axkit_passthru')) {
         # slow passthru
         $r->send_http_header('text/xml');
+        return DONE if $r->method eq 'HEAD';
         eval {
             my $fh = $provider->get_fh;
             $r->send_fd($fh);
@@ -328,6 +340,7 @@ sub main_handler {
         AxKit::Debug(4, "[DECLINED] From: $E->{-file} : $E->{-line}");
         
         $r->send_http_header('text/xml');
+        return DONE if $r->method eq 'HEAD';
         eval {
             my $fh = $provider->get_fh;
             $r->send_fd($fh);
@@ -388,7 +401,7 @@ sub run_axkit_engine {
     AxKit::Debug(2, "media: $media, preferred style: $preferred");
 
     # get cache object
-    my $cache = Apache::AxKit::Cache->new($r, $r->filename() . ($AxKit::Cfg->GzipOutput ? '.gzip' : '') . ($r->path_info() || ''), $preferred, $media, $r->notes('axkit_cache_extra'));
+    my $cache = Apache::AxKit::Cache->new($r, $provider->key() . ($AxKit::Cfg->GzipOutput ? '.gzip' : '') . ($r->path_info() || ''), $preferred, $media, $r->notes('axkit_cache_extra'));
 
     my $recreate = 0; # regenerate from source (not cached)
 
@@ -401,7 +414,7 @@ sub run_axkit_engine {
             # Make sure we default the cache file, otherwise
             # we setup a potential DoS
             AxKit::Debug(3, "resetting cache with no preferred style ($preferred ne $styles->[0]{title})");
-            $cache = Apache::AxKit::Cache->new($r, $r->filename() . ($AxKit::Cfg->GzipOutput ? '.gzip' : '') . $r->path_info(), '', $media, $r->notes('axkit_cache_extra'));
+            $cache = Apache::AxKit::Cache->new($r, $provider->key() . ($AxKit::Cfg->GzipOutput ? '.gzip' : '') . $r->path_info(), '', $media, $r->notes('axkit_cache_extra'));
         }
     }
 
@@ -478,11 +491,11 @@ sub get_axkit_uri {
     
     my $apache = AxKit::Apache->request;
     my $r;
-    if ($uri =~ m|^axkit:(/.*)$|) {
+    if ($uri =~ /^axkit:(\/.*)$/) {
         my $blurb = $1;
         # got "axkit:/..."
         # first check if it's actually "axkit://host[:port]/..."
-        if ($blurb =~ m|^//(?:([\w\.-]+)(:\d+)?)?(/.*)$|) {
+        if ($blurb =~ /^\/\/(?:([\w\.-]+)(:\d+)?)?(\/.*)$/) {
             my $host = $1;
             my $port = $2;
             my $abs_uri = $3;
@@ -551,8 +564,11 @@ sub get_axkit_uri {
             }
         }
         else {
-            # Some other type of exception
-            $E->throw;
+            # Some other type of exception - since error
+            # handling from axkit: uri handling might not be
+            # great, return the error xml instead of propogating
+            # the exception
+            return $E->as_xml($r->filename);
         }
     }
     
@@ -673,12 +689,11 @@ sub process_request {
 
     my $interm_prefix;
     my $interm_count = 0;
-    if ($AxKit::Cfg->TraceIntermediate) {
+    if (my $ti = $AxKit::Cfg->TraceIntermediate) {
         my $id = $r->notes('AxRequestID');
         $interm_prefix = ($id?$id:$r->uri);
         $interm_prefix =~ s{%}{%25}g;
         $interm_prefix =~ s{/}{%2f}g;
-        my $ti = $AxKit::Cfg->TraceIntermediate;
         if (defined $id) {
                 $interm_prefix = substr($interm_prefix,-1).'/'.substr($interm_prefix,-3,2).'/'.substr($interm_prefix,0,-3).'/';
                 mkdir($ti.'/'.substr($interm_prefix,0,1),0777);
@@ -691,9 +706,14 @@ sub process_request {
         $interm_prefix = $ti.'/'.$interm_prefix;
     
         if ($interm_prefix) {
+            if (!-d $ti) {
+                if (!mkdir($ti, 0777)) {
+                    AxKit::Debug(1, "Can't create AxTraceIntermediate directory '$ti': $!");
+                }
+            }
             my $fh = Apache->gensym();
-            if (sysopen($fh, $interm_prefix.$interm_count, O_WRONLY|O_CREAT|O_TRUNC)) {
-                syswrite($fh,${$provider->get_strref});
+            if (AxKit::open($fh, ">".$interm_prefix.$interm_count)) {
+                print $fh ${$provider->get_strref};
                 close($fh);
                 $interm_count++;
             } else {
@@ -753,7 +773,7 @@ sub process_request {
 
         if ($interm_prefix) {
             my $fh = Apache->gensym();
-            if (open($fh, '>'.$interm_prefix.$interm_count)) {
+            if (AxKit::open($fh, '>'.$interm_prefix.$interm_count)) {
                 my $xmlstr;
                 if ($AxKit::Cfg->DebugTidy) {
                     eval {
@@ -852,8 +872,12 @@ sub check_dependencies {
         if ($depends_contents) {
             DEPENDENCY:
             for my $dependency (split(/:/, $depends_contents)) {
-                AxKit::Debug(3, "Checking dependency: $dependency for resource ", $provider->key());
-                my $dep = Apache::AxKit::Provider->new($r, key => $dependency);
+                $dependency =~ s|^\{(\w+)\}||;
+                my $dep_type = $1;
+                AxKit::Debug(3, "Checking dependency: $dependency of type $dep_type for resource ", $provider->key());
+                my $dep = ($dep_type eq "style") ?
+                    Apache::AxKit::Provider->new_style_provider($r, key => $dependency) :
+                    Apache::AxKit::Provider->new($r, key => $dependency);
                 if ( $dep->has_changed( $cache->mtime() ) ) {
                     AxKit::Debug(4, "dependency: $dependency newer");
                     return 1;
@@ -938,6 +962,7 @@ sub deliver_to_browser {
         if ($AxKit::Cfg->DoGzip) {
             AxKit::Debug(4, 'Sending gzipped xml string to browser');
             AxKit::Apache::send_http_header($r);
+            return DONE if $r->method eq 'HEAD';
             if ($doit) {
                 $r->print( unpack($]>5.00555?"U0A*":"A*", Compress::Zlib::memGzip( 
                          $transformer->( $r->pnotes('xml_string') )
@@ -949,6 +974,7 @@ sub deliver_to_browser {
         }
         else {
             AxKit::Apache::send_http_header($r);
+            return DONE if $r->method eq 'HEAD';
             if ($doit) {
                 $r->print(
                         $transformer->( $r->pnotes('xml_string') )
@@ -970,6 +996,7 @@ sub deliver_to_browser {
             if ($E->isa('Apache::AxKit::Exception::IO')) {
                 AxKit::Debug(1, "WARNING: Unable to write to AxCacheDir or .xmlstyle_cache");
                 AxKit::Apache::send_http_header($r);
+                return DONE if $r->method eq 'HEAD';
                 $r->print( $r->pnotes('xml_string') );
             }
             else {

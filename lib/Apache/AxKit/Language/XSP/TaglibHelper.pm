@@ -1,4 +1,4 @@
-# $Id: TaglibHelper.pm,v 1.4 2002/04/15 16:04:50 barries Exp $
+# $Id: TaglibHelper.pm,v 1.5 2003/02/04 17:36:55 matts Exp $
 
 package Apache::AxKit::Language::XSP::TaglibHelper;
 @ISA = qw(Apache::AxKit::Language::XSP);
@@ -75,10 +75,12 @@ sub optional_args ($) {
 
     my ($argspec) = ($funspec =~ /; *([^\)]*)/);
     my @retval;
-    foreach my $arg(split (/,/, $argspec)) {
-        $arg =~ s/^\s*//g;
-        $arg =~ s/\s*$//g;
-        push (@retval, $arg);
+    if ($argspec) {
+       foreach my $arg (split (/,/, $argspec)) {
+           $arg =~ s/^\s*//g;
+           $arg =~ s/\s*$//g;
+           push (@retval, $arg);
+       }
     }
     return @retval;
 }

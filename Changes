@@ -1,4 +1,17 @@
 AxKit Changes
+1.6.2
+ - Made processors added via AxAddDynamicProcessor appear in their proper
+   order based on the order in which they appear in the config files
+   (rather than simply appended on to the current processing chain).
+ - AxAdd*Processor outside of <AxStyleName> blocks now are global, instead
+   of in the '#default' style name
+ - XSP attribute values are now interpolated like in XSLT, to save you
+   having <xsp:attribute> tags all over your XSP code.
+ - Added a test suite based on Apache::Test (yay!)
+ - A number of XSP bug fixes
+ - Support HTTP HEAD requests
+ - Custom content providers now interact properly with the dependency tests
+ - AxTraceIntermediate now creates the dir if it didn't exist
 
 1.6.1
  - Added AxExternalEncoding option including TransHandler
@@ -12,6 +25,7 @@ AxKit Changes
  - Fixed caching when AxGzipOutput is off
  - Slightly improved demo site code
  - Added AxDebugTidy option to use Perl::Tidy on XSP debug dumps
+ - added ability to specify cache/trace directories relative to DocumentRoot
  - Many bug fixes, debug log improvements, and code cleanups
 
 1.6

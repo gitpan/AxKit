@@ -1,4 +1,4 @@
-# $Id: Makefile.PL,v 1.13.2.2 2003/02/08 13:49:21 matts Exp $
+# $Id: Makefile.PL,v 1.22 2003/07/17 16:34:49 matts Exp $
 
 # package AxKit;
 # file Makefile.PL
@@ -12,6 +12,11 @@ use ExtUtils::MakeMaker qw(prompt);
 use vars qw($DEBUG $is_Win32 $DEVNULL);
 
 require 5.005;
+
+BEGIN {
+    $INC{'bytes.pm'}++ if $] < 5.006;
+    $INC{'warnings.pm'}++ if $] < 5.006;
+}
 
 sub wrap ($)
 {
@@ -46,10 +51,10 @@ my %config;
 
 $|=1; # flush output
 
-# while($_ = shift @ARGV) {
-#     my ($k, $v) = split /=/, $_, 2;
-#     $config{$k} = $v;
-# }
+for (@ARGV) {
+     my ($k, $v) = split /=/, $_, 2;
+     $config{$k} = $v;
+ }
 
 $DEBUG = delete $config{DEBUG};
 ######################################################
@@ -65,14 +70,14 @@ ExtUtils::AutoInstall->import
         'File::Basename'  => '',
         'File::Spec'      => '',
     ],
+    "Apache::Test for live server tests" => [
+        -tests => [ <t/xslt-basic/*.t> ],
+        'Apache::Test'    => '1.00',
+    ],
     "Optional modules for using XPathScript" => [
         -default => 0,
         'XML::Parser'     => '2.27',
         'XML::XPath'      => '1.00',
-    ],
-    "Recommended module for speeding up URI requests" => [
-        -default => 0,
-        'HTTP::GHTTP'     => '1.00',
     ],
     "Optional module for using Sablotron XSLT engine" => [
         -default => 0,
@@ -86,11 +91,23 @@ ExtUtils::AutoInstall->import
         -default => 0,
         'XML::LibXSLT'    => '1.49',
     ],
-    
+    "Optional for tidying output of AxTraceIntermediate XSP pages" => [
+        -default => 0,
+        'Perl::Tidy'      => '',
+    ],
   );
 
 require Apache::src;
 require Apache::MyConfig;
+
+eval {
+    require Apache::TestMM;
+    import Apache::TestMM qw(test clean);
+
+    Apache::TestMM::filter_args();
+    Apache::TestMM::generate_script('t/TEST');
+};
+undef $@;
 
 my $xml_parser_found = eval "require XML::Parser";
 
@@ -159,14 +176,14 @@ DEATH
     }
     
     require Apache::MyConfig;
-    $config{INC} .= qq{ -I"$Apache::MyConfig::Setup{MODPERL_INC}/../.." }
-        . qq{ -I"$Apache::MyConfig::Setup{APACHE_INC}" }
-        . qq{ -I"$Apache::MyConfig::Setup{APACHE_INC}/../os/win32" };
+    $config{INC} .= qq( -I"$Apache::MyConfig::Setup{MODPERL_INC}/../.." )
+        . qq( -I"$Apache::MyConfig::Setup{APACHE_INC}" )
+        . qq( -I"$Apache::MyConfig::Setup{APACHE_INC}/../os/win32" );
     $config{CCFLAGS} = $Config{ccflags} . 
         ' -D_WINSOCK2API_ -D_MSWSOCK_ -D_INC_SIGNAL -D_INC_MALLOC ';
     $config{LIBS} = 
-        qq{ -L"$Apache::MyConfig::Setup{APACHE_LIB}" -lApacheCore } .
-        qq{ -L"$Apache::MyConfig::Setup{MODPERL_LIB}" -lmod_perl};
+        qq( -L"$Apache::MyConfig::Setup{APACHE_LIB}" -lApacheCore ) .
+        qq( -L"$Apache::MyConfig::Setup{MODPERL_LIB}" -lmod_perl);
 }
 
 if (!$xml_parser_found) {
@@ -212,6 +229,8 @@ unless ($Apache::MyConfig::Setup{PERL_USELARGEFILES} == 1) {
     $config{CCFLAGS} = strip_lfs($config{CCFLAGS});
 }
 
+# rebuild @ARGV from the stored and modified values.
+undef(@ARGV);
 foreach my $k (keys %config) {
     push @ARGV, "$k=$config{$k}";
 }
