@@ -76,6 +76,11 @@
 			<sb:title>FAQ</sb:title>
 			<sb:url>/faq.xml</sb:url>
 		</sb:item>
+    
+    <sb:item>
+      <sb:title>Provider HOWTO</sb:title>
+      <sb:url>/docs/provider-howto.dkb</sb:url>
+    </sb:item>
 		
 	</sb:section>
 	

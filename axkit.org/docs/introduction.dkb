@@ -25,7 +25,7 @@ type="application/x-xpathscript" title="print" alternate="yes"?>
 	</copyright>
 
 	<abstract>
-		<para>An introduction to AxKit, an XML Delivery Toolkit for
+		<para>An introduction to AxKit, the XML Application Server for
 		Apache</para>
 	</abstract>
 </artheader>
@@ -349,15 +349,14 @@ add the following line to your httpd.conf file:
 PerlModule AxKit
 </screen>
 </informalexample>
-Finally, you can add in the core components of AxKit - the XMLFinder and
-the StyleFinder. These can be added to any .htaccess file, or other
-Apache configuration file:
+Finally, you can add in the core of AxKit - handler itself. This
+can be added to any .htaccess file, or to your httpd.conf file:
 <informalexample>
 <screen>
 SetHandler perl-script
 PerlHandler AxKit
 
-AxAddStyleMap text/xsl Apache::AxKit::Language::XSLT
+AxAddStyleMap text/xsl Apache::AxKit::Language::Sablot
 </screen>
 </informalexample>
 The last line there associates the type "text/xsl" with the stylesheet

@@ -53,7 +53,7 @@ processing instruction.
 <para>
 XPathScript was concieved as part of AxKit - an application server
 environment for Apache servers running mod_perl (XML.com ran my <ulink
-url="http://www.xml.com/pub/2000/05/24/axkit/">
+url="http://www.xml.com/pub/a/2000/05/24/axkit/index.html">
 Introduction to AxKit</ulink> article in May). Its
 primary goal was to achieve the sorts of transformations that XSLT can
 do, without being restricted by XSLT's XML based syntax, and to provide
@@ -719,6 +719,65 @@ output in the resulting document and bother your users!
 </para>
 <para>
 This feature was introduced in AxKit 0.94.
+</para>
+
+</sect2>
+
+<sect2>
+<title>Interpolation</title>
+
+<para>
+Adding attributes or other data into the translated nodes is non-trivial
+using this setup. It requires you to drop down into testcode. Here's an
+example of turning <literal>&lt;link url="..."></literal> tags into
+HTML <literal>&lt;a></literal> tags:
+<informalexample>
+<programlisting><![CDATA[
+<%
+$t->{'link'}{testcode} = sub {
+  my ($node, $t) = @_;
+  $t->{pre} = '<a href="' . $node->findvalue('@url') . '">';
+  $t->{post} = '</a>';
+  return 1;
+};
+%>
+]]></programlisting>
+</informalexample>
+This is obviously rather verbose.
+</para>
+
+<para>
+To make this a little simpler, in XPathScript as of AxKit 1.1, we have
+introduced interpolation of the replacement strings, much the same as
+you can do with XSLT attributes. Here is the appropriate
+<literal>$t</literal> entry as of AxKit 1.1:
+<informalexample>
+<programlisting><![CDATA[
+<%
+$t->{'link'}{pre} = '<a href="{@url}">';
+$t->{'link'}{post} = '</a>';
+%>
+]]></programlisting>
+</informalexample>
+The curly brackets <literal>{}</literal> delimit an XPath expression on
+which findvalue is called using the current node as the context. Any
+XPath expression should be valid within those delimiters.
+</para>
+
+<para>
+As a backwards compatibility measure, and to ensure efficiency is
+defaulted, interpolation only occurs when you have the following
+somewhere in your Apache configuration defined for the current request:
+<informalexample>
+<programlisting><![CDATA[
+PerlSetVar AxXPSInterpolate 1
+]]></programlisting>
+</informalexample>
+You can also turn off interpolation temporarily in your script using the
+global variable <literal>$XPathScript::DoNotInterpolate</literal>. Set
+that to a true value to turn off interpolation. Be careful to only do
+that locally (using the perl <literal>local</literal> keyword) to ensure
+it doesn't remain set for the next invocation of the script.
 </para>
 
 </sect2>

@@ -1,7 +1,7 @@
 <%
 use Apache::Request;
 
-my $apr = Apache::Request->new($r);
+my $apr = Apache::Request->instance($r);
 my $sect = $apr->param('section');
 
 $r->no_cache(1);

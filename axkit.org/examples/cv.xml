@@ -9,7 +9,6 @@
 	type="application/x-xpathscript" 
 	title="text" 
 	alternate="yes"?>
-<!DOCTYPE resume SYSTEM "http://axkit.org/examples/resume.dtd">
 <resume>
 	<person>
 		<persname>
@@ -37,12 +36,12 @@
 
 	<skills>
 		<area name="Languages">
-			<item time="3 years">Perl 5</item>
-			<item time="2 years">XML</item>
+			<item time="5 years">Perl 5</item>
+			<item time="3 years">XML</item>
 			<item time="6 months">Java (JDK 1.2, Visual J++)</item>
 			<item>JavaScript</item>
 			<item time="3 years">ASP</item>
-			<item time="3 years">HTML</item>
+			<item time="5 years">HTML</item>
 			<item time="3 years">(Visual) C++ (all versions)</item>
 		</area>
 		<area name="Protocols">
@@ -113,6 +112,30 @@
 	</education>
 
 	<experience>
+    <employee>
+      <name>AxKit.com Limited</name>
+      <address>
+        <line>161 Waverley Crescent</line>
+        <line>Livingston</line>
+        <line>West Lothian</line>
+        <postcode>EH54 8JT</postcode>
+        <country>Scotland</country>
+      </address>
+      <datefrom>2000/08</datefrom>
+      <dateto>Present</dateto>
+      <role>Chief Technology Officer and Developer</role>
+      <details>
+        CTO and lead developer on a project to build a leading edge
+        open source XML application server and content management
+        system. AxKit is now one of the leading products in the open
+        source community for building XML backed web sites, and has been
+        used to successfully build many web sites providing alternate
+        views for pages (such as WAP or HTML) and a friendly XML based
+        development environment. The technologies built and designed
+        by myself include XPathScript and the core engine inside AxKit.
+        I also ported Cocoon's XSP technology to Perl for use in AxKit.
+      </details>
+    </employee>
 		<employee>
 			<name>O'Reilly and Associates</name>
 			<address>
@@ -132,7 +155,8 @@
 				standards of object oriented, performance aware code.
 				Every aspect of Perl programming is being used: Database
 				access, installation, Object Orientation, Module design,
-				and lots of internet API's.
+				and lots of internet API's. The project is slated for release
+        in Q2 2001.
 			</details>
 		</employee>
 		<employee>
@@ -287,6 +311,34 @@
 			</details>
 		</employee>
 	</experience>
+  
+  <speaking>
+   <engagement>
+    <conference>XML Dev Con 2000 New York</conference>
+    <talk>Generating XML From Form Data</talk>
+   </engagement>
+   <engagement>
+    <conference>XML Dev Con 2000 New York</conference>
+    <talk>XML Little Languages (compilation, optimisation and execution
+    of XML languages)</talk>
+   </engagement>
+   <engagement>
+    <conference>Apache Con Europe 2000 London</conference>
+    <talk>AxKit - the XML Application server for Apache</talk>
+   </engagement>
+   <engagement>
+    <conference>XML Dev Con Fall 2000 San Jose</conference>
+    <talk>Building XML Based Web Sites with Open Source Tools</talk>
+   </engagement>
+   <engagement>
+    <conference>XML Dev Con Fall 2000 San Jose</conference>
+    <talk>Generating XML From Form Data</talk>
+   </engagement>
+   <engagement>
+    <conference>XML Dev Con Europe 2001 London</conference>
+    <talk>Building XML Based Web Sites with Open Source Tools</talk>
+   </engagement>
+  </speaking>
 
 	<training>
 		<course>

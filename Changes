@@ -1,0 +1,23 @@
+1.2
+    - XPathScript can interpolate "{xpath}" in $t hash
+    - reduced required modules list
+    - Removed Sablotron from AxKit.pm due to some segfaults
+    - Fixed segfaults in aborted conversions with iconv
+    - Added AxResetProcessors
+    - Improved Apache::Filter support
+    - Much improved installer
+    - Many XSP changes/fixes. Now uses XML::XPath DOM tree.
+    - Memoize methods that call stat() in Cache and Providers
+    - Many miscellaneous improvements
+    
+1.1
+
+    - Uses iconv rather than Unicode::* modules to do character
+      set conversions
+    - Fix for AxMediaType/AxStyleName bug (Owen Stenseth)
+    - Fix for compilation under mod_perl 1.24_01
+    - Fix for relative URI's and file:// sub requests
+    - Minor stylesheet cache bug fixed
+    - Updated Filter provider for Apache::Filter >= 1.13
+    - Fix for filehandle leak
+    - Fix for Virtual Host Stash bug.

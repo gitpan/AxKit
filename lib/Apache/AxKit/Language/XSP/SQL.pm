@@ -1,17 +1,14 @@
-# $Id: SQL.pm,v 1.5 2000/07/14 07:48:30 matt Exp $
+# $Id: SQL.pm,v 1.7 2001/01/13 18:59:58 matt Exp $
 
 package Apache::AxKit::Language::XSP::SQL;
 use strict;
-use vars qw/@ISA/;
+use vars qw/@ISA $NS/;
 @ISA = ('Apache::AxKit::Language::XSP');
+
+$NS = 'http://www.apache.org/1999/SQL';
 
 use Apache::AxKit::Language::XSP;
 use DBI;
-
-sub register {
-	my $class = shift;
-	$class->register_taglib('http://www.apache.org/1999/SQL');
-}
 
 my @dbparams = qw(
 		username
@@ -53,16 +50,16 @@ sub execute_query {
 	}	
 
 	if ($dbparams->{'doc-element'}) {
-		my $el = $document->createElement($dbparams->{'doc-element'});
+		my $el = $XML::XPath::Node::Element->new($dbparams->{'doc-element'});
 		$parent->appendChild($el); $parent = $el;
 		
 		if ($dbparams->{'skip-rows-attribute'}) {
-			my $attr = $document->createAttribute($dbparams->{'skip-rows-attribute'}, $rowid);
-			$parent->setAttributeNode($attr);
+			my $attr = XML::Node::Attribute->new($dbparams->{'skip-rows-attribute'}, $rowid);
+			$parent->appendAttribute($attr);
 		}
 		if ($dbparams->{'query-attribute'}) {
-			my $attr = $document->createAttribute($dbparams->{'query-attribute'}, $query);
-			$parent->setAttributeNode($attr);
+			my $attr = XML::Node::Attribute->new($dbparams->{'query-attribute'}, $query);
+			$parent->appendAttribute($attr);
 		}
 	}
 
@@ -88,28 +85,29 @@ sub execute_query {
 		@hash{ @$names } = @$row;
 		
 		if ($dbparams->{'row-element'}) {
-			my $el = $document->createElement($dbparams->{'row-element'});
+			my $el = XML::XPath::Node::Element->new($dbparams->{'row-element'});
 			$parent->appendChild($el); $parent = $el;
 			
 			if ($dbparams->{'id-attribute'}) {
 				if ($dbparams->{'id-attribute-column'}) {
-					my $attr = $document->createAttribute($dbparams->{'id-attribute'}, $hash{$dbparams->{'id-attribute-column'}});
-					$parent->setAttributeNode($attr);
+					my $attr = XML::XPath::Node::Attribute->new($dbparams->{'id-attribute'},
+					$hash{$dbparams->{'id-attribute-column'}});
+					$parent->appendAttribute($attr);
 				}
 				else {
-					my $attr = $document->createAttribute($dbparams->{'id-attribute'}, $rowid);
-					$parent->setAttributeNode($attr);
+					my $attr = XML::XPath::Node::Attribute->new($dbparams->{'id-attribute'}, $rowid);
+					$parent->appendAttribute($attr);
 				}
 			}
 		}
 
 		for my $col (@$names) {
-			my $el = $document->createElement($col);
+			my $el = XML::XPath::Node::Element->new($col);
 			$parent->appendChild($el);
 			if (!defined($hash{$col})) {
 				if ($dbparams->{'null-indicator'} =~ /^y(es)?$/) {
-					my $attr = $document->createAttribute("NULL", "YES");
-					$el->setAttributeNode($attr);
+					my $attr = XML::XPath::Node::Attribute->new("NULL", "YES");
+					$el->appendAttribute($attr);
 				}
 				$hash{$col} = '';
 			}
@@ -119,12 +117,10 @@ sub execute_query {
 				$hash{$col} = $formatter->format($hash{$col});
 			}
 			
-			my $text = $document->createTextNode($hash{$col});
+			my $text = XML::XPath::Node::Text->new($hash{$col});
 			$el->appendChild($text);
 		}
 
-# 		my $slash_n = $document->createTextNode("\n");
-# 		$parent->appendChild($slash_n);
 		
 		if ($dbparams->{'row-element'}) {
 			$parent = $parent->getParentNode();
@@ -138,12 +134,12 @@ sub execute_query {
 	
 	if ($dbparams->{'doc-element'}) {
 		if ($dbparams->{'count-attribute'}) {
-			my $attr = $document->createAttribute($dbparams->{'count-attribute'}, $rowid);
-			$parent->setAttributeNode($attr);
+			my $attr = XML::XPath::Node::Attribute->new($dbparams->{'count-attribute'}, $rowid);
+			$parent->appendAttribute($attr);
 		}
 		if ($dbparams->{'max-rows-attribute'}) {
-			my $attr = $document->createAttribute($dbparams->{'max-rows-attribute'}, $currentrow);
-			$parent->setAttributeNode($attr);
+			my $attr = XML::XPath::Node::Attribute->new($dbparams->{'max-rows-attribute'}, $currentrow);
+			$parent->appendAttribute($attr);
 		}
 		$parent = $parent->getParentNode();
 	}

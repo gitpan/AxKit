@@ -1,0 +1,138 @@
+Installation of AxKit has been designed to be as simple as
+possible (but we might not always get it right!).
+
+If you do not have Apache and mod_perl installed, please scroll
+down to "INSTALLATION OF MOD_PERL/APACHE".
+
+CPAN SHELL WAY
+
+The easiest way to install it is from the CPAN shell:
+
+ $ su
+ $ perl -MCPAN -e shell
+ cpan> install AxKit
+
+This will download AxKit, and install any pre-requisite
+modules before installing it. You will also be asked questions
+regarding optional modules that you may wish to install.
+
+WITHOUT THE CPAN SHELL
+
+If you do not have network access (due to firewalls), installation
+is also fairly simple, it follows the common perl installation
+idiom:
+
+ $ perl Makefile.PL
+ $ make
+ $ make test
+ $ su
+ $ make install
+
+The installer will check pre-requisite modules and automatically
+install anything that is an absolute requirement before running.
+
+INSTALLATION OF MOD_PERL/APACHE
+
+Note that AxKit WILL NOT install Apache and mod_perl for you. That
+is simply because these are extremely large and complex packages,
+and you should install them yourself. However some people have
+experienced problems with their installation of mod_perl (for
+example segmentation faults). So here is my recipe for a stable
+installation:
+
+ Download mod_perl from http://perl.apache.org/
+ Download Apache from http://www.apache.org/httpd.html
+ Extract both archives in a suitable location (I use /tmp)
+ Do not extract one archive in the other's directory - this
+   will cause you problems.
+ 
+ Now cd to the mod_perl directory, and enter the following:
+ 
+ $ perl Makefile.PL \
+ > EVERYTHING=1 \
+ > USE_APACI=1 \
+ > DYNAMIC=1 \
+ > APACHE_PREFIX=/opt/apache \
+ > APACHE_SRC=../apache_1.3.12/src \
+ > DO_HTTPD=1 \
+ > APACI_ARGS="--enable-module=so --enable-shared=info 
+ > --enable-shared=proxy --enable-shared=rewrite 
+ > --enable-shared=log_agent"
+ $ make
+ $ su
+ $ make install
+
+Note that in the above, the $ and > are part of your shell prompt,
+not part of the commands to enter!
+
+Also note that the paths for the APACHE_SRC and APACHE_PREFIX should
+be fixed to the version of apache you downloaded, and the location
+you wish to install Apache into, respectively.
+
+ADVANCED INSTALLATION TIPS
+
+The following options can be passed on the command line to AxKit's
+Makefile.PL:
+
+  DEBUG=1
+  
+    This option turns on lots of output from the running of Makefile.PL,
+    use it in case you have problems installing AxKit and wish to
+    send email to axkit-users@axkit.org with your problem.
+
+  EXPAT_OPTS="..."
+  
+    Setting this option is only relevant if you do not already have
+    libexpat installed. It lists options to be passed to libexpat's
+    ./configure command. Such options might be "--prefix=/usr" which
+    will install libexpat in /usr/lib, rather than the default
+    location (which will likely be /usr/local/lib).
+
+  LIBS="-L/path/to/expat/lib -lexpat"
+  
+    Allows you to set your library search path.
+
+  INC="-I/path/to/expat/include"
+  
+    Allows you to set the include search path.
+
+  NO_DIRECTIVES=1
+  
+    This option turns off AxKit's apache configuration directives,
+    which means you will have to set these via PerlSetVar instead.
+    
+    This is useful because sometimes AxKit and mod_php can cause
+    conflicts when using configuration directives (and results
+    in segfaults). This is hopefully fixed in mod_perl 1.25.
+
+    Note that you *must* manually remove all traces of AxKit from
+    your /usr/lib/perl5/site_perl directory before re-running
+    Makefile.PL with NO_DIRECTIVES=1 because unfortunately this
+    causes AxKit to be installed in a completely different location,
+    yet mod_perl will pick up the original copy compiled with
+    directives, which is probably not what you want at all.
+
+GETTING HELP
+
+If you are still stuck getting this to work, first of all, see the
+AxKit FAQ at http://axkit.org/faq.xml - especially if your Apache
+is segfaulting when using AxKit.
+
+Then please send problem reports to axkit-users@axkit.org along with
+information about what version of the following items you are running:
+
+    AxKit
+    mod_perl
+    Apache
+    Perl
+    Operating System
+
+However please note that installation problems regarding mod_perl,
+Sablotron, or Apache should be directed to the appropriate places
+for those modules, not to the axkit-users mailing list. Thank you.
+
+IF EVERYTHING WORKS
+
+Congratulations! You have a running AxKit. Now please visit
+http://axkit.org/docs/quick_start.dkb for a guide to your first pages
+with AxKit.

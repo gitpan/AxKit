@@ -1,0 +1,578 @@
+<?xml version="1.0" standalone="no"?>
+<?xml-stylesheet href="/stylesheets/docbook_screen.xps" 
+				type="application/x-xpathscript" 
+				media="screen"
+				title="default" ?>
+<?xml-stylesheet href="/stylesheets/docbook_screen_fancy.xps" 
+				type="application/x-xpathscript" 
+				media="screen"
+				title="fancy"
+				alternate="yes" ?>
+<?xml-stylesheet href="/stylesheets/docbook_print.xps" 
+				type="application/x-xpathscript" 
+				media="screen"
+				title="print"
+				alternate="yes" ?>
+<?xml-stylesheet href="/stylesheets/docbook_handheld.xps" 
+				type="application/x-xpathscript" 
+				media="handheld"
+				title="default"?>
+<article label="ProviderHOWTO">
+<artheader>
+	<title>AxKit Provider HOWTO</title>
+	
+	<author>
+		<firstname>Riccardo</firstname>
+		<surname>Cambiassi</surname>
+		<email>brujah@infodrome.net</email>
+	</author>	
+	<abstract>
+		<para>A quite complete HOWTO on writing Providers for AxKit</para>
+	</abstract>
+</artheader>
+<sect1>
+<title>Introduction</title>
+<para>
+AxKit is an XML Application Server for Apache. It provides on-the-fly conversion from XML to any format, such as HTML, WAP or text using either W3C standard techniques, or flexible custom code. AxKit also uses a built-in Perl interpreter to provide some amazingly powerful techniques for XML transformation.  For more information on AxKit see <ulink url="http://www.axkit.org">www.axkit.org</ulink>.
+</para>
+<para>
+One of the most interesting features of AxKit is it's object architecture: it makes easy (and quite fun) to extend it to meet your own needs.
+From the AxKit manpage we learn that we can operate on three aspects of AxKit behaviour:
+<itemizedlist>
+<listitem>
+<emphasis>AxConfigReader</emphasis> returns information about various configuration options.
+</listitem>
+<listitem>
+<emphasis>AxProvider</emphasis> is the means by wich AxKit gets its resources from. 
+</listitem>
+<listitem>
+<emphasis>AxCacheModule</emphasis> is responsible for storing cache data for later retrieval.
+
+</listitem>
+</itemizedlist>
+The special feature that we'll exploit in this document is the extension of the <emphasis>Provider</emphasis> module.
+</para>
+</sect1>
+<sect1>
+<title>Overview of AxKit Providers</title>
+<para>All Providers descends from <application>Apache::AxKit::Provider</application> Module.
+From its manpage (and a bit of hacking) we learn that it relies upon the following (main) methods:
+<itemizedlist>
+<listitem>
+<application>new()</application>
+- creates a new Provider object; normally this method should be defined only in the parent class (<application>Apache::AxKit::Provider</application>). To handle custom initialization, look at <application>init()</application> below.
+</listitem>
+<listitem>
+<application>init()</application>
+ - intialize the provider; it is called by <application>new()</application>. Here the Provider module has the chance to carry out custom initialization procedures. The standard behaviour is to do nothing.
+<note>The <application>init()</application> method should accept argument as follows: the first is always the request object; then we have a list of key => value pairs 
+containing either 'uri' or 'file' key for the desired resource id and, in case of an external entity, 'rel' containing the Provider object for the main document. [is this correct ???].</note>
+</listitem>
+<listitem>
+<application>process() *</application>
+- answers the question "Shall we process this request?". Should return 1 if it can process the resource or die it it cannot, eventually <emphasis>throwing</emphasis> an opportune exception (see below).
+</listitem>
+<listitem>
+<application>exists() *</application>
+ - answers the question: "Does the resource exist?". Return 1 if it exists.
+</listitem>
+<listitem>
+<application>mtime() *</application>
+- answers the question "How old is this resource?". Return the modification time in days before the current time. It's used to test the validity of cached data.
+</listitem>
+<listitem>
+<application>get_fh() *</application>
+ - returns an open filehandle for the resource (or die if that's not possible).
+</listitem>
+<listitem>
+<application>get_strref() *</application>
+ - returns a reference to a scalar containing the resource; note that at least one of get_fh or get_strref must work.
+</listitem>
+<listitem>
+<application>key() *</application>
+ - returns an unique identifier for this resource.
+</listitem>
+<listitem>
+<application>get_styles()</application>
+ - extract stylesheets and external entities from the resource.
+</listitem>
+<listitem>
+<application>get_ext_ent_handler() </application>
+- return a reference to be used instead of XML::Parser's default external entity handler.
+</listitem>
+</itemizedlist>
+<note>All methods marked with * are not defined in <application>Apache::AxKit::Provider</application>, so each real Provider will have to implement their own.</note>
+</para>
+<sect2>
+<title>How do Providers work?</title>
+<para>Throughout the processing of a request, whenever AxKit needs to fetch a resource, it creates an <application>Apache::AxKit::Provider</application> object for the desired resource.
+This is a generic (highlevel) object whose job is not limited to define standard methods (see above) but also to verify which actual Provider is in charge and <application>reconsecrate()</application> to it.
+To change the default Provider you can use the <emphasis>AxProvider</emphasis> directive or simply set the variable with <emphasis>PerlSetVar</emphasis> directive from your httpd.conf:
+<programlisting>
+# either
+AxProvider Apache::AxKit::Provider::File
+# or
+PerlSetVar AxProvider Apache::AxKit::Provider::File
+</programlisting>
+</para>
+
+<para>
+A new Provider is created in order to get:
+<itemizedlist>
+<listitem>The XML document</listitem>
+<listitem>Every stylesheets</listitem>
+<listitem>Every external entity</listitem>
+</itemizedlist>
+</para>
+
+<example>
+<para>For example, let's suppose we have requested the following document at the url http://localhost/sample.xml</para>
+<programlisting>
+&lt;?xml version="1.0" ?&gt;
+  &lt;xml-stylesheet href="/sample.xsl" type="text/xsl"?&gt;
+  &lt;page&gt;
+    &lt;para&gt;Hello World!&lt;/para&gt;
+  &lt;/page&gt;
+</programlisting>
+From a quite high level point of view, AxKit will:
+<orderedlist>
+<listitem>Create a Provider for this resource [my $provider = Apache::AxKit::Provider->new($r)]</listitem>
+<listitem>Check if to proceed in processing this resource [if ($provider->process())]</listitem>
+<listitem>Get the resource [$provider->get_fh or $provider->get_strref()]</listitem>
+<listitem>Parse the XML to extract all stylesheet and external entities and, for each resource:</listitem>
+<orderedlist>
+<listitem>Create a Provider for this resource, specifying the 'uri' in case of a stylesheet or  either 'file' or 'uri' in case of an external entity.
+In our example we have just one stylesheet ('/sample.xsl') and no external entities.</listitem>
+<listitem>Check if we can process this resource</listitem>
+<listitem>Get the resource</listitem>
+</orderedlist>
+<listitem>Once AxKit has got all resources it will use Language Processors to apply the stylesheet to the document, and then delivery the result to the browser.</listitem>
+</orderedlist>
+</example>
+
+</sect2>
+
+</sect1>
+<sect1>
+<title>Standard Providers</title>
+<para>What follows is a list of the Providers that come with the standard distribution of AxKit.</para>
+<sect2>
+<title>File</title>
+<para>That's the default. It gets input from files (surprise!) relative to Apache's DocumentRoot. This is also the most complete Provider in that it defines all features and IMO the best starting place for everyone who wants to develop a new Provider.
+</para>
+<para> 
+It defines:
+<itemizedlist>
+<listitem> get_fh()</listitem>
+<listitem> get_strref()</listitem> 
+<listitem>key()</listitem>
+<listitem>exists()</listitem>
+<listitem>process()</listitem>
+<listitem>mtime()</listitem>
+</itemizedlist>
+and redefines:
+<itemizedlist>
+<listitem>init().</listitem>
+</itemizedlist>
+</para>
+</sect2>
+<sect2>
+<title>Scalar</title>
+<para>This is a basic provider, gets input from a scalar variable.
+AxKit uses this Provider in order to handle Error messages.</para>
+<para>
+It defines all standard methods:
+<itemizedlist>
+<listitem>process()</listitem>
+<listitem>exists()</listitem>
+<listitem>mtime()</listitem>
+<listitem>get_fh</listitem>
+<listitem>get_strref()</listitem>
+<listitem>key()</listitem>
+</itemizedlist>
+
+ and redefines:
+<itemizedlist>
+<listitem>new()</listitem>
+<listitem>init()</listitem>
+<listitem>apache_request</listitem>
+<listitem>get_styles()</listitem>
+</itemizedlist>
+</para>
+</sect2>
+<sect2>
+<title>Filter</title>
+<para>The most exotic Provider and, quite surprisingly, the most simple: it works with <application>Apache::Filter</application> in order to get data from another <emphasis>PerlHandler</emphasis>. This requires other Handlers to be "Filter aware". By the time of this writing, this applies to:
+<itemizedlist>
+<listitem>Apache::Registry</listitem>
+<listitem>Apache::SSI</listitem>
+<listitem>Apache::ASP</listitem>
+<listitem>HTML::Mason</listitem>
+<listitem>Apache::SimpleReplace</listitem>
+</itemizedlist>
+The Filter Provider is derived from File Provider and redefines just:
+<itemizedlist>
+<listitem>init()</listitem>
+<listitem>get_fh()</listitem>
+<listitem>get_strref()</listitem>
+<listitem>mtime()</listitem>
+</itemizedlist>
+</para>
+</sect2>
+</sect1>
+<sect1>
+<title>Using Filter Provider</title>
+<para>Here we'll discuss how to use Filter Provider in order to exploit Apache::Filter</para>
+<sect2>
+<title>Apache::Filter</title>
+<para>To enable the Filter chain, you will have to operate on both the Apache configuration and the single handlers  (here called Filters). The following piece of code is borrowed from Apache::Filter manpage:</para>
+<programlisting>
+#### In httpd.conf:
+         PerlModule Apache::Filter
+         # That's it - this isn't a handler.
+
+         &lt;Files ~ "*\.blah"&gt;
+          SetHandler perl-script
+          PerlSetVar Filter On
+          PerlHandler Filter1 Filter2 Filter3
+         &lt;/Files&gt;
+
+#### In Filter1, Filter2, and Filter3:
+         $r = $r->filter_register();  # Required
+         my $fh = $r->filter_input(); # Optional (you might not need the input FH)
+         while (&lt;$fh&gt;) {
+           s/ something / something else /;
+           print;
+         }
+</programlisting>
+<para>As we noticed before, currently the following public modules are Filter-aware.</para>
+<itemizedlist>
+<listitem>
+        Apache::Registry (using Apache::RegistryFilter, included with Apache::Filter)
+</listitem>
+<listitem>
+        Apache::SSI
+</listitem>
+<listitem>
+        Apache::ASP
+</listitem>
+<listitem>
+        HTML::Mason
+</listitem>
+<listitem>
+        Apache::SimpleReplace
+</listitem>
+</itemizedlist>
+</sect2>
+<sect2>
+<title>... with simple CGIs</title>
+<para>How to use Apache::RegistryFilter and AxKit. This is pretty simple: just add in httpd.conf:</para>
+<programlisting>
+PerlModule Apache::RegistryFilter
+PerlModule AxKit
+
+&lt;Location /filter&gt;
+ SetHandler perl-script
+ PerlSetVar Filter On
+ PerlHandler Apache::RegistryFilter AxKit
+&lt;/Location&gt;
+</programlisting>
+<para>Then write a CGI that will generate your xml document and put it in the $DocumentRoot/filter/ directory. What follows is a minimalistic example:</para>
+<programlisting>
+#!/usr/bin/perl
+
+print &lt;&lt;EOT;
+&lt;?xml version="1.0"?&gt;
+&lt;?xml-stylesheet href="plain.xsl"
+    type="text/xsl"?&gt;
+&lt;html&gt;
+  &lt;head&gt;
+  &lt;title&gt;AxKit/Simple CGI filter test&lt;/title&gt;
+  &lt;/head&gt;
+  &lt;body&gt;
+  &lt;table bgcolor="#FFFFFF"&gt;
+EOT
+
+print map { "&lt;tr&gt;&lt;td&gt;$_&lt;/td&gt;&lt;td&gt;$ENV{$_}&lt;/td&gt;&lt;/tr&gt;" } keys %ENV;
+
+print &lt;&lt;EOT;
+&lt;/table&gt;
+&lt;/body&gt;
+&lt;/html&gt;
+EOT
+</programlisting>
+<para>Finally, you will need a stylesheet to process the xml generated by the CGI. Here's an example:</para>
+<programlisting>
+&lt;?xml version="1.0" ?&gt;
+&lt;xsl:stylesheet
+	xmlns:xsl="http://www.w3.org/1999/XSL/Transform"
+	version="1.0"
+&gt;
+&lt;xsl:output
+	method="html"
+	indent="yes"
+	encoding="ISO-8859-1"
+/&gt;
+&lt;xsl:template match="/"&gt;
+	&lt;xsl:apply-templates select="/html/*"/&gt;
+&lt;/xsl:template&gt;
+
+&lt;xsl:template match="*"&gt;
+	&lt;xsl:copy&gt;
+		&lt;xsl:copy-of select="./@*" /&gt;
+		&lt;xsl:apply-templates /&gt;
+	&lt;/xsl:copy&gt;
+&lt;/xsl:template&gt;
+&lt;/xsl:stylesheet&gt;
+</programlisting>
+</sect2>
+<sect2>
+<title>... with Apache::ASP</title>
+<para><emphasis>Apache::ASP</emphasis> provides an Active Server Pages port to the Apache Web Server with Perl as the host scripting language. For more information about Apache::ASP, see <ulink url="http://www.apache-asp.org">Apache ASP homepage</ulink>.
+</para>
+<para>To enable it to work with the AxKit Filter Provider, just add the following in httpd.conf:</para>
+
+<programlisting>
+PerlModule Apache::Filter
+PerlModule Apache::ASP
+PerlModule AxKit
+
+&lt;Location /filter&gt;
+SetHandler perl-script
+PerlSetVar Filter On
+PerlHandler Apache::ASP AxKit
+&lt;/Location&gt;
+</programlisting>
+<para>Then create a sample ASP page to generate the xml. Here is a minimalistic example:</para> 
+<programlisting>
+&lt;?xml version="1.0"?&gt;
+&lt;?xml-stylesheet href="plain.xsl"
+	type="text/xsl"?&gt;
+&lt;html&gt;
+	&lt;head&gt;
+	&lt;title&gt;AxKit / Apache::ASP filter test&lt;/title&gt;
+	&lt;/head&gt;
+&lt;body bgcolor="#000000" text="#CCCCCC"&gt;
+	&lt;h3&gt;Environment Variables:&lt;/h3&gt;
+	&lt;table border="1" width="100%" cellspacing="0" cellpadding="0"&gt;
+&lt;%
+	my $env = $Request->ServerVariables;
+                $Response->Write ( map {  "&lt;tr&gt;&lt;th&gt;$_&lt;/th&gt;&lt;td&gt;$env->{$_}&lt;/td&gt;&lt;/tr&gt;" } keys %$env );
+
+%&gt;
+&lt;/table&gt;
+&lt;/body&gt;  
+&lt;/html&gt;
+</programlisting>
+</sect2>
+<!--
+<sect2>
+<title>... with HTML::Mason</title>
+<para>Mason is a tool for building, serving and managing large websites. For more information about Mason, take a look at <ulink url="http://www.masonhq.com">Mason HeadQuarters</ulink>.</para>
+</sect2>
+-->
+</sect1>
+<sect1>
+<title>Provider Internals</title>
+<para>Some advanced tips about AxKit. Everything you'll find in this chapter is to be considered just an overview on the subject and is included here just to let the reader better understand some of the main topics covered in this paper.</para>
+<!--
+<sect2><title>Use of Apache notes ($r->p?notes)</title>
+<para>headers_sent, passthru and so on...</para>
+</sect2>
+-->
+<sect2>
+<title>AxKit::Apache object</title>
+<para>AxKit redefines the request object through the <emphasis>AxKit::Apache</emphasis> package.</para>
+<para>This (re)defines the following methods:
+<itemizedlist>
+<listitem>content-type</listitem>
+<listitem>print</listitem>
+<listitem>no_cache</listitem>
+<listitem>send_http_header</listitem>
+</itemizedlist>
+</para>
+<para>The changes in the methods have mostly to do with cache handling and shouldn't be of much interest to you. Just note that with the <emphasis>no_cache</emphasis> method you can disable AxKit's own cache too.</para>
+</sect2>
+<sect2>
+<title>External Entity Handler</title>
+<para>As we stated before, it is possible to define a custom External Entity Handler in the Provider module. This 
+happens through the <emphasis>get_ext_ent_handler()</emphasis> routine. The default behaviour is to fetch remote <emphasis>http:</emphasis> entities with HTTP::GHTTP and local (unknown or no scheme) ones with the current AxKit Provider.</para>
+</sect2>
+<sect2>
+<title>Apache::AxKit::Exception</title>
+<para>AxKit uses a subclass of <emphasis>Error</emphasis> to handle Exceptions. This implements the try / catch / otherwise / finally primitives. You can use them to handle (or recover from) errors in a clean way. </para>
+<para>The Apache::AxKit::Exception package defines the following types of exception:
+<itemizedlist>
+<listitem>Apache::AxKit::Exception</listitem>
+<listitem>Apache::AxKit::Exception::Declined</listitem>
+<listitem>Apache::AxKit::Exception::Error</listitem>
+<listitem>Apache::AxKit::Exception::OK</listitem>
+<listitem>Apache::AxKit::Exception::Retval</listitem>
+<listitem>Apache::AxKit::Exception::IO</listitem>
+</itemizedlist>
+</para>
+</sect2>
+</sect1>
+<sect1>
+<title>Writing a simple provider: DBI</title>
+<para>Here's a complete example of an <application>AxKit Provider</application> from scratch.</para>
+<para>This is called <emphasis>Apache::AxKit::Provider::DBI</emphasis> and is designed to get its data from a DataBase.
+In my example, I used as data source a MySQL installed on localhost, with the 'test' db and a 'guest' user with password 'guest'. Here is the table definition and default values:
+</para>
+<programlisting>
+
+# Table definition
+CREATE TABLE blocks (
+   id varchar(255) DEFAULT '' NOT NULL,
+   block TEXT,
+   PRIMARY KEY (id)
+);
+
+# Sample code
+INSERT INTO blocks VALUES ('/index.xml', 
+   '&lt;?xml version="1.0"?&gt;
+     &lt;page&gt;
+	&lt;title&gt;Hello world&lt;/title&gt;
+     &lt;/page&gt;');
+
+INSERT INTO blocks VALUES ('/index.xsl', 
+'&lt;?xml version="1.0" ?&gt;
+&lt;xsl:stylesheet
+    xmlns:xsl="http://www.w3.org/1999/XSL/Transform"
+    version="1.0"
+&gt;
+
+&lt;xsl:template match="/"&gt;
+   &lt;xsl:apply-templates /&gt;
+&lt;/xsl:template&gt;
+
+&lt;xsl:template match="title"&gt;
+   title = &lt;xsl:value-of select="."/&gt;
+&lt;/xsl:template&gt;
+&lt;/xsl:stylesheet&gt;');
+
+</programlisting>
+
+What follows is the code for the provider: 
+<programlisting>
+#TODO: 
+# - insert some decent comments
+# - write down a sample external entity handler
+# - explain better the get_mtime() thing.
+
+package Apache::AxKit::Provider::DBI;
+use strict;
+use vars qw/@ISA/;
+@ISA = ('Apache::AxKit::Provider');
+
+use Apache;
+use Apache::Log;
+use Apache::AxKit::Exception;
+use Apache::AxKit::Provider;
+use Apache::AxKit::Provider::File;
+use Apache::MimeXML;
+use Apache::Constants;
+
+use DBI;
+
+# sub: Init
+# Here we do some initialization stuff. 
+sub init {
+    my $self = shift;
+    my (%p) = @_;
+    
+    if ($p{uri}) {
+      # called from :
+      # process_request ($styleprovider = Apache::AxKit::Provider->new)
+      # check_resource_mtimes ($ent_provider = ... )
+      # [...]
+      $self->{id} = $p{uri};
+    }
+    elsif ($p{file}) {
+      
+      $self->{id} = $p{file};
+    }
+    else {
+      $self->{id} = $self->{apache}->filename();
+    }
+}
+
+# sub: get_fh
+# we don't want to handle files, so we just throw an exception here.
+sub get_fh {
+    throw Apache::AxKit::Exception::IO( 
+            -text => "Can't get fh for DBI filehandle"
+            );
+}
+
+# sub: get_strref
+# since we refused to work with file handles, we HAVE to define this.
+sub get_strref {
+  my $self = shift;
+
+  # Connect to the DB and query it.
+  my $dbh = DBI->connect("dbi:mysql:test",'guest', 'guest');
+  my $sth = $dbh->prepare("SELECT block FROM blocks WHERE id='".$self->{id}."'");
+  $sth->execute;
+
+  # Now get the data and disconnect from the DB
+  my $res = $sth->fetchrow();
+  $dbh->disconnect;
+  return \$res;
+  
+}
+
+# sub: mtime
+# This should return the modification time of the resource, for simplicity here we decrement it everytime we are called
+# so that resources are never considere cacheable.
+
+use vars qw/$mtime/;
+
+$mtime = 0;
+
+sub mtime {
+  my $self=shift;
+  return --$time; #borrowed from Scalar Provider
+}
+
+# sub: process
+
+sub process {
+  my $self = shift;
+  # For simplicity, let's assume our DB entry always exists
+  return 1; 
+} 
+
+# sub: key
+# should return a unique identifier for the resource.
+# Let's assume the id from the uri is a good one.
+
+sub key {
+  my $self = shift;
+  return $self->{id};
+}
+
+# sub: exists
+# should return 1 only if the resource actually exists. Let's cheat for now.
+sub exists {
+  my $self = shift;
+  return 1;
+}
+
+1;
+
+
+</programlisting>
+
+to enable it, just modify your httpd.conf as follows:
+<programlisting>
+
+&lt;Location /&gt;
+PerlHandler AxKit
+AxProvider Apache::AxKit::Provider::DBI
+&lt;/Location &gt;
+</programlisting> 
+</sect1>
+
+
+</article>

@@ -13,12 +13,11 @@ data differently to others. AxKit allows web designers to focus on web
 site design, content developers to work on a purely content basis, and
 webmasters to focus on their core competencies. 
 
-AxKit is based on components that are replaceable. This allows the web
-site developer to create a completely custom XML Application Server
-based around the AxKit API. AxKit can either automatically provide
-caching facilities, or you can create your own cache handler, so that
-XML transformations (which can be time consuming) only happen when
-required. 
+AxKit is based on plugin components. This allows the web site developer
+to create a completely custom XML Application Server based around the
+AxKit API. AxKit can either automatically provide caching facilities,
+or you can create your own cache handler, so that XML transformations
+(which can be time consuming) only happen when required. 
 
 The toolkit also provides ability to build component based web sites,
 and dynamic content. Database integration is fully supported, allowing
@@ -30,4 +29,5 @@ the potential mess that CGI programming can cause.
 HOME PAGE
 
 The web site for AxKit is http://axkit.org/. There you will find lots
-more documentation and example code.
+more documentation and example code. The complete source for axkit.org
+is included in this distribution in the axkit.org directory.

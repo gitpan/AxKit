@@ -98,6 +98,13 @@ make test install</pre>
 				coming online all the time.
 				</para>
 			</subsection>
+			
+			<subsection>
+				<title>Bizarre copy of ARRAY in aassign (sic)</title>
+				<para>
+				This is actually a bug in Perl 5.6. See <a href="http://www.xray.mpe.mpg.de/mailing-lists/perl5-porters/2000-06/msg00200.html">this post to perl5-porters</a> for a patch.
+				</para>
+			</subsection>
 
 			<subsection>
 				<title>Should I ever run with scissors?</title>

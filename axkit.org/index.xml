@@ -32,8 +32,8 @@
 				powerful techniques for XML transformation.
 			</para>
 			<para>
-				The emphasis with AxKit is on separation of content from
-				presentation. The pipelining technique that AxKit uses allows
+				AxKit makes the separation of content and presentation a
+        practical reality. The pipelining technique that AxKit uses allows
 				content to be converted to a presentable format in stages,
 				allowing certain platforms to see data differently to others.
 				AxKit allows web designers to focus on web site design,
@@ -52,7 +52,7 @@
 			<para>
 				The toolkit also provides ability to build component based web
 				sites, and dynamic content. Database integration is fully
-				supported, allowing either deliver of XML from a database, or
+				supported, allowing either delivery of XML from a database, or
 				XML generation from a database query. Dynamic web components can
 				be built using the Perl language, making the possibilities as
 				infinite as CGI scripts, without the potential mess that CGI

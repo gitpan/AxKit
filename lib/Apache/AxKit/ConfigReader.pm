@@ -1,4 +1,4 @@
-# $Id: ConfigReader.pm,v 1.17 2000/10/01 22:08:40 matt Exp $
+# $Id: ConfigReader.pm,v 1.23 2001/01/13 20:13:51 matt Exp $
 
 package Apache::AxKit::ConfigReader;
 
@@ -107,12 +107,21 @@ sub DebugLevel {
 
 sub OutputCharset {
     my $self = shift;
+
+#    warn "OutputCharset\n";
+    unless ($self->{cfg}{TranslateOutput} ||
+            $self->{apache}->dir_config('AxTranslateOutput')) {
+        return;
+    }
+    
+#    warn "Checking OutputCharset\n";
     
     if (my $charset = $self->{cfg}{OutputCharset}
         || $self->{apache}->dir_config('AxOutputCharset')) {
         return $charset;
     }
     
+#    warn "Checking Accept-Charset\n";
     # check HTTP_ACCEPT_CHARSET
     if (my $ok_charsets = $ENV{HTTP_ACCEPT_CHARSET}) {
         my @charsets = split(/,\s*/, $ok_charsets);
@@ -123,17 +132,19 @@ sub OutputCharset {
 
             ($charset, $score) = split(/;\s*q=/, $charset, 2);
             $score = 1 unless (defined($score) && ($score =~ /^(\+|\-)?\d+(\.\d+)?$/));
-            
-            if ($score > $retscore || $charset =~ /^utf\-?8$/) { # we like utf8
+           
+            if ($score > $retscore || $charset =~ /^utf\-?8$/i) { # we like utf8
                 $retcharset = $charset;
                 $retscore = $score;
             }
         }
         
         $retcharset =~ s/iso/ISO/;
+        $retcharset =~ s/(us\-)?ascii/US-ASCII/;
         
         return undef if $retcharset =~ /^utf\-?8$/;
-
+	return undef if $retcharset eq '*';
+# warn "Charset: '$retcharset'\n";
         return $retcharset;
     }
     
@@ -146,7 +157,7 @@ sub ErrorStyles {
     my ($type, $href);
     if (!$style) {
         ($type, $href) = split(/\s*=>\s*/,
-                $self->{apache}->dir_config('AxErrorStylesheet'),
+                ($self->{apache}->dir_config('AxErrorStylesheet') || ''),
                 2);
         return [] unless $href;
     }
@@ -157,6 +168,12 @@ sub ErrorStyles {
     my $style_map = $self->StyleMap;
     
     my $module = $style_map->{ $type };
+    
+    if (!$module) {
+        throw Apache::AxKit::Exception::Error(
+                -text => "ErrorStylesheet: No module mapping found for type '$type'"
+                );
+    }
     
     return [{href => $href, type => $type, module => $module}];
 }
@@ -213,30 +230,46 @@ sub DoGzip {
 
 sub GetMatchingProcessors {
     my $self = shift;
-    my ($media, $style, $doctype, $dtd, $root) = @_;
+    my ($media, $style, $doctype, $dtd, $root, $styles) = @_;
+    return @$styles if @$styles;
     
+    $style ||= '#default';
+
     my $list = $self->{cfg}{Processors}{$media}{$style};
+
+    my $processors = $self->{apache}->dir_config('AxProcessors');
+    if( $processors ) {
+      foreach my $processor (split(/\s*,\s*/, $processors) ) {
+	my ($pmedia, $pstyle, @processor) = split(/\s+/, $processor);
+	next unless ($pmedia eq $media and $pstyle eq $style);
+	push (@$list, [ 'NORMAL', @processor ] );
+      }
+    }
     
     my @results;
     
     for my $directive (@$list) {
         my $type = $directive->[0];
         if ($type eq 'NORMAL') {
-            push @results, { type => $directive->[1], href => $directive->[2] };
+            push @results, { type => $directive->[1], href => $directive->[2],
+                    title => $style };
         }
         elsif ($type eq 'DocType') {
             if ($doctype eq $directive->[3]) {
-                push @results, { type => $directive->[1], href => $directive->[2] };
+                push @results, { type => $directive->[1], href => $directive->[2],
+                    title => $style };
             }
         }
         elsif ($type eq 'DTD') {
             if ($dtd eq $directive->[3]) {
-                push @results, { type => $directive->[1], href => $directive->[2] };
+                push @results, { type => $directive->[1], href => $directive->[2],
+                    title => $style };
             }
         }
         elsif ($type eq 'Root') {
             if ($root eq $directive->[3]) {
-                push @results, { type => $directive->[1], href => $directive->[2] };
+                push @results, { type => $directive->[1], href => $directive->[2],
+                    title => $style };
             }
         }
         else {
@@ -253,8 +286,11 @@ sub XSPTaglibs {
     my @others;
     
     @others = eval { keys %{ $self->{cfg}{XSPTaglibs} } };
+    warn $@ if $@;
     
-    return @others if @others;
+    if (@others) {
+        return @others;
+    }
     
     local $^W;
     @others = split(/\s+/, $self->{apache}->dir_config('AxAddXSPTaglibs'));

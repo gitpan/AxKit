@@ -1,4 +1,4 @@
-# $Id: File.pm,v 1.18 2000/10/01 22:08:59 matt Exp $
+# $Id: File.pm,v 1.22 2001/01/19 13:50:38 matt Exp $
 
 package Apache::AxKit::Provider::File;
 use strict;
@@ -17,11 +17,27 @@ use Fcntl qw(:DEFAULT);
 sub init {
     my $self = shift;
     my (%p) = @_;
+
+    if ($p{uri} and $p{uri} =~ s|^file:(//)?||) {
+        $p{file} = delete $p{uri};
+    }
     
     if ($p{uri}) {
         my $r = $p{rel} ? $p{rel}->apache_request() : $self->apache_request();
         
+        AxKit::Debug(8, "File Provider looking up uri $p{uri}");
+
         $self->{apache} = $r->lookup_uri($p{uri});
+        $self->{file} = $self->{apache}->filename();
+        
+        AxKit::Debug(8, "File Provider set filename to $self->{file}");
+    }
+    elsif ($p{file}) {
+        my $r = $p{rel} ? $p{rel}->apache_request() : $self->apache_request();
+        
+        AxKit::Debug(8, "File Provider looking up file $p{file}");
+
+        $self->{apache} = $r->lookup_file($p{file});
         $self->{file} = $self->{apache}->filename();
         
         AxKit::Debug(8, "File Provider set filename to $self->{file}");
@@ -38,8 +54,10 @@ sub key {
 
 sub exists {
     my $self = shift;
+    return $self->{file_exists} if exists $self->{file_exists};
     if (-e $self->{file}) {
         if (-r _ ) {
+            $self->{file_exists} = 1;
             return 1;
         }
         else {
@@ -55,19 +73,13 @@ sub process {
     
     my $xmlfile = $self->{file};
     
-    if (!-e $xmlfile) {
+    unless ($self->exists()) {
         throw Apache::AxKit::Exception::Declined(
-                reason => "file '$xmlfile' does not exist"
+                reason => "file '$xmlfile' does not exist or is not readable"
                 );
     }
     
-    if (!-r _ ) {
-        throw Apache::AxKit::Exception::Declined(
-                reason => "file '$xmlfile' does not have the read bits set"
-                );
-    }
-    
-    if (-d _ ) {
+    if (-d $xmlfile) {
         throw Apache::AxKit::Exception::Declined(
                 reason => "'$xmlfile' is a directory"
                 );
@@ -89,11 +101,15 @@ sub process {
 
 sub mtime {
     my $self = shift;
-    return -M $self->{file};
+    return $self->{mtime} if exists $self->{mtime};
+    return ($self->{mtime} = -M $self->{file});
 }
 
 sub get_fh {
     my $self = shift;
+    if (!$self->exists()) {
+        throw Apache::AxKit::Exception::IO(-text => "File '$self->{file}' does not exist or is not readable");
+    }
     my $filename = $self->{file};
     chdir(dirname($filename));
     my $fh = Apache->gensym();

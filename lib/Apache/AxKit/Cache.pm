@@ -1,4 +1,4 @@
-# $Id: Cache.pm,v 1.15 2000/10/02 17:35:34 matt Exp $
+# $Id: Cache.pm,v 1.18 2001/01/19 13:50:52 matt Exp $
 
 package Apache::AxKit::Cache;
 use strict;
@@ -14,7 +14,15 @@ use Fcntl qw(:DEFAULT);
 sub new {
     my $class = shift;
     my ($r, $xmlfile, @extras) = @_;
-    my $key = Digest::MD5->new->add("$xmlfile:" . join(':', @extras))->hexdigest;
+    my $key = Digest::MD5->new->add(
+            join(':', 
+                $r->get_server_name,
+                $r->get_server_port,
+                $xmlfile,
+                @extras
+            ))->hexdigest;
+    
+    AxKit::Debug(7, "Cache: key = $key");
     
 #    warn "New for: $xmlfile:" . join(':', @extras). "\n";
     
@@ -137,6 +145,10 @@ sub deliver {
     else {
         AxKit::Debug(4, "Cache: Sending untransformed content to browser");
 
+        # Make sure we unset PATH_INFO or wierd things can happen!
+        $ENV{PATH_INFO} = '';
+        $r->path_info('');
+        
         if ($AxKit::Cfg->DoGzip) {
             AxKit::Debug(4, 'Cache: Delivering gzipped output');
             $r->filename($self->{file}.'.gz');
@@ -159,13 +171,15 @@ sub reset {
 
 sub mtime {
     my $self = shift;
-    return -M $self->{file};
+    return $self->{mtime} if exists $self->{mtime};
+    return ($self->{mtime} = -M $self->{file});
 }
 
 sub exists {
     my $self = shift;
     return if $self->{no_cache};
-    return -e $self->{file};
+    return $self->{file_exists} if exists $self->{file_exists};
+    return ($self->{file_exists} = -e $self->{file});
 }
 
 sub key {

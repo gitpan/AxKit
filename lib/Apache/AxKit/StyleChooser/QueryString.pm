@@ -1,4 +1,4 @@
-# $Id: QueryString.pm,v 1.5 2000/09/10 15:04:32 matt Exp $
+# $Id: QueryString.pm,v 1.6 2000/12/06 14:11:54 matt Exp $
 
 package Apache::AxKit::StyleChooser::QueryString;
 
@@ -26,7 +26,7 @@ Apache::AxKit::StyleChooser::QueryString - Choose stylesheet using querystring
 
 This module lets you pick a stylesheet based on the querystring. To use
 it, simply add this module to the list of PerlHandlers prior to
-Apache::XMLStylesheet:
+the main AxKit handler:
 
 	PerlHandler Apache::AxKit::StyleChooser::QueryString \
 			AxKit

@@ -1,10 +1,14 @@
 <?xml version="1.0"?>
 <?xml-stylesheet href="/stylesheets/docbook_screen.xps"
-				type="application/x-xpathscript"
-				media="screen"
-				title="default" ?>
+        type="application/x-xpathscript"
+        media="screen"
+        title="default"
+?>
 <?xml-stylesheet href="/stylesheets/docbook_print.xps"
-type="application/x-xpathscript" title="print" alternate="yes"?>
+        type="application/x-xpathscript"
+        title="print"
+        alternate="yes"
+?>
 <!DOCTYPE article [
 <!ENTITY prompt "&#x25; ">
 ]>
@@ -21,9 +25,10 @@ type="application/x-xpathscript" title="print" alternate="yes"?>
   <abstract>
     <para>
     This document is a <emphasis>quick start</emphasis> guide designed to help developers
-    deliver transformed XML with AxKit as quickly as possible. As such, we
-    will only be focusing on one type of transformation (XSLT) and many of the
-    finer points of AxKit's extremely robust interface will not be covered.
+    deliver transformed XML with AxKit as quickly as possible. As such, many of the
+    finer points of AxKit's extremely robust interface will not be covered. For a more
+    descriptive introduction, please see Matt's <ulink url=
+    "http://axkit.org/docs/introduction.dkb">Introduction to AxKit</ulink>.
     </para>
     <para>
 
@@ -57,56 +62,13 @@ downloaded the source, type the following:
 &prompt; <userinput>make install</userinput>
 </programlisting>
 </informalexample>
+If <literal>perl Makefile.PL</literal> warns about missing modules, make a note of these
+dependencies and install the corresponding Perl packages before proceeding with the AxKit
+installation. AxKit will not be properly installed, otherwise.
 </para>
 </sect2>
 <sect2>
-<title>Step 2 - Download and Install the Sablotron XSLT
-Processor</title>
-<para>
-Next, fetch either the source or appropriate binary distribution of the
-Sablotron XSLT Processor from <ulink url="http://www.gingerall.com/">
-www.gingerall.com</ulink>. If you choose to install from the source, you
-will also need to get Sablot-Expat.tar.gz from the same directory.
-</para>
-<para>
-Installing Sablotron from the source:
-<informalexample>
-<programlisting>
-&prompt; <userinput>tar -zxvf Sablot-x.xx.tar.gz</userinput>
-&prompt; <userinput>tar -zxvf Sablot-Expat.tar.gz</userinput>
-&prompt; <userinput>cd Sablot-x.xx/</userinput>
-&prompt; <userinput>./configure</userinput>
-&prompt; <userinput>make</userinput>
-&prompt; <userinput>make install</userinput>
-</programlisting>
-</informalexample>
-Please note that Sablotron build process described here covers versions 0.41 and above.
-Consult the INSTALL and README files that shipped with the version you downloaded for details
-and possible changes.
-</para>
-</sect2>
-<sect2>
-<title>Step 3 - Download and Install the XML::Sablotron Perl
-Library</title>
-<para>
-Next, get the latest version of the XML::Sablotron Perl package from <ulink
-url="http://www.gingerall.com/">www.gingerall.com</ulink>, cd to the
-directory you downloaded the tarball to and type:
-<informalexample>
-<programlisting>
-&prompt; <userinput>tar -zxvf XML-Sablot-x.xx.tar.gz</userinput>
-&prompt; <userinput>mv XML-Sablot-x.xx/ Sablot-x.xx/</userinput>
-&prompt; <userinput>cd Sablot-x.xx/XML-Sablot-x.xx/</userinput>
-&prompt; <userinput>perl Makefile.PL</userinput>
-&prompt; <userinput>make</userinput>
-&prompt; <userinput>make test</userinput>
-&prompt; <userinput>make install</userinput>
-</programlisting>
-</informalexample>
-</para>
-</sect2>
-<sect2>
-<title>Step 4 - Edit Your httpd.conf File</title>
+<title>Step 2 - Edit Your httpd.conf File</title>
 <para>
 Add the following lines to your httpd.conf:
 <informalexample>
@@ -114,6 +76,9 @@ Add the following lines to your httpd.conf:
 PerlModule AxKit
 SetHandler perl-script
 PerlHandler AxKit
+AxAddStyleMap application/x-xpathscript Apache::AxKit::Language::XPathScript
+
+# add the following only if you intend to install Sablotron
 AxAddStyleMap text/xsl Apache::AxKit::Language::Sablot
 </programlisting>
 </informalexample>
@@ -121,8 +86,8 @@ AxAddStyleMap text/xsl Apache::AxKit::Language::Sablot
 <para>
 Don't worry that this looks like AxKit will deliver all of your files,
 if it doesn't detect XML at the URL you give it, it will let the httpd
-deliver it as normal. If you're still concerned, put the <emphasis>last
-3</emphasis> configuration directives in a <ulink
+deliver it as normal. If you're still concerned, put <emphasis>all but the first</emphasis>
+configuration directive in a <ulink
 url="http://www.apache.org/docs/mod/core.html#location"
 ><literal>&lt;Location></literal></ulink> section. Note that the first
 line: <literal>PerlModule AxKit</literal> <emphasis>MUST</emphasis>
@@ -137,10 +102,70 @@ with AxKit!
 </para>
 </sect2>
 </sect1>
-
-
 <sect1>
-<title>Your First XSLT Transformation</title>
+<title>Installing the Sablotron XSLT Processor (Optional)</title>
+<para>
+This section assumes that you will be installing the Sablotron XSLT processor along with
+AxKit. If you want to see AxKit in action but do not want to install Sablotron you may safely
+skip to the <ulink url="quick_start.dkb?section=3">next section</ulink>.
+</para>
+<sect2>
+<title>Step 1 - Download and Install the Sablotron XSLT
+Processor</title>
+<para>
+Next, fetch either the source or appropriate binary distribution of the
+Sablotron XSLT Processor from <ulink url="http://www.gingerall.com/">
+www.gingerall.com</ulink>. As of version 0.50, Sablotron requires the shared library version
+of the Expat XML parser to be installed before installing Sablotron. Visit <ulink url=
+"http://sourceforge.net/projects/expat/">the Expat project page</ulink> for sources and
+installation instructions.
+</para>
+<para>
+Installing Sablotron from the source:
+<informalexample>
+<programlisting>
+&prompt; <userinput>tar -zxvf Sablot-x.xx.tar.gz</userinput>
+&prompt; <userinput>cd Sablot-x.xx/</userinput>
+&prompt; <userinput>./configure</userinput>
+&prompt; <userinput>make</userinput>
+&prompt; <userinput>make install</userinput>
+</programlisting>
+</informalexample>
+Please note that Sablotron build process described here covers versions 0.50. Consult the
+INSTALL and README files that shipped with the version you downloaded for details
+and possible changes.
+</para>
+</sect2>
+<sect2>
+<title>Step 2 - Install the XML::Sablotron Perl Library</title>
+<para>
+Next, install XML::Sablotron. You can either install the package by hand or use the CPAN
+shell. To install using the CPAN shell type:
+<informalexample>
+<programlisting>
+&prompt; <userinput>perl -MCPAN -e shell</userinput>
+&prompt; <userinput>install XML::Sablotron</userinput>
+</programlisting>
+</informalexample>
+To install the packages yourself, get the latest version of the XML::Sablotron Perl package
+from <ulink url="http://www.gingerall.com/">www.gingerall.com</ulink>, cd to the
+directory you downloaded the tarball to and type:
+<informalexample>
+<programlisting>
+&prompt; <userinput>tar -zxvf XML-Sablot-x.xx.tar.gz</userinput>
+&prompt; <userinput>mv XML-Sablot-x.xx/ Sablot-x.xx/</userinput>
+&prompt; <userinput>cd Sablot-x.xx/XML-Sablot-x.xx/</userinput>
+&prompt; <userinput>perl Makefile.PL</userinput>
+&prompt; <userinput>make</userinput>
+&prompt; <userinput>make test</userinput>
+&prompt; <userinput>make install</userinput>
+</programlisting>
+</informalexample>
+</para>
+</sect2>
+</sect1>
+<sect1>
+<title>Sample Document Transformations</title>
 <para>
 Now, we're going to see how AxKit works by transforming an XML file containing data about
 Camelids (note the dubious Perl reference) into HTML.
@@ -173,10 +198,18 @@ Save this file as test.xml.
 </para>
 </sect2>
 <sect2>
-<title>Step 2 - Create an XSLT Stylesheet</title>
+<title>Step 2 - Create a Stylesheet</title>
 <para>
-Now, create the stylesheet by starting a new file and entering the
-following:
+Now, create the stylesheet to transform your XML document. If you have chosen to install
+Sablotron or one of the other XSLT processors that AxKit supports you may use either the XSLT
+or XPathScript samples below. If you have not installed an XSLT processor skip directly to
+the XPathScript example.
+</para>
+</sect2>
+<sect2>
+<title>Using XSLT</title>
+<para>
+Start a new file and type the following:
 <informalexample>
 <programlisting><![CDATA[
 <?xml version="1.0"?>
@@ -215,18 +248,61 @@ Save this file as test.xsl.
 </para>
 </sect2>
 <sect2>
-<title>Step 3 - Associate the XML Document with your XSLT
-Stylesheet</title>
+<title>Using XPathScript</title>
 <para>
-Next, re-open the test.xml file and add the following line just after the &lt;?xml
-version="1.0"?> declaration:
+Create a new file and type:
+<informalexample>
+<programlisting><![CDATA[
+<%
+$t->{'humps'}{'pre'} = "<td>";
+$t->{'humps'}{'post'} = "</td>";
+$t->{'disposition'}{'pre'} = "<td>";
+$t->{'disposition'}{'post'} = "</td>";
+$t->{'species'}{testcode} = sub {
+    my $node = shift;
+    my $t = shift;
+    $t->{pre} = '<tr><td>' . findvalue('@name', $node) . '</td>';
+    $t->{post} = "</tr>";
+    return 1;
+}
+%>
+
+<html>
+<head>
+        <title>Know Your Dromedaries</title>
+</head>
+<body bgcolor="white">
+    <table bgcolor="eeeeee" border="1">
+    <tr><th>Species</th><th>No. of Humps</th><th>Disposition</th></tr>
+
+    <%= apply_templates('/dromedaries/species'); %>
+
+    </table>
+</body>
+</html>
+]]></programlisting>
+</informalexample>
+Save this file as test.xps.
+</para>
+</sect2>
+<sect2>
+<title>Step 3 - Associate the XML Document with your Stylesheet</title>
+<para>
+Next, re-open the test.xml file and add the following just after the &lt;?xml version="1.0"?>
+declaration. If you have selected the XSLT example, add:
 <informalexample>
 <programlisting><![CDATA[
 <?xml-stylesheet href="test.xsl" type="text/xsl"?>
 ]]></programlisting>
 </informalexample>
-Note that this line is telling AxKit which stylesheet to use (test.xsl) and
-which handler to use for that stylesheet (text/xsl). Now, save the test.xml
+ Or, if you have chosen the XPathScript sample, use:
+<informalexample>
+<programlisting><![CDATA[
+<?xml-stylesheet href="test.xps" type="application/x-xpathscript"?>
+]]></programlisting>
+</informalexample>
+Note that this line is telling AxKit which stylesheet to use and
+which handler to use for that stylesheet. Now, save the test.xml
 file and quit your editor.
 </para>
 </sect2>
@@ -234,16 +310,27 @@ file and quit your editor.
 <title>Step 4 - Finishing Up</title>
 <para>
 You are now ready to deliver your little zoological XML data file as
-formatted HTML! Just copy or move the test.xml and test.xsl files into the
+formatted HTML! Just copy or move the XML and stylesheet files into the
 same directory under your httpd DocumentRoot. Then, point your browser to
 http://your-server.com/path/to/test.xml and you should see your data nicely
 formatted in an HTML table.
 </para>
 <para>
-Congratulations, you are now well on the road to adding XML, XSLT and AxKit
+Congratulations, you are now well on the road to adding XML, XSLT, XPathScript and AxKit
 to your developmental toolbelt. For more information about AxKit's advanced
-features or, if you had any problems during this process, please visit the
-<ulink url="http://www.axkit.org/">AxKit homepage</ulink>.
+features, please visit the <ulink url="http://www.axkit.org/">AxKit homepage</ulink>.
+</para>
+</sect2>
+<sect2>
+<title>If Things Go Wrong</title>
+<para>
+As I stated in the introduction, this is document is designed to walk someone through the
+AxKit instalation process, on to serving transformed documents as quickly and simply as
+possible. Depending upon your setup, installing AxKit may require some special attention to
+get it to sanely co-exist with some of the other tools that you may be using. If you've had
+any trouble while following the steps outlined here, please consult the <ulink url=
+"http://axkit.org/faq.xml">AxKit FAQ</ulink>, and the AxKit User's <ulink url=
+"http://axkit.org/cgi-bin/ezmlm-cgi/4">mailing list archives</ulink>.
 </para>
 </sect2>
 </sect1>
@@ -261,6 +348,8 @@ features or, if you had any problems during this process, please visit the
     <listitem><ulink url="http://www.modperl.com/">Writing Apache Modules
     with Perl and C</ulink>
     </listitem>
+    <listitem><ulink url="http://take23.org/">mod_perl News and Information</ulink>
+    </listitem>
   </itemizedlist>
 </para>
 </sect2>
@@ -269,17 +358,43 @@ features or, if you had any problems during this process, please visit the
 <para>
   <itemizedlist>
     <listitem><ulink url="http://www.w3.org/Style/XSL/">W3C Specification
-    </ulink>
-    </listitem>
-    <listitem><ulink url="http://www.xml.com/pub/Guide/XSLT">XSLT Resources
-    at XML.com</ulink>
-    </listitem>
+    </ulink></listitem>
+    <listitem><ulink url="http://www.xml.com/pub/Guide/XSLT">XSLT Resources at XML.com
+    </ulink></listitem>
+    <listitem><ulink url="http://www.mulberrytech.com/quickref/index.html">Mulberry
+    Technologies' XPath and XSLT quick reference card (PDF).</ulink></listitem>
+    <listitem><ulink url="http://www.zvon.org/xxl/XSLTreference/Output/index.html">An
+    expanded XSLT reference from zvon.org.</ulink></listitem>
     <listitem><ulink url="http://www.xslt.com/">XSLT.com</ulink></listitem>
+  </itemizedlist>
+</para>
+</sect2>
+<sect2>
+<title>XPathScript</title>
+<para>
+  <itemizedlist>
+    <listitem><ulink url="http://axkit.org/docs/xpathscript/guide.dkb">XPathScript - A Viable
+    Alternative to XSLT?</ulink></listitem>
   </itemizedlist>
 </para>
 </sect2>
 </sect1>
 </article>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 

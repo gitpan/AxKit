@@ -1,4 +1,4 @@
-# $Id: PathInfo.pm,v 1.4 2000/06/12 16:20:51 matt Exp $
+# $Id: PathInfo.pm,v 1.5 2001/01/14 15:48:19 matt Exp $
 
 package Apache::AxKit::StyleChooser::PathInfo;
 
@@ -43,7 +43,7 @@ Apache::AxKit::StyleChooser::PathInfo - Choose stylesheet using PATH_INFO
 
 This module lets you pick a stylesheet based on the extra PATH_INFO. To use
 it, simply add this module to the list of PerlHandlers prior to
-Apache::XMLStylesheet:
+AxKit:
 
 	PerlHandler Apache::AxKit::StyleChooser::PathInfo \
 			AxKit

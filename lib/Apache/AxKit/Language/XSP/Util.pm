@@ -1,12 +1,12 @@
-# $Id: Util.pm,v 1.2 2000/09/21 16:40:44 matt Exp $
+# $Id: Util.pm,v 1.5 2001/01/13 18:59:03 matt Exp $
 
 package Apache::AxKit::Language::XSP::Util;
 use strict;
 use Apache::AxKit::Language::XSP;
-use LWP::UserAgent;
+use HTTP::GHTTP;
 use Apache::File;
-use XML::DOM;
-use HTTP::Request;
+#use XML::DOM;
+use XML::XPath;
 use Time::Object; # had to be here (because of overrides to localtime?).
 
 use vars qw/@ISA $NS $VERSION/;
@@ -16,24 +16,17 @@ $NS = 'http://www.apache.org/1999/XSP/Util';
 
 $VERSION = 0.03;
 
-sub register {
-    my $class = shift;
-    $class->register_taglib($NS);
-}
-
-
 ## Taglib subs
 
 # insert from a local file
 sub include_file {
     my ($document, $parent, $filename) = @_;
-    my $p = new XML::DOM::Parser;
-    my $inc_dom = $p->parsefile($filename);
-    my $root = $inc_dom->getDocumentElement;
-    my $clone = $root->cloneNode(1);
-    $clone->setOwnerDocument($document);
-    $parent->appendChild($clone);
-    $inc_dom->dispose;
+    my $p = XML::XPath::XMLParser->new(filename => $filename);
+    my $root = $p->parse;
+    #my $clone = $root->cloneNode(1);
+    #$clone->setOwnerDocument($document);
+    $parent->appendChild($root);
+    #$inc_dom->dispose;
 }
 
 
@@ -44,30 +37,20 @@ sub include_file {
 # declared in the doc. could be useful for widget building. . .
 sub include_uri {
     my ($document, $parent, $uri) = @_;
-    my $ua = LWP::UserAgent->new;
-    my $p = new XML::DOM::Parser;
-    my $req = HTTP::Request->new(GET => $uri);
-    my $res = $ua->request($req);
-    my $raw_xml = $res->content;
-    my $inc_dom = $p->parse($raw_xml);
-    my $root = $inc_dom->getDocumentElement;
-    my $clone = $root->cloneNode(1);
-    $clone->setOwnerDocument($document);
-    $parent->appendChild($clone);
-    $inc_dom->dispose;
+    my $ua = HTTP::GHTTP->new($uri);
+    $ua->process_request;
+    my $raw_xml = $ua->get_body;
+    my $p = new XML::XPath::XMLParser->new(xml => $raw_xml);
+    my $root = $p->parse;
+    $parent->appendChild($root);
 }
         
 # insert from a SCALAR
 sub include_expr {
     my ($document, $parent, $frag) = @_;
-#        warn "util: expr is $frag\n";
-    my $p = new XML::DOM::Parser; 
-    my $inc_dom = $p->parse($frag);
-    my $root = $inc_dom->getDocumentElement;   
-    my $clone = $root->cloneNode(1);
-    $clone->setOwnerDocument($document);
-    $parent->appendChild($clone);
-    $inc_dom->dispose;
+    my $p = XML::XPath::XMLParser->new( xml => $frag ); 
+    my $root = $p->parse;   
+    $parent->appendChild($root);
 }
 
 # insert from a local file as plain text
@@ -77,8 +60,7 @@ sub get_file_contents {
        throw Apache::AxKit::Exception::Declined( reason => "error opening $filename");
     local $/;
     my $content = <$fh>;
-    my $text = $document->createTextNode($content);
-    $parent->appendChild($text);
+    $parent->appendChild( XML::XPath::Node::Text->new($content) );
     $fh->close;
 }
 
@@ -87,8 +69,7 @@ sub get_date {
     my ($document, $parent, $format) = @_;
     my $t = localtime;
     my $ret = $t->strftime($format);
-    my $text = $document->createTextNode($ret);
-    $parent->appendChild($text);
+    $parent->appendChild( XML::XPath::Node::Text->new($ret) );
 }
 
 ## Parser subs
@@ -223,7 +204,7 @@ are valid.
 =item C<<util:include-file>>
 
 Provides a way to include an XML fragment from a local file into the
-current DOM tree. Requires a B<name> argument. The path may be relative
+current parse tree. Requires a B<name> argument. The path may be relative
 or absolute.
 
 =item C<<util:include-uri>>

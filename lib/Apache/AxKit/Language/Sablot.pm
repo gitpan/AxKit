@@ -1,4 +1,4 @@
-# $Id: Sablot.pm,v 1.15 2000/09/14 20:39:33 matt Exp $
+# $Id: Sablot.pm,v 1.17 2001/01/14 15:49:18 matt Exp $
 
 package Apache::AxKit::Language::Sablot;
 
@@ -20,7 +20,6 @@ sub handler {
 	
 	if (my $dom = $r->pnotes('dom_tree')) {
 		$xmlstring = $dom->toString;
-		$dom->dispose;
 		delete $r->pnotes()->{'dom_tree'};
 	}
 	else {
@@ -44,7 +43,7 @@ sub handler {
 	my $retcode;
 
 	# get request form/querystring parameters	
-	my $cgi = Apache::Request->new($r);
+	my $cgi = Apache::Request->instance($r);
 	my @xslt_params;
 	foreach my $param ($cgi->param) {
 		push @xslt_params, $param, $cgi->param($param);

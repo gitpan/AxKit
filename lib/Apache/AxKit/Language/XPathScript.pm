@@ -1,4 +1,4 @@
-# $Id: XPathScript.pm,v 1.33 2000/10/01 22:08:16 matt Exp $
+# $Id: XPathScript.pm,v 1.43 2001/01/19 14:49:06 matt Exp $
 
 package Apache::AxKit::Language::XPathScript;
 
@@ -17,8 +17,7 @@ use Apache::AxKit::Language;
 use Apache::AxKit::Cache;
 use Apache::AxKit::Exception ':try';
 use Storable;
-use Unicode::Map8 ();
-use Unicode::String ();
+use Apache::AxKit::CharsetConv;
 
 
 @ISA = 'Apache::AxKit::Language';
@@ -27,7 +26,7 @@ $VERSION = '0.05';
 
 sub handler {
     my $class = shift;
-    my ($r, $xml_provider, $style_provider, $reparse) = @_;
+    my ($r, $xml_provider, $style_provider) = @_;
     
     my $xpath = XML::XPath->new();
     
@@ -41,33 +40,36 @@ sub handler {
     
     my $parser = XML::XPath::XMLParser->new(parser => $xml_parser);
     
-    local *XML::XPath::Function::document;
+    local $Apache::AxKit::Language::XPathScript::local_ent_handler;
     
     if (my $entity_handler = $xml_provider->get_ext_ent_handler()) {
         $xml_parser->setHandlers(
                 ExternEnt => $entity_handler,
                 );
-        setup_document_function($entity_handler, $parser);
+        $Apache::AxKit::Language::XPathScript::local_ent_handler = $entity_handler;
     }
     
     AxKit::Debug(6, "XPathScript: Getting XML Source");
     
     if (my $dom = $r->pnotes('dom_tree')) {
-        use XML::XPath::Builder;
-        my $builder = XML::XPath::Builder->new();
-        $source_tree = $dom->to_sax( Handler => $builder );
-        $dom->dispose;
+        # dom_tree is an XML::XPath DOM
+        $source_tree = $dom;
         delete $r->pnotes()->{'dom_tree'};
     }
     elsif (my $xml = $r->notes('xml_string')) {
 #        warn "Parsing from string : $xml\n";
-        $source_tree = $parser->parse($xml);
+        try {
+            $source_tree = $parser->parse($xml);
+        }
+        catch Error with {
+            my $E = shift;
+            throw Apache::AxKit::Exception::Error(-text => "Parse of xml_string failed: $E->{-text}");
+        };
     }
     else {
         AxKit::Debug(6, "XPathScript: creating stor cache");
         my $cache = Apache::AxKit::Cache->new($r, $r->filename(), 'xpathstor');
-        my $key = $xml_provider->key();
-        if (!$reparse) {
+        if ($cache->mtime() <= $xml_provider->mtime()) {
             AxKit::Debug(7, "XPathScript: thawing stor cache");
             try {
                 $source_tree = Storable::thaw($cache->read());
@@ -89,9 +91,14 @@ sub handler {
             
             AxKit::Debug(7, "XPathScript: freezing stor cache");
 
-            $cache->write(Storable::freeze($source_tree));
+            try {
+                $cache->write(Storable::freeze($source_tree));
+            }
+            catch Error with {
+                my $err = shift;
+                AxKit::Debug(1, "XPathScript: freeze failed: $err");
+            };
         }
-        
     }
     
     $xpath->set_context($source_tree);
@@ -128,8 +135,8 @@ sub handler {
     AxKit::Debug(7, "Running XPathScript script\n");
     local $^W;
     $cv->($r, $xpath, $t);
-        
-    if (!$r->notes('xml_string')) { # no output? Try apply_templates
+    
+    if (!$r->notes('xml_string') && !$r->dir_config('XPSNoApplyTemplatesOnEmptyOutput')) { # no output? Try apply_templates
         print Apache::AxKit::Language::XPathScript::Toys::apply_templates();
     }
     
@@ -177,8 +184,8 @@ sub extract {
         
         AxKit::Debug(8, "XPS: got charset: $charset");
         
-        my $map = Unicode::Map8->new($charset) || die "No such charset: $charset";
-        $contents = $map->tou($contents)->utf8();
+        my $map = Apache::AxKit::CharsetConv->new($charset, "utf8") || die "No such charset: $charset";
+        $contents = $map->convert($contents);
     }
     
     my $key = $provider->key();
@@ -278,30 +285,39 @@ sub include_file {
     return extract($inc_provider);
 }
 
-sub setup_document_function {
-    my ($ent_handler, $parser) = @_;
-    no strict 'refs';
-    undef *{'XML::XPath::Function::document'};
-    *{'XML::XPath::Function::document'} = sub {
-        my $self = shift;
-        my ($node, @params) = @_;
-        die "document: Function takes 1 parameter\n" unless @params == 1;
-        my $results = XML::XPath::NodeSet->new();
-        my $newdoc;
-        try {
-            $newdoc = $parser->parse($ent_handler->(undef, undef, $params[0]));
-        }
-        catch Apache::AxKit::Exception::IO with {
-            my $E = shift;
-            AxKit::Debug(2, $E);
-        }
-        catch Error with {
-            my $E = shift;
-            throw Apache::AxKit::Exception::Error(-text => "Parse of '$params[0]' failed: $E");
-        };
-        $results->push($newdoc) if $newdoc;
-        return $results;
+sub XML::XPath::Function::document {
+    return unless $Apache::AxKit::Language::XPathScript::local_ent_handler;
+    my $self = shift;
+    my ($node, @params) = @_;
+    die "document: Function takes 1 parameter\n" unless @params == 1;
+
+    my $xml_parser = XML::Parser->new(
+            ErrorContext => 2,
+            Namespaces => 1,
+            ParseParamEnt => 1,
+            );
+
+    my $parser = XML::XPath::XMLParser->new(parser => $xml_parser);
+
+    my $results = XML::XPath::NodeSet->new();
+    my $newdoc;
+    try {
+        $newdoc = $parser->parse(
+                $Apache::AxKit::Language::XPathScript::local_ent_handler->(
+                    undef, undef, $params[0]
+                )
+            );
+    }
+    catch Apache::AxKit::Exception::IO with {
+        my $E = shift;
+        AxKit::Debug(2, $E);
+    }
+    catch Error with {
+        my $E = shift;
+        throw Apache::AxKit::Exception::Error(-text => "Parse of '$params[0]' failed: $E");
     };
+    $results->push($newdoc) if $newdoc;
+    return $results;
 }
 
 sub get_mtime {
@@ -356,6 +372,7 @@ sub get_package_name {
     package Apache::AxKit::Language::XPathScript::Toys;
     
     use XML::XPath::Node;
+    use Apache::AxKit::Exception ':try';
 
     use vars '@ISA', '@EXPORT';
     use Exporter;
@@ -368,7 +385,14 @@ sub get_package_name {
             apply_templates
             matches
             set_namespace
+            DO_SELF_AND_KIDS
+            DO_SELF_ONLY
+            DO_NOT_PROCESS
             );
+    
+    sub DO_SELF_AND_KIDS () { return 1; }
+    sub DO_SELF_ONLY () { return -1; }
+    sub DO_NOT_PROCESS () { return 0; }
 
     sub findnodes {
         $Apache::AxKit::Language::XPathScript::xp->findnodes(@_);
@@ -448,13 +472,32 @@ sub get_package_name {
                 
         my $translations = $Apache::AxKit::Language::XPathScript::trans;
         
+        if ($node->isTextNode) {
+            my $trans = $translations->{'text()'};
+            if (!$trans) { return $node->toString; }
+            if (my $code = $trans->{testcode}) {
+                my $t = {};
+                my $retval = $code->($node, $t);
+                if ($retval && %$t) {
+                    foreach my $tkey (keys %$t) {
+                        $trans->{$tkey} = $t->{$tkey};
+                    }
+                }
+            }
+            return $trans->{pre} . $node->toString . $trans->{post};
+        }
+
         if (!$node->isElementNode) {
             # don't output top-level PI's
             if ($node->isPINode) {
-                if (try {$node->getParentNode->getParentNode}) {
-                    return $node->toString;
-                }
-                return '';
+                return try {
+                    if ($node->getParentNode->getParentNode) {
+                        return $node->toString;
+                    }
+                    return '';
+                } catch Error with {
+                    return '';
+                };
             }
             return $node->toString;
         }
@@ -462,6 +505,7 @@ sub get_package_name {
 #        warn "translate_node: ", $node->getName, "\n";
         
         my $node_name = $node->getName;
+
         my $trans = $translations->{$node_name};
 
         if (!$trans) {
@@ -513,21 +557,21 @@ sub get_package_name {
         }
         
         # default: process children too.
-        my $pre = $trans->{pre} . 
+        my $pre = interpolate($node, $trans->{pre}) . 
                 ($trans->{showtag} ? start_tag($node) : '') .
-                $trans->{prechildren};
+                interpolate($node, $trans->{prechildren});
         
-        my $post = $trans->{postchildren} .
+        my $post = interpolate($node, $trans->{postchildren}) .
                 ($trans->{showtag} ? end_tag($node) : '') .
-                $trans->{post};
+                interpolate($node, $trans->{post});
         
         if ($dokids) {
             my $middle = '';
             for my $kid ($node->getChildNodes()) {
                 if ($kid->isElementNode) {
-                    $middle .= $trans->{prechild} .
+                    $middle .= interpolate($node, $trans->{prechild}) .
                             _apply_templates($kid) .
-                            $trans->{postchild};
+                            interpolate($node, $trans->{postchild});
                 }
                 else {
                     $middle .= _apply_templates($kid);
@@ -539,9 +583,9 @@ sub get_package_name {
             my $middle = '';
             for my $kid (findnodes($search, $node)) {
                 if ($kid->isElementNode) {
-                    $middle .= $trans->{prechild} .
+                    $middle .= interpolate($node, $trans->{prechild}) .
                             _apply_templates($kid) .
-                            $trans->{postchild};
+                            interpolate($node, $trans->{postchild});
                 }
                 else {
                     $middle .= _apply_templates($kid);
@@ -585,6 +629,21 @@ sub get_package_name {
             return '';
         }
     }
+    
+    sub interpolate {
+        my ($node, $string) = @_;
+        return $string if $XPathScript::DoNotInterpolate;
+        return $string unless Apache->request->dir_config('AxXPSInterpolate');
+        my $new = '';
+        while ($string =~ m/\G(.*?)\{(.*?)\}/gcs) {
+            my ($pre, $path) = ($1, $2);
+            $new .= $pre;
+            $new .= $node->findvalue($path);
+        }
+        $string =~ /\G(.*)/gcs;
+        $new .= $1 if defined $1;
+        return $new;
+    }
 
     1;
 }
@@ -604,7 +663,7 @@ Apache::AxKit::Language::XPathScript - An XML Stylesheet Language
 =head1 DESCRIPTION
 
 This documentation has been removed. The definitive reference for 
-XPathScript is now at http://xml.sergeant.org/axkit/xpathscript/guide.dkb
+XPathScript is now at http://axkit.org/docs/xpathscript/guide.dkb
 in DocBook format.
 
 =cut

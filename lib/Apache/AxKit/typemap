@@ -1,0 +1,2 @@
+TYPEMAP
+Apache::AxKit::CharsetConv T_PTROBJ

@@ -1,4 +1,4 @@
-# $Id: UserAgent.pm,v 1.1 2000/09/21 12:18:12 matt Exp $
+# $Id: UserAgent.pm,v 1.2 2001/01/09 14:50:19 kip Exp $
 
 package Apache::AxKit::StyleChooser::UserAgent;
 
@@ -9,18 +9,13 @@ $VERSION = '0.01';
 
 use Apache::Constants;
 
-# edit this to your taste. The format is ['token', 'string_to_find']
-# We preferred a LOL over a hash to be sure we find "MSIE" and "Opera"
-# before "Mozilla" since since all present "Mozilla" in the UA string
-
-# TODO: Get this from PerlSetVar directive instead...
-my @UAMap = (['lynx', 'Lynx'],
-             ['explorer', 'MSIE'],
-             ['opera', 'Opera'],
-             ['netscape', 'Mozilla']);
-
 sub handler {
     my $r = shift;
+    my @UAMap;
+    my @aoh = split /\s*,\s*/, $r->dir_config('AxUAStyleMap');
+    foreach (@aoh) {
+        push (@UAMap, [ split /\s*=>\s*/, $_ ]);
+    }
 
 #    warn "checking UA: $ENV{HTTP_USER_AGENT}\n";
 
@@ -43,40 +38,27 @@ __END__
 Apache::AxKit::StyleChooser::UserAgent - Choose stylesheets based on the user agent.
 
 =head1 SYNOPSIS
-
+    In your .conf or .htaccess file(s):
+    
     PerlHandler Apache::AxKit::StyleChooser::UserAgent \
                 AxKit
+
+    PerlSetVar AxUAStyleMap "lynx     => Lynx,\
+                             explorer => MSIE,\
+                             opera    => Opera,\
+                             netscape => Mozilla"
 
 =head1 DESCRIPTION
 
 This module sets the internal preferred style based on the user agent
 string presented by the connecting client.
 
-By default, the following styles will be set based on the UA:
-
-=over 4
-
-=item lynx
-
-=item explorer
-
-=item opera
-
-=item netscape
-
-=back
-
-However, it is very likely that you will want to customize this for
-your particular situation. At this point, the only way to customize the
-UA to style mapping is to crack open the module and edit it on your
-own. Future releases may provide a friendlier interface.
-
 Remember, use the B<title> attribute in your stylesheet PI to define a
 matching style.
 
 =head1 AUTHOR
 
-Kip Hampton, kip@hampton.ws
+Kip Hampton, khampton@totalcinema.com
 
 =head1 SEE ALSO
 

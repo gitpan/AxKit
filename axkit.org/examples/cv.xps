@@ -112,6 +112,21 @@ foreach my $employee (findnodes('/resume/experience/employee[position() <= 7]'))
 %>
 </table>
 
+<b><font size="+1">Speaking Engagements</font></b>
+<hr width="100%">
+<table>
+<%
+foreach my $engagement (findnodes('/resume/speaking/engagement')) {
+%>
+	<tr>
+		<td width="25"> </td>
+		<td><%= $engagement->findvalue('conference') %> <i>(<%= $engagement->findvalue('talk') %>)</i></td>
+	</tr>
+<%
+}
+%>
+</table>
+
 <b><font size="+1">Training</font></b>
 <hr width="100%">
 <table>

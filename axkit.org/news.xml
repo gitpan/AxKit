@@ -1,85 +1,73 @@
-<?xml version="1.0"?>
- 	
- 	<!DOCTYPE rss PUBLIC "-//Netscape Communications//DTD RSS 0.91//EN" "http://my.netscape.com/publish/formats/rss-0.91.dtd">
- 	<rss version="0.91">
- 	
- 	  <channel>
- 	    <title>XML.com</title>
- 	    <description>XML.com features a rich mix of information and services for the XML community.</description>
- 	    <language>en-us</language>
- 	    <link>http://xml.com/pub</link>
- 	    <copyright>Copyright 2000, O'Reilly and Associates</copyright>
- 	    <managingEditor>edd@xml.com (Edd Dumbill)</managingEditor>
- 	    <webMaster>peter@xml.com (Peter Wiggin)</webMaster>
- 	
- 	  <image>
- 	    <title>XML.com</title>
- 	    <url>http://xml.com/universal/images/xml_tiny.gif</url>
- 	    <link>http://xml.com/pub</link>
- 	    <width>88</width>
- 	    <height>31</height>
- 	  </image>
- 	
-   <item>
-     <title>The Beginning of the Endgame</title>
-     <link>http://xml.com/pub/2000/09/27/schemas1.html?wwwrrr_rss</link>
-     <description>The W3C's XML Schemas technology, vital to the use of XML in e-business,  is finally nearing completion. This article catalogs the most  significant changes from the recent draft specs,and highlights areas  where priority feedback is required from implementors and users.  </description>
-   </item>
- 
-   <item>
-     <title>From DTDs to Documents</title>
-     <link>http://xml.com/pub/2000/09/27/qanda.html?wwwrrr_rss</link>
-     <description>This month our question and answer column covers  guidelines for good DTD design and the thorny  problem of generating Microsoft Word or Adobe Acrobat  documents from XML.</description>
-   </item>
- 
-   <item>
-     <title>Schemas in the Wild</title>
-     <link>http://xml.com/pub/2000/09/27/deviant.html?wwwrrr_rss</link>
-     <description>As adoption of W3C XML Schema technology increases, the need  for documenting best practices is becoming more important, not least  where namespaces are concerned. The XML-Deviant investigates.</description>
-   </item>
- 
- <item>
- 	<title>COSCA/NACM JTC XML Court Filing Project.</title>
- 	<link>http://xml.com/pub/coverpage/newspage.html#ni2000-10-02-c</link>
- 	<description>       The Electronic Filing Standards sub-committee of the COSCA/NACM Joint Technology XML Standards Committee is working with LegalXML.org to develop an XML standard for electronic court filing via the Internet. Within the framework of LegalXML.org, "the Court Filing Workgroup focuses on document and information exchange formats for electronic court filing applications. The chair of the Court Filing Workgroup is John Greacen (email: aocjmg@nmcourts.com). In July 2000, a second revised vers...
- </description>
- </item>
- <item>
- 	<title>Creating Barcodes Using XSL.</title>
- 	<link>http://xml.com/pub/coverpage/newspage.html#ni2000-10-02-a</link>
- 	<description>       In the category of creative applications: the 'XSL Barcode Generator' from RenderX.  Nikolai Grigoriev recently announced the XSL-based barcode generator on the Mulberry XSL-List: "As a byproduct of our main activity, we have developed an XSL stylesheet that draws barcodes from digit sequences.  We hope a thing like this may be useful for people wishing to add barcode labelling to their XSL-based publishing solutions.  Barcodes implemented are the most popular ones that you can see on...
- </description>
- </item>
- <item>
- 	<title>QARE: An Open Source XML/Java Portal.</title>
- 	<link>http://xml.com/pub/coverpage/newspage.html#ni2000-10-02-b</link>
- 	<description>       Bill la Forge posted an announcement for the alpha release of QARE -- 'Quick Agent Runtime Environment'.  "QARE (pronounced 'care') is an XML/Java Portal, providing an easy-to-use platform for processing XML over HTTP.  QARE, which runs as a simple Java Servlet, is now complete, except for plugins (jar file extensions), though testing has been minimal.  The documentation is currently limited to the API.  QARE can handle any number of different markup languages. The type of markup lang...
- </description>
- </item>
- <item>
- 	<title>Microsoft's September 2000 MSXML Beta Release.</title>
- 	<link>http://xml.com/pub/coverpage/newspage.html#ni2000-09-30-a</link>
- 	<description>       Microsoft has published an article in the MSDN Web Workshop which outlines new features in the September 2000 MSXML Beta Release. "The September 2000 Microsoft XML Parser (MSXML) Beta Release is an update to the July 2000 MSXML Beta Release.  This latest release of MSXML [9/29/2000] represents a step beyond the July 2000 release, providing: (1) Server-safe HTTP access; (2) Complete implementation of XSLT/Xpath; (3) Changes to the SAX2 implementation, including new SAX2 helper classes;...
- </description>
- </item>
- <item>
- 	<title>Web Services Description Language (WSDL).</title>
- 	<link>http://xml.com/pub/coverpage/newspage.html#ni2000-09-29-c</link>
- 	<description>       Ariba, IBM, and Microsoft have jointly issued a specification for a 'Web Services Description Language (WSDL)' which defines an XML grammar "for describing network services as collections of communication endpoints capable of exchanging messages." Authors include Erik Christensen (Microsoft), Francisco Curbera (IBM), Greg Meredith (Microsoft), and Sanjiva Weerawarana (IBM). This published WSDL specification "represents the current thinking with regard to descriptions of services withi...
- </description>
- </item>
- <item>
- 	<title>Harvesting RDF Statements from XLinks.</title>
- 	<link>http://xml.com/pub/coverpage/newspage.html#ni2000-09-29-b</link>
- 	<description>      A new W3C Note on XLink and RDF bears the title Harvesting RDF Statements from XLinks. Reference: W3C Note 29-September-2000, edited by Ron Daniel Jr. (Metacode Technologies Inc.). This Note is not a formal product of the W3C XML Linking Working Group, but "is made available by the W3C XML Linking Working Group for the consideration of the XLink and RDF communities in the hopes that it may prove useful." Abstract: "Both XLink and RDF provide a way of asserting relations between resourc...
- </description>
- </item>
- <item>
- 	<title>New Release of Redland - An RDF Application Framework.</title>
- 	<link>http://xml.com/pub/coverpage/newspage.html#ni2000-09-29-a</link>
- 	<description>       Dave Beckett (Institute for Learning and Research Technology,  University of Bristol) announced the release of Redland version 0.9.4 with a new Perl interface and added support for Linux RPM binaries. Redland (An RDF Application Framework) "is a library that provides a high-level interface for RDF allowing the model to be stored, queried and manipulated. Redland implements each of the RDF model concepts in its own class so provides an object based API for them. Some of the classes pro...
- </description>
- </item>
-   </channel>
- </rss>
+<?xml version="1.0" encoding="ISO-8859-1"?>
+<!DOCTYPE rss PUBLIC "-//Netscape Communications//DTD RSS 0.91//EN"
+              "http://my.netscape.com/publish/formats/rss-0.91.dtd">
+<rss version="0.91">
+   <channel>
 
+   <title>xmlhack</title>
+   <link>http://www.xmlhack.com</link>
+   <description>Developer news from the XML community</description>
+   <language>en-us</language>
+   <copyright>Copyright 1999-2001, xmlhack team.</copyright>
+   <managingEditor>editor@xmlhack.com</managingEditor>
+   <webMaster>webmaster@xmlhack.com</webMaster>
+
+      <image>
+        <title>xmlhack</title>
+        <url>http://www.xmlhack.com/images/mynetscape88.gif</url>
+        <link>http://www.xmlhack.com</link>
+        <width>88</width>
+        <height>31</height>
+        <description>News, opinions, tips and issues concerning XML development</description>
+      </image>
+
+<item>
+<title>CSS3 moves forward</title>
+<link>http://www.xmlhack.com/read.php?item=1012</link>
+<description>The W3C released a new draft of Introduction to CSS, along with a 
+new version of CSS3 Module: Multi-column Layout.</description>
+<category>CSS</category>
+<category>W3C</category>
+</item>
+<item>
+<title>Publication day arrives for XML Media Types protocol</title>
+<link>http://www.xmlhack.com/read.php?item=1011</link>
+<description>A document describing the handling of XML Media Types, first
+      reported in xmlhack in a September 1999 story, has been officially
+    released by the Internet
+    Engineering Task Force as a new Request
+      for Comments, RFC 3023.</description>
+<category>IETF</category>
+<category>Encodings</category>
+</item>
+<item>
+<title>Managing voluminous RDF description bases</title>
+<link>http://www.xmlhack.com/read.php?item=1010</link>
+<description>Greg Karvounarakis has announced a paper describing RDFSuite,
+a set of tools for parsing, storng and querying RDF metadata.</description>
+<category>RDF</category>
+</item>
+<item>
+<title>Visual drag and drop SVG/DHTML editor</title>
+<link>http://www.xmlhack.com/read.php?item=1009</link>
+<description>Steve White has announced an update to Virtual Mechanics' WEB ENGINE, a drag and drop editor for creating content in DHTML and SVG.</description>
+<category>SVG</category>
+<category>XHTML</category>
+</item>
+<item>
+<title>Apache Cocoon 1.8.1 released</title>
+<link>http://www.xmlhack.com/read.php?item=1008</link>
+<description>Robin Green has announced Cocoon 1.8.1, which fixes a large number of outstanding bugs with Cocoon 1 and adds several new features.</description>
+<category>Java</category>
+<category>Tools</category>
+</item>
+<item>
+<title>SOAP::Lite v.45 improves interoperability</title>
+<link>http://www.xmlhack.com/read.php?item=1007</link>
+<description>Paul Kulchenko has released version 0.45 of his popular Perl SOAP module, SOAP::Lite, improving Apache SOAP interoperability and adding new features.</description>
+<category>Protocols</category>
+<category>Perl</category>
+</item>
+
+</channel>
+</rss>

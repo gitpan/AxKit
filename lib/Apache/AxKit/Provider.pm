@@ -1,4 +1,4 @@
-# $Id: Provider.pm,v 1.13 2000/09/24 15:10:55 matt Exp $
+# $Id: Provider.pm,v 1.18 2001/01/15 16:56:27 matt Exp $
 
 package Apache::AxKit::Provider;
 use strict;
@@ -40,15 +40,29 @@ sub get_ext_ent_handler {
     my $self = shift;
     return sub {
         my ($e, $base, $sysid, $pubid) = @_;
-        if ($sysid =~ /^(https?|ftp):/) {
+        if ($sysid =~ /^http:/) {
             if ($pubid) {
                 return ''; # do not bring in public DTD's
             }
-            return XML::Parser::lwp_ext_ent_handler(@_);
+            eval {
+                require HTTP::GHTTP;
+            };
+            if ($@) {
+                require LWP;
+                return XML::Parser::lwp_ext_ent_handler(@_);
+            }
+            my $r = HTTP::GHTTP->new($sysid);
+            $r->process_request;
+            return $r->get_body;
+        }
+        elsif ($sysid =~ /^(https|ftp):/) {
+            if ($pubid) {
+                return ''; # do not bring in public DTD's
+            }
+            die "Cannot download https (SSL) or ftp URL's yet. Patches welcome";
         }
         
 #        warn "File provider ext_ent_handler called with '$sysid'\n";
-        $sysid =~ s/^file:(\/\/)?//;
         my $provider = Apache::AxKit::Provider->new(
                 Apache->request,
                 uri => $sysid
@@ -91,6 +105,12 @@ sub get_styles {
                 Proc => \&parse_pi,
                 Entity => \&parse_entity_decl,
                 );
+
+    if (my $entity_handler = $self->get_ext_ent_handler()) {
+        $xml_parser->setHandlers(
+				 ExternEnt => $entity_handler,
+				);
+    }
     
     my $to_parse = try { 
         $self->get_fh();
@@ -122,18 +142,12 @@ sub get_styles {
         
     AxKit::Debug(4, "get_styles: parse returned successfully");
 
-    my @styles;
-        
-    if (@$styles) {
-        @styles = @$styles;
-    }
-    else {
-        # now get all current styles that match all these properties
-        @styles = $AxKit::Cfg->GetMatchingProcessors($media, $pref_style, @$vals);
-    }
+    # Let GetMatchingProcessors to process the @$styles array
+    my @styles = $AxKit::Cfg->GetMatchingProcessors($media,
+		$pref_style, @$vals[0 .. 2], $styles);
     
     if (!@styles) {
-        throw Apache::AxKit::Exception::Error(
+        throw Apache::AxKit::Exception::Declined(
                 -text => "No styles defined for '$key'"
                 );
     }
@@ -159,7 +173,7 @@ sub get_styles {
         }
         catch Error with {
             my $E = shift;
-            throw Apache::AxKit::Exception::Declined(
+            throw Apache::AxKit::Exception::Error(
                     reason => "Load of '$mapto' failed with: $E"
                     );
         };

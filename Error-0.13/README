@@ -1,0 +1,38 @@
+Error - Error/exception handling in an OO-ish way
+
+
+    use Error qw(:try);
+
+    throw Error::Simple( "A simple error");
+
+    sub xyz {
+        ...
+	record Error::Simple("A simple error")
+	    and return;
+    }
+ 
+    unlink($file) or throw Error::Simple("$file: $!",$!);
+
+    try {
+	do_some_stuff();
+	die "error!" if $condition;
+	throw Error::Simple -text => "Oops!" if $other_condition;
+    }
+    catch Error::IO with {
+	my $E = shift;
+	print STDERR "File ", $E->{'-file'}, " had a problem\n";
+    }
+    except {
+	my $E = shift;
+	my $general_handler=sub {send_message $E->{-description}};
+	return {
+	    UserException1 => $general_handler,
+	    UserException2 => $general_handler
+	};
+    }
+    otherwise {
+	print STDERR "Well I don't know what to say\n";
+    }
+    finally {
+	close_the_garage_door_already(); # Should be reliable
+    }; # Don't forget the trailing ; or you might be surprised

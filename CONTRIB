@@ -1,0 +1,34 @@
+The following people have contributed to AxKit:
+
+Kip Hampton (moral support, Util taglib, docs, StyleChoosers)
+Vincent Cagnard (Apache::Filter support (although it was re-done))
+Owen Stenseth (output filtering single point of exit, and others)
+Honza Pazdziora (many small patches)
+
+If I've missed anyone, please correct this list as my memory
+is poor.
+
+If you wish to contribute to AxKit, please join the axkit-devel
+mailing list, by sending a mail to: 
+
+    axkit-devel-subscribe@axkit.org
+
+The list will show you all check-ins and allow you to discuss
+the features you want, and how to go about implementing them. Please
+bring things up there before randomly sending in a patch.
+
+You can also access the AxKit CVS archive, read only:
+
+    $ export CVSROOT=:pserver:anonymous@axkit.org:/home/cvs
+    $ cvs login
+      (just hit enter when asked for password)
+    $ cvs co AxKit
+
+Please only submit patches by editing your CVS copy, and then issuing:
+
+    $ cvs diff
+
+In the root of the AxKit tree. This makes it much easier to apply
+patches. If your mailer isn't very friendly with spaces then please
+redirect the output to a file and mail it as an attachment (possibly
+gzipped).

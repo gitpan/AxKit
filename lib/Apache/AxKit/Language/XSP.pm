@@ -1,4 +1,4 @@
-# $Id: XSP.pm,v 1.17 2000/09/21 11:54:43 matt Exp $
+# $Id: XSP.pm,v 1.23 2001/01/14 15:48:51 matt Exp $
 
 package Apache::AxKit::Language::XSP;
 
@@ -21,13 +21,16 @@ sub get_mtime {
 
 sub register {
     my $class = shift;
-    $class->register_taglib($NS);
+    no strict 'refs';
+    $class->register_taglib(${"${class}::NS"});
 }
 
 sub _register_me_and_others {
+    warn "Loading taglibs\n";
     __PACKAGE__->register();
     
     foreach my $package ($AxKit::Cfg->XSPTaglibs()) {
+        warn "Registering taglib: $package\n";
         AxKit::load_module($package);
         $package->register();
     }
@@ -38,8 +41,10 @@ my $cache;
 # useful for debugging - not actually used by AxKit:
 sub get_code {
     my $filename = shift;
-    
-    _register_me_and_others();
+ 
+# cannot register - no $AxKit::Cfg...
+#    _register_me_and_others();
+    __PACKAGE__->register();
     
     my $package = get_package_name($filename);
     my $parser = get_parser($package, $filename);
@@ -65,7 +70,6 @@ sub handler {
         if (my $dom_tree = $r->pnotes('dom_tree')) {
             AxKit::Debug(5, 'XSP: parsing dom_tree');
             $to_eval = $parser->parse($dom_tree->toString);
-            $dom_tree->dispose;
             delete $r->pnotes()->{'dom_tree'};
         }
         elsif (my $xmlstr = $r->notes('xml_string')) {
@@ -125,12 +129,7 @@ sub handler {
     no strict 'refs';
     my $cv = \&{"$package\::handler"};
     
-    if (my $dom = $r->pnotes('dom_tree')) {
-        $dom->dispose;
-        delete $r->pnotes()->{'dom_tree'};
-    }
-    
-    my $cgi = Apache::Request->new($r);
+    my $cgi = Apache::Request->instance($r);
     
     $r->no_cache(1);
 
@@ -147,11 +146,13 @@ sub handler {
 
 sub _parse_init {
     my $e = shift;
+    
+    $e->{Text_Type} = '';
 
     $e->{XSP_Script} = join("\n", 
                 "package $e->{XSP_Package};",
                 "use Apache;",
-                "use XML::DOM;",
+                "use XML::XPath;",
                 "#line 1 ".$e->{XSP_Line}."\n",
                 );
 }
@@ -188,8 +189,8 @@ sub default_parse_char {
     
     $text =~ s/\|/\\\|/g;
     
-    return '{ my $text = $document->createTextNode(q|' . $text . '|);' .
-            '$parent->appendChild($text); }' . "\n";
+    return '{ my $text = XML::XPath::Node::Text->new(q|' . $text . '|);' .
+            '$parent->appendChild($text, 1); }' . "\n";
 }
 
 sub _parse_start {
@@ -221,7 +222,7 @@ sub default_parse_start {
         $code .= join("\n",
                 'sub handler {',
                 'my ($r, $cgi) = @_;',
-                'my $document = XML::DOM::Document->new();',
+                'my $document = XML::XPath::Node::Element->new();',
                 'my ($parent);',
                 '$parent = $document;',
                 "\n",
@@ -229,12 +230,12 @@ sub default_parse_start {
         $e->{XSP_User_Root} = $e->depth . ":$tag";
     }
     
-    $code .= '{ my $elem = $document->createElement(q(' . $tag . '));' .
-                '$parent->appendChild($elem); $parent = $elem; }' . "\n";
+    $code .= '{ my $elem = XML::XPath::Node::Element->new(q(' . $tag . '));' .
+                '$parent->appendChild($elem, 1); $parent = $elem; }' . "\n";
     
     for my $attr (keys %attribs) {
-        $code .= '{ my $attr = $document->createAttribute(q(' . $attr . '), q(' . $attribs{$attr} . '));';
-        $code .= '$parent->setAttributeNode($attr); }' . "\n";
+        $code .= '{ my $attr = XML::XPath::Node::Attribute->new(q(' . $attr . '), q(' . $attribs{$attr} . '));';
+        $code .= '$parent->appendAttribute($attr, 1); }' . "\n";
     }
     
     return $code;
@@ -394,37 +395,38 @@ sub parse_char {
     my ($e, $text) = @_;
 
     local $^W;
-    if ($e->in_element($e->generate_ns_name('content', $NS))) {
-        return '' unless $e->{XSP_User_Root};
     
+#     Ricardo writes: "<xsp:expr> produces either an [object]
+# _expression_ (not necessarily a String) or a character event depending
+# on context. When  <xsp:expr> is enclosed in another XSP tag (except
+# <xsp:content>), it's replaced by the code it contains. Otherwise it
+# should be treated as a text node and, therefore, coerced to String to be
+# output through a characters SAX event."
+
+    if ($e->{Text_Type} eq 'node') {
         $text =~ s/\|/\\\|/g;
 
-        return '{ my $text = $document->createTextNode(q|' . $text . '|);' .
-                '$parent->appendChild($text); }' . "\n";
+        return '{ my $last = $parent->getLastChild;
+                 if ($last && $last->isTextNode) {
+                     $last->appendText(q|' . $text . '|);
+                 }
+                 else {
+                     my $text = XML::XPath::Node::Text->new(q|' . $text . '|);
+                     $parent->appendChild($text, 1); 
+                 }
+                }' . "\n";
     }
-    elsif ($e->current_element() eq 'expr') {
-        if (($e->namespace(($e->context())[-2]) eq $NS)
-                && !$e->eq_name(($e->context())[-2], $e->generate_ns_name('content', $NS))
-                && !$e->eq_name(($e->context())[-2], $e->generate_ns_name('element', $NS))) {
-            
-            return " . do { $text }";
-        }
-        else {
-            return '{ my $text = $document->createTextNode(do { '. $text . '});' .
-                    '$parent->appendChild($text); }' . "\n";
-        }
+    elsif ($e->{Text_Type} eq 'expr') {
+        return ". do { $text }";
     }
-    elsif ($e->current_element() =~ /^(include|structure|dtd|logic)$/) {
-        return $text;
-    }
-    elsif ($e->current_element() eq 'element') {
-        return '';
+    elsif ($e->{Text_Type} eq 'quote') {
+        $text =~ s/\|/\\\|/g;    
+        return ". q|$text|";
     }
     
     return '' unless $e->{XSP_User_Root};
-
-    $text =~ s/\|/\\\|/g;    
-    return ". q|$text|";
+    
+    return $text;
 }
 
 sub parse_start {
@@ -444,28 +446,43 @@ sub parse_start {
     elsif ($tag eq 'dtd') {
     }
     elsif ($tag eq 'include') {
-        return "use ";
+        return "warn \"xsp:include is deprecated\"; use ";
     }
     elsif ($tag eq 'content') {
     }
     elsif ($tag eq 'logic') {
     }
+    elsif ($tag eq 'import') {
+        return "use ";
+    }
     elsif ($tag eq 'element') {
-        return '{ my $elem = $document->createElement(q(' . $attribs{'name'} . '));' .
-                '$parent->appendChild($elem); $parent = $elem; }' . "\n";
+        return '{ my $elem = XML::XPath::Node::Element->new(q(' . $attribs{'name'} . '));' .
+                '$parent->appendChild($elem, 1); $parent = $elem; }' . "\n";
     }
     elsif ($tag eq 'attribute') {
-        return '{ my $attr = $document->createAttribute(q(' . $attribs{'name'} . '), ""';
+        $e->{Text_Type} = 'quote';
+        return '{ my $attr = XML::XPath::Node::Attribute->new(q(' . $attribs{'name'} . '), ""';
     }
     elsif ($tag eq 'pi') {
     }
     elsif ($tag eq 'comment') {
-        return '{ my $comment = $document->createComment(""';
+        $e->{Text_Type} = 'quote';
+        return '{ my $comment = XML::XPath::Node::Comment->new(""';
     }
     elsif ($tag eq 'text') {
-        return '{ my $text = $document->createTextNode(""';
+        $e->{Text_Type} = 'quote';
+        return '{ my $text = XML::XPath::Node::Text->new(""';
     }
     elsif ($tag eq 'expr') {
+        $e->{Text_Type} = 'expr';
+        if ($e->namespace(($e->context())[-2]) eq $NS) {
+            if (($e->context())[-2] eq 'content') {
+                $e->{Text_Type} = 'node';
+            }
+        }
+        else {
+            return '{ my $text = XML::XPath::Node::Text->new(""';
+        }
 #        warn "start Expr: CurrentEl: ", $e->current_element, "\n";
     }
     
@@ -480,29 +497,44 @@ sub parse_end {
     elsif ($tag eq 'structure') {
     }
     elsif ($tag eq 'dtd') {
+        $e->{Text_Type} = '';
     }
     elsif ($tag eq 'include') {
+        $e->{Text_Type} = '';
+        return ";\n";
+    }
+    elsif ($tag eq 'import') {
+        $e->{Text_Type} = '';
         return ";\n";
     }
     elsif ($tag eq 'content') {
+        $e->{Text_Type} = '';
     }
     elsif ($tag eq 'logic') {
+        $e->{Text_Type} = '';
     }
     elsif ($tag eq 'element') {
         return '$parent = $parent->getParentNode;' . "\n";
     }
     elsif ($tag eq 'attribute') {
-        return '); $parent->setAttributeNode($attr); }' . "\n";
+        $e->{Text_Type} = '';
+        return '); $parent->appendAttribute($attr, 1); }' . "\n";
     }
     elsif ($tag eq 'pi') {
     }
     elsif ($tag eq 'comment') {
-        return '); $parent->appendChild($comment); }' . "\n";
+        $e->{Text_Type} = '';
+        return '); $parent->appendChild($comment, 1); }' . "\n";
     }
     elsif ($tag eq 'text') {
-        return '); $parent->appendChild($text); }' . "\n";
+        $e->{Text_Type} = '';
+        return '); $parent->appendChild($text, 1); }' . "\n";
     }
     elsif ($tag eq 'expr') {
+        $e->{Text_Type} = '';
+        if ($e->namespace(($e->context())[-2]) ne $NS) {
+            return '); $parent->appendChild($text, 1); }' . "\n";
+        }
 #        warn "end Expr: CurrentEl: ", $e->current_element, "\n";
     }
     
