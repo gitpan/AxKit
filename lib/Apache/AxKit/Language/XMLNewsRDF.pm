@@ -1,4 +1,4 @@
-# $Id: XMLNewsRDF.pm,v 1.4 2000/06/02 13:41:50 matt Exp $
+# $Id: XMLNewsRDF.pm,v 1.5 2000/08/06 12:15:18 matt Exp $
 
 package Apache::AxKit::Language::XMLNewsRDF;
 
@@ -18,7 +18,7 @@ sub handler {
 	
 	$template_processor->readTemplate($style->get_fh());
 	
-	$template_processor->applyTemplate(*STDOUT, undef, $xml->get_fh());
+	$template_processor->applyTemplate($r, undef, $xml->get_fh());
 	
 	return OK;
 }

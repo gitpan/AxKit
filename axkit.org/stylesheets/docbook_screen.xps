@@ -1,0 +1,126 @@
+<%
+use Apache::Request;
+
+my $apr = Apache::Request->new($r);
+my $sect = $apr->param('section');
+
+$r->no_cache(1);
+
+my $this_page = $r->uri;
+
+my ($prev, $next);
+my $sects = findvalue('count(/article/sect1)');
+$sects = "$sects";
+if ($sects > 1) {
+	if ($sect >= $sects) {
+		$prev = $sects - 1;
+	}
+	elsif ($sect <= 1) {
+		$next = 2;
+	}
+	else {
+		$prev = $sect - 1;
+		$next = $sect + 1;
+	}
+}
+
+%>
+<!--#include file="docbook_tags.xps"-->
+<%
+$t->{'xref'}{testcode} = sub {
+		my ($node, $t) = @_;
+		my $id = findvalue('@linkend', $node);
+		my ($dest) = findnodes("id('$id')/title");
+		my $sect = findvalue("count(ancestor::sect1/preceding-sibling::sect1) + 1", $dest);
+		$t->{pre} = "<b><a href=\"$this_page?section=$sect#";
+		$t->{pre} .= $id . '">';
+		$t->{pre} .= findvalue("id('$id')/title/text()");
+		$t->{post} = '</a></b>';
+		return -1;
+	};
+%>
+<html>
+<head>
+	<title><%= findvalue('/article/artheader/title/text()') %></title>
+</head>
+<body bgcolor="white">
+
+<%
+if (!$sect) {
+	# display title/TOC page
+	print apply_templates('/article/artheader/*');
+	my $page = 0;
+	foreach my $sect (findnodes('/article/sect1')) {
+		$page++;
+		print "<a href=\"$this_page?section=$page\">";
+		print findvalue('title/text()', $sect);
+		print "</a><br>\n";
+	}
+	%><hr><%
+}
+else {
+
+%>
+<table width="100%">
+<tr>
+<td align="left">
+<%
+	if ($prev) {
+%>
+<a href="<%=$this_page%>?section=<%=$prev%>">Prev</a>
+<% } else {
+%>
+Prev
+<% } %>
+</td><td align="center"><a href="<%=$this_page%>">Top</a></td><td align="right">
+<%
+	if ($next) {
+%>
+<a href="<%=$this_page%>?section=<%=$next%>">Next</a>
+<% } else { %>
+Next
+<% } %>
+</td></tr></table>
+<hr>
+
+<%
+	# display particular page
+	foreach my $section (findnodes("/article/sect1[$sect]")) {
+		# should only be 1
+		print apply_templates($section);
+	}
+}
+
+if ($sect) {
+%>
+<table width="100%">
+<tr>
+<td align="left">
+<%
+	if ($prev) {
+%>
+<a href="<%=$this_page%>?section=<%=$prev%>">Prev</a>
+<% } else {
+%>
+Prev
+<% } %>
+</td><td align="center"><a href="<%=$this_page%>">Top</a></td><td align="right">
+<%
+	if ($next) {
+%>
+<a href="<%=$this_page%>?section=<%=$next%>">Next</a>
+<% } else { %>
+Next
+<% } %>
+</td></tr></table>
+<hr>
+<% } 
+%>
+<table width="100%"><tr><td align="right">
+<a href="<%=$this_page%>?style=print">Printer Friendly</a>
+</td></tr>
+<tr><td align="right">
+<a href="<%=$this_page%>?passthru=1">Raw XML</a>
+</td></tr></table>
+</body>
+</html>

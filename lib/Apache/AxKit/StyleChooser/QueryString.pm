@@ -1,20 +1,16 @@
-# $Id: QueryString.pm,v 1.4 2000/06/12 16:21:11 matt Exp $
+# $Id: QueryString.pm,v 1.5 2000/09/10 15:04:32 matt Exp $
 
 package Apache::AxKit::StyleChooser::QueryString;
 
 use strict;
 use Apache::Constants;
-use CGI ();
 
 sub handler {
 	my $r = shift;
 	
-	my $q = CGI->new();
-	
-	my $style = $q->param('style');
-	if ($style) {
-#		warn "setting notes: $style\n";
-		$r->notes('preferred_style', $style);
+	my %in = $r->args();
+	if ($in{style}) {
+		$r->notes('preferred_style', $in{style});
 	}
 	return DECLINED;
 }

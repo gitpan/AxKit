@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="ISO-8859-1"?>
+<?xml-stylesheet type="application/x-xpathscript"
+		href="/stylesheets/webpage_html.xps"
+		title="default"?>
+<!DOCTYPE webpage [
+<!ENTITY sidebar SYSTEM "/sidebar.xml">
+<!ENTITY news SYSTEM "/news.xml">
+]>
+<webpage>
+	<head>
+		<title>AxKit - License</title>
+	</head>
+	<body>
+		<section>
+			<title>License for AxKit</title>
+			<para>
+			AxKit is licensed under either the Artistic license, or the GNU
+			GPL version 2 (you choose either or both when you need to comply
+			with the license in some way or another).
+			</para>
+			<para>
+			Some modules that AxKit works with are distributed
+			under the GNU GPL, in particular <ulink
+			url="http://www.gingerall.com">Sablotron</ulink> from
+			gingerall.com is only available under the GNU GPL. While AxKit
+			makes fairly extensive use of <ulink
+			url="http://xml.sergeant.org">XML::XPath</ulink>, this module is
+			also developed by Fastnet Software Ltd, and AxKit has a special
+			exclusive distribution license with XML::XPath.
+			</para>
+		</section>
+	</body>
+</webpage>

@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="ISO-8859-1"?>
+<?xml-stylesheet href="/stylesheets/webpage_html.xps"
+	type="application/x-xpathscript" title="default"?>
+<webpage>
+<head>
+	<title>AxKit - XSP Documentation</title>
+</head>
+<body>
+	<section>
+		<title>XSP Documentation</title>
+		<para>
+			XSP is an XML dialect for executing code in the web server that
+			utilises embedded code, extensible tag libraries, and
+			transformation techniques.
+		</para>
+		<para>
+			XSP was originally invented for the <ulink
+			url="http://xml.apache.org/cocoon/">Cocoon project</ulink>. By
+			using their standard, scripts that are built for Cocoon are easier
+			to port to AxKit (although its worth noting that Cocoon does not
+			support XSP's written in Perl, nor does AxKit support XSP's
+			written in Java at the time of this writing).
+		</para>
+		<para>
+			Please see the links in the sidebar to find the rest of the XSP
+			documentation.
+		</para>
+	</section>
+</body>
+</webpage>

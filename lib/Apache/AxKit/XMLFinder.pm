@@ -1,4 +1,4 @@
-# $Id: XMLFinder.pm,v 1.6 2000/06/15 10:30:53 matt Exp $
+# $Id: XMLFinder.pm,v 1.15 2000/06/22 11:39:53 matt Exp $
 
 package Apache::AxKit::XMLFinder;
 
@@ -6,7 +6,7 @@ use strict;
 use Apache::MimeXML;
 use Apache::Constants;
 
-die "************ THIS MODULE IS DEPRECATED *******************\nSee perldoc AxKit now\n";
+die "************* THIS MODULE IS DEPRECATED ****************\nSee perldoc AxKit now\n";
 
 sub handler {
 	my $r = shift;

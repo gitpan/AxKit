@@ -1,0 +1,300 @@
+<?xml version="1.0"?>
+<?xml-stylesheet href="/stylesheets/docbook_screen.xps"
+				type="application/x-xpathscript"
+				media="screen"
+				title="default" ?>
+<?xml-stylesheet href="/stylesheets/docbook_print.xps"
+type="application/x-xpathscript" title="print" alternate="yes"?>
+<!DOCTYPE article [
+<!ENTITY prompt "&#x25; ">
+]>
+<article>
+<artheader>
+  <title>AxKit Quickstart Guide</title>
+  <author>
+    <firstname>Kip</firstname>
+    <surname>Hampton</surname>
+    <affiliation>
+      <address><email>khampton@totalcinema.com</email></address>
+    </affiliation>
+  </author>
+  <abstract>
+    <para>
+    This document is a <emphasis>quick start</emphasis> guide designed to help developers
+    deliver transformed XML with AxKit as quickly as possible. As such, we
+    will only be focusing on one type of transformation (XSLT) and many of the
+    finer points of AxKit's extremely robust interface will not be covered.
+    </para>
+    <para>
+
+    </para>
+  </abstract>
+</artheader>
+<sect1>
+<title>Installing and Configuring AxKit</title>
+<para>
+This guide presumes that you already have an
+<ulink url ="http://www.apache.org/httpd.html">Apache</ulink> httpd server running
+<ulink url="http://perl.apache.org/">mod_perl</ulink>. If this is not
+the case, please visit the <ulink url
+="http://www.apache.org/httpd.html">Apache
+</ulink> and <ulink url="http://perl.apache.org/">mod_perl</ulink> pages for
+more information.
+</para>
+<sect2>
+<title>Step 1 - Download and Install AxKit</title>
+<para>
+First, visit the AxKit <ulink url="http://www.axkit.org/download/">
+download directory</ulink> and grab the latest tarball. Once you've
+downloaded the source, type the following:
+<informalexample>
+<programlisting>
+&prompt; <userinput>tar -zxvf AxKit-x.xx.tar.gz</userinput>
+&prompt; <userinput>cd AxKit-x.xx/</userinput>
+&prompt; <userinput>perl Makefile.PL</userinput>
+&prompt; <userinput>make</userinput>
+&prompt; <userinput>make test</userinput>
+&prompt; <userinput>make install</userinput>
+</programlisting>
+</informalexample>
+</para>
+</sect2>
+<sect2>
+<title>Step 2 - Download and Install the Sablotron XSLT
+Processor</title>
+<para>
+Next, fetch either the source or appropriate binary distribution of the
+Sablotron XSLT Processor from <ulink url="http://www.gingerall.com/">
+www.gingerall.com</ulink>. If you choose to install from the source, you
+will also need to get Sablot-Expat.tar.gz from the same directory.
+</para>
+<para>
+Installing Sablotron from the source:
+<informalexample>
+<programlisting>
+&prompt; <userinput>tar -zxvf Sablot-x.xx.tar.gz</userinput>
+&prompt; <userinput>tar -zxvf Sablot-Expat.tar.gz</userinput>
+&prompt; <userinput>cd Sablot-x.xx/</userinput>
+&prompt; <userinput>./configure</userinput>
+&prompt; <userinput>make</userinput>
+&prompt; <userinput>make install</userinput>
+</programlisting>
+</informalexample>
+Please note that Sablotron build process described here covers versions 0.41 and above.
+Consult the INSTALL and README files that shipped with the version you downloaded for details
+and possible changes.
+</para>
+</sect2>
+<sect2>
+<title>Step 3 - Download and Install the XML::Sablotron Perl
+Library</title>
+<para>
+Next, get the latest version of the XML::Sablotron Perl package from <ulink
+url="http://www.gingerall.com/">www.gingerall.com</ulink>, cd to the
+directory you downloaded the tarball to and type:
+<informalexample>
+<programlisting>
+&prompt; <userinput>tar -zxvf XML-Sablot-x.xx.tar.gz</userinput>
+&prompt; <userinput>mv XML-Sablot-x.xx/ Sablot-x.xx/</userinput>
+&prompt; <userinput>cd Sablot-x.xx/XML-Sablot-x.xx/</userinput>
+&prompt; <userinput>perl Makefile.PL</userinput>
+&prompt; <userinput>make</userinput>
+&prompt; <userinput>make test</userinput>
+&prompt; <userinput>make install</userinput>
+</programlisting>
+</informalexample>
+</para>
+</sect2>
+<sect2>
+<title>Step 4 - Edit Your httpd.conf File</title>
+<para>
+Add the following lines to your httpd.conf:
+<informalexample>
+<programlisting>
+PerlModule AxKit
+SetHandler perl-script
+PerlHandler AxKit
+AxAddStyleMap text/xsl Apache::AxKit::Language::Sablot
+</programlisting>
+</informalexample>
+</para>
+<para>
+Don't worry that this looks like AxKit will deliver all of your files,
+if it doesn't detect XML at the URL you give it, it will let the httpd
+deliver it as normal. If you're still concerned, put the <emphasis>last
+3</emphasis> configuration directives in a <ulink
+url="http://www.apache.org/docs/mod/core.html#location"
+><literal>&lt;Location></literal></ulink> section. Note that the first
+line: <literal>PerlModule AxKit</literal> <emphasis>MUST</emphasis>
+occur in your httpd.conf so that it is parsed in the parent httpd
+process. This is because it adds configuration directives to the entire
+Apache httpd. If you do not do this you will get SEGFAULTs.
+</para>
+<para>
+Now, stop and restart your Apache server and assuming you've had no trouble
+with the steps above, you are now ready to begin publishing transformed XML
+with AxKit!
+</para>
+</sect2>
+</sect1>
+
+
+<sect1>
+<title>Your First XSLT Transformation</title>
+<para>
+Now, we're going to see how AxKit works by transforming an XML file containing data about
+Camelids (note the dubious Perl reference) into HTML.
+</para>
+<sect2>
+<title>Step 1 - A Sample XML Document</title>
+<para>
+First, you will need a sample XML file. Open the text editor of your choice
+and type the following:
+<informalexample>
+<programlisting><![CDATA[
+<?xml version="1.0"?>
+  <dromedaries>
+    <species name="Camel">
+      <humps>1 or 2</humps>
+      <disposition>Cranky</disposition>
+    </species>
+    <species name="Llama">
+      <humps>1 (sort of)</humps>
+      <disposition>Aloof</disposition>
+    </species>
+    <species name="Alpaca">
+      <humps>(see Llama)</humps>
+      <disposition>Friendly</disposition>
+    </species>
+</dromedaries>
+]]></programlisting>
+</informalexample>
+Save this file as test.xml.
+</para>
+</sect2>
+<sect2>
+<title>Step 2 - Create an XSLT Stylesheet</title>
+<para>
+Now, create the stylesheet by starting a new file and entering the
+following:
+<informalexample>
+<programlisting><![CDATA[
+<?xml version="1.0"?>
+<xsl:stylesheet xmlns:xsl="http://www.w3.org/1999/XSL/Transform"
+version="1.0">
+<xsl:template match="/">
+  <html>
+  <head><title>Know Your Dromedaries</title></head>
+  <body>
+    <table bgcolor="eeeeee" border="1">
+    <tr>
+    <th>Species</th>
+    <th>No of Humps</th>
+    <th>Disposition</th>
+    </tr>
+    <xsl:for-each select="dromedaries">
+      <xsl:apply-templates select="./species" />
+  </xsl:for-each>
+  </table>
+  </body>
+  </html>
+</xsl:template>
+
+<xsl:template match="species">
+  <tr>
+  <td><xsl:value-of select="@name" /></td>
+  <td><xsl:value-of select="./humps" /></td>
+  <td><xsl:value-of select="./disposition" /></td>
+  </tr>
+</xsl:template>
+
+</xsl:stylesheet>
+]]></programlisting>
+</informalexample>
+Save this file as test.xsl.
+</para>
+</sect2>
+<sect2>
+<title>Step 3 - Associate the XML Document with your XSLT
+Stylesheet</title>
+<para>
+Next, re-open the test.xml file and add the following line just after the &lt;?xml
+version="1.0"?> declaration:
+<informalexample>
+<programlisting><![CDATA[
+<?xml-stylesheet href="test.xsl" type="text/xsl"?>
+]]></programlisting>
+</informalexample>
+Note that this line is telling AxKit which stylesheet to use (test.xsl) and
+which handler to use for that stylesheet (text/xsl). Now, save the test.xml
+file and quit your editor.
+</para>
+</sect2>
+<sect2>
+<title>Step 4 - Finishing Up</title>
+<para>
+You are now ready to deliver your little zoological XML data file as
+formatted HTML! Just copy or move the test.xml and test.xsl files into the
+same directory under your httpd DocumentRoot. Then, point your browser to
+http://your-server.com/path/to/test.xml and you should see your data nicely
+formatted in an HTML table.
+</para>
+<para>
+Congratulations, you are now well on the road to adding XML, XSLT and AxKit
+to your developmental toolbelt. For more information about AxKit's advanced
+features or, if you had any problems during this process, please visit the
+<ulink url="http://www.axkit.org/">AxKit homepage</ulink>.
+</para>
+</sect2>
+</sect1>
+<sect1>
+<title>Other Resources</title>
+<sect2>
+<title>mod_perl</title>
+<para>
+  <itemizedlist>
+    <listitem><ulink url="http://perl.apache.org">mod_perl Homepage</ulink>
+    </listitem>
+    <listitem><ulink url="http://perl.apache.org/guide/">mod_perl Guide
+    </ulink>
+    </listitem>
+    <listitem><ulink url="http://www.modperl.com/">Writing Apache Modules
+    with Perl and C</ulink>
+    </listitem>
+  </itemizedlist>
+</para>
+</sect2>
+<sect2>
+<title>XSLT</title>
+<para>
+  <itemizedlist>
+    <listitem><ulink url="http://www.w3.org/Style/XSL/">W3C Specification
+    </ulink>
+    </listitem>
+    <listitem><ulink url="http://www.xml.com/pub/Guide/XSLT">XSLT Resources
+    at XML.com</ulink>
+    </listitem>
+    <listitem><ulink url="http://www.xslt.com/">XSLT.com</ulink></listitem>
+  </itemizedlist>
+</para>
+</sect2>
+</sect1>
+</article>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

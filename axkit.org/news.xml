@@ -1,0 +1,73 @@
+<?xml version="1.0"?>
+
+<!DOCTYPE rss PUBLIC "-//Netscape Communications//DTD RSS 0.91//EN" "http://my.netscape.com/publish/formats/rss-0.91.dtd">
+
+<rss version="0.91">
+
+  <channel>
+    <title>XML.com</title>
+    <description>XML.com features a rich mix of information and services for the XML community.</description>
+    <language>en-us</language>
+    <link>http://xml.com/pub</link>
+    <copyright>Copyright 1999, O'Reilly and Associates and Seybold Publications</copyright>
+    <managingEditor>dale@xml.com (Dale Dougherty)</managingEditor>
+    <webMaster>peter@xml.com (Peter Wiggin)</webMaster>
+
+  <image>
+    <title>XML.com</title>
+    <url>http://xml.com/universal/images/xml_tiny.gif</url>
+    <link>http://xml.com/pub</link>
+    <width>88</width>
+    <height>31</height>
+  </image>
+
+  <item>
+    <title>XML and Visual Basic</title>
+    <link>http://xml.com/pub/2000/07/12/vbasic/vb_and_xml.html?wwwrrr_rss</link>
+    <description>What happens when one of the most popular programming  languages in the world meets XML? This article  explains how to use XML with Visual Basic, and the effect  XML is having on VB application design.  </description>
+  </item>
+
+  <item>
+    <title>Exposing Application Services With SOAP</title>
+    <link>http://xml.com/pub/2000/07/12/soap/mssoaptutorial.html?wwwrrr_rss</link>
+    <description>In this tutorial for advanced users of Visual Basic, James Snell shares  his experience of the Microsoft SOAP toolkit and demonstrates how to  construct web services.</description>
+  </item>
+
+  <item>
+    <title>Visual Basic and the XML DOM: An Annotated Example</title>
+    <link>http://xml.com/pub/2000/07/12/vbasic/example.html?wwwrrr_rss</link>
+    <description>Our annotated example gives an easy introduction to using Visual  Basic and XML together. This article is an extract from the book "XML Programming with VB  and ASP."</description>
+  </item>
+
+  <item>
+    <title>Schemas Revisited</title>
+    <link>http://xml.com/pub/2000/07/12/deviant.html?wwwrrr_rss</link>
+    <description>The XML-DEV mailing list has seen a renewed vigor in discussion  recently, with the spotlight being turned on the troubled issue of XML  Schemas.</description>
+  </item>
+
+<item>
+	<title>W3C Speech Recognition Grammar Specification.</title>
+	<link>http://xml.com/pub/coverpage/newspage.html#ni2000-07-11-a</link>
+	<description>      The first public working draft version of a 'Speech Recognition Grammar Specification' has been issued by the W3C Voice Browser Working Group as part of the W3C Voice Browser Activity, viz.:  Speech Recognition Grammar Specification for the W3C Speech Interface Framework.  Reference: W3C Working Draft 10-July-2000, edited by Andrew Hunt (SpeechWorks International) and Scott McGlashan (PipeBeach). Abstract: "This document defines syntax for representating grammars for use in speech reco...
+</description>
+</item>
+<item>
+	<title>Revised W3C Working Draft for Scalable Vector Graphics (SVG).</title>
+	<link>http://xml.com/pub/coverpage/newspage.html#ni2000-07-10-a</link>
+	<description>      The SVG Working Group has released a revised working draft for the Scalable Vector Graphics (SVG) 1.0 Specification as part of the W3C Graphics Activity, Reference: W3C Working Draft 29-June-2000, edited by Jon Ferraiolo (Adobe). Abstract: "This specification defines the features and syntax for Scalable Vector Graphics (SVG), a language for describing two-dimensional vector and mixed vector/raster graphics in XML. [...] SVG allows for three types of graphic objects: vector graphic shap...
+</description>
+</item>
+<item>
+	<title>Smalltalk Interchange Format in XML (SMIX).</title>
+	<link>http://xml.com/pub/coverpage/newspage.html#ni2000-07-05-b</link>
+	<description>      Masashi Umezawa is developing 'Smalltalk Interchange Format in XML (SMIX)' as "a new Smalltalk Interchange Format.  It is basically based on the ANSI Smalltalk Interchange Format (version 1.0)."  The web site provides a SMIX XML DTD, a sample  XML document, and  an alpha version of a  simple SMIX generator. The author's Dandelion tool will generate SMIX format.  Dandelion is "a generic Smalltalk code analysis/output framework; you can analyze your code and output the  information in va...
+</description>
+</item>
+<item>
+	<title>W3C XSL Working Group is Rechartered.</title>
+	<link>http://xml.com/pub/coverpage/newspage.html#ni2000-07-05-a</link>
+	<description>      The W3C XSL Working Group, as part of the W3C User Interface Domain and participant in the Style Sheets Activity, has recently published a new charter.  The document supplies detailed [public] information on the working group's Primary deliverables, Duration and Milestones, Relationship to other W3C activities, Liaison with groups outside the W3C, etc.  Excerpt: "The XSL Working Group is chartered to continue the developement of XSL (extensible stylesheet language), a style sheet and t...
+</description>
+</item>
+  </channel>
+</rss>

@@ -1,0 +1,59 @@
+<%
+
+$t->{'rss'}{testcode} = sub {
+	my ($node, $t) = @_;
+	
+	$t->{'pre'} = q(<table width='190' border='0' cellspacing='0' cellpadding='0'>
+            <tr><td align='center' bgcolor='#330066'>
+            <table width='100%' border='0' cellspacing='1' cellpadding='0'>
+            <tr>
+            <td align='center' bgcolor='#9966cc'><table border='0' cellpadding='0'
+			cellspacing='0'><tr><td bgcolor='#660099'>) . spacer(1,1) . q(</td><td align='center' bgcolor='white'><a href=');
+	$t->{'pre'} .= findvalue('channel/image/link/text()', $node);
+	$t->{'pre'} .= q('><img src=');
+				
+	$t->{'pre'} .= findvalue('channel/image/url/text()', $node);
+	
+	$t->{'pre'} .= q(' border='0' vspace='0' hspace='0' alt=');
+	$t->{'pre'} .= findvalue('channel/image/title/text()', $node);
+	
+	$t->{'pre'} .= q(' /></a></td><td bgcolor='#660099'>) . spacer(1,1) . q(</td></tr></table></td>
+
+            </tr>
+
+            <tr>
+            <td>
+
+                <table width='100%' border='0' cellspacing='0' cellpadding='5' bgcolor='#ffffff'>
+                <tr>
+                <td align='left' valign='top'>);
+	
+	$t->{'post'} = q(</td>
+                </tr>
+                </table>
+
+            </td>
+            </tr>
+            </table>
+            </td></tr></table>);
+	
+	return 'channel/item[position() < 5]';
+};
+
+$t->{'item'}{testcode} = sub {
+	my ($node, $t) = @_;
+	if ($node->getParentNode->getName ne 'channel') {
+		return 1;
+	}
+	
+	$t->{'pre'} = '<p><img src="/img/bullet.gif" width="10" height="10" border="0" vspace="0" hspace="0" alt=">>" />
+	<a href="' . findvalue('link/text()', $node) . '"><b>' .
+	findvalue('title/text()', $node) . '</b></a> - ' .
+	findvalue('description/text()', $node);
+	
+	$t->{'post'} = "</p>\n\n";
+	
+	return -1;
+};
+
+%>

@@ -1,0 +1,998 @@
+<?xml version="1.0" encoding="ISO-8859-1"?>
+<?xml-stylesheet href="/stylesheets/docbook_screen.xps" type="application/x-xpathscript"
+title="default"?>
+<?xml-stylesheet href="/stylesheets/docbook_print.xps"
+type="application/x-xpathscript" title="print" alternate="yes"?>
+<!DOCTYPE article [
+<!ENTITY prompt "&#x25; ">
+<!ENTITY XPath "<ulink url='http://www.w3.org/TR/xpath'>XPath</ulink>">
+]>
+<article>
+
+<artheader>
+	<title>XPathScript - A Viable Alternative to XSLT?</title>
+	
+	<author>
+		<firstname>Matt</firstname>
+		<surname>Sergeant</surname>
+		<affiliation>
+			<address><email>matt@sergeant.org</email></address>
+		</affiliation>
+	</author>
+	
+	<copyright>
+		<year>2000</year>
+		<holder role="mailto:matt@sergeant.org">Fastnet Software Ltd</holder>
+	</copyright>
+
+	<abstract>
+		<para>This guide gives an introduction to the features of
+		XPathScript, a template processor that is part of <ulink
+		url="http://xml.sergeant.org/axkit/">AxKit</ulink> which provides
+		full programming facilities alongside XPath based node resolution.
+		It also features code / template separation using the
+		ASP <literal>&lt;% %></literal> paradigm.</para>
+	</abstract>
+</artheader>
+
+<!-- ################################### -->
+<sect1>
+<title>Introduction</title>
+<para>
+XPathScript is a stylesheet language for translating XML files into some
+other format. It has only a few features, but by combining those
+features with the power and flexibility of Perl, XPathScript is a very
+capable system. Like all XML stylesheet languages, including XSLT, an
+XPathScript stylesheet is always executed in the context of a source XML
+file. In many cases the source XML file will actually define what
+stylesheets to use via the <literal>&lt;?xml-stylesheet?></literal>
+processing instruction.
+</para>
+<para>
+XPathScript was concieved as part of AxKit - an application server
+environment for Apache servers running mod_perl (XML.com ran my <ulink
+url="http://www.xml.com/pub/2000/05/24/axkit/">
+Introduction to AxKit</ulink> article in May). Its
+primary goal was to achieve the sorts of transformations that XSLT can
+do, without being restricted by XSLT's XML based syntax, and to provide
+full programming facilities within that environment. I also wanted
+XPathScript to be completely agnostic about output formats, without
+having to program in special after-effect filters. The result is a
+language for server-side transformation that provides the power and flexibility of
+XSLT combined with the full capabilities of the Perl language, and the
+ability to produce stylesheets in any ASP capable editor or ordinary
+text editor. The above Introduction to AxKit is recommended reading
+before reading this guide.
+</para>
+</sect1>
+
+<!-- ################################### -->
+<sect1>
+<title>The Syntax</title>
+
+<para>
+XPathScript follows the basic ASP syntax of introducing code with the
+<literal>&lt;% %></literal> delimiters. Here's a brief example of a
+fully compatible XPathScript stylesheet:
+<informalexample>
+<programlisting><![CDATA[
+<html>
+ <body>
+  <%= 5+5 %>
+ </body>
+</html> 
+]]></programlisting>
+</informalexample>
+This simply outputs the value 10 in a HTML document. The delimiters used
+here are the <literal>&lt;%= %></literal> delimiters, which are slightly
+different in that they send the results of the expression to the browser
+(or to the next processing stage in AxKit).
+Of course this example does absolutely nothing with the source XML file
+which is completely separate from this stylesheet. Here's another
+example:
+<informalexample>
+<programlisting><![CDATA[
+<html>
+ <body>
+  <% $foo = 'World' %>
+Hello
+  <%= $foo %> !!!
+ </body>
+</html>
+]]></programlisting>
+</informalexample>
+This outputs the text <literal>"Hello World !!!"</literal>. Again, we're
+not actually doing anything here with our source document, so all XML
+files using this stylesheet will look identical. This seems rather
+uninteresting until we discover the library of functions that are
+accesible to our XPathScript stylesheets for accessing the source
+document contents.
+</para>
+</sect1>
+
+<!-- ################################### -->
+<sect1>
+<title>The XPathScript API</title>
+
+<para>
+Along with the code delimiters XPathScript provides stylesheet
+developers with a full API for accessing and transforming the source XML
+file. This API can be used in conjunction with the delimiters above to
+provide a stylesheet language that is as powerful as XSLT, and yet
+provides all the features of a full programming language (in this case,
+Perl, but I'm certain that other implementations such as Python or Java
+would be possible).
+</para>
+
+<sect2 id="extract_values">
+<title>Extracting Values</title>
+
+<para>
+A simple example to get us started, is to use the API to bring in the
+title from a docbook article. A docbook article title looks like this:
+
+<informalexample>
+<programlisting><![CDATA[
+<article>
+ <artheader>
+  <title>XPathScript - A Viable Alternative to XSLT?</title>
+  ...
+]]></programlisting>
+</informalexample>
+
+The XPath expression to retrieve the text in the title element is:
+
+<informalexample>
+<programlisting><![CDATA[
+/article/artheader/title/text()
+]]></programlisting>
+</informalexample>
+
+Putting this all together to make this text into the HTML title we get
+the following XPathScript stylesheet:
+
+<informalexample>
+<programlisting><![CDATA[
+<html>
+	<head>
+		<title><%= findvalue("/article/artheader/title/text()") %></title>
+	</head>
+	<body>
+		This was a DocBook Article. We're only extracting the title for now!
+		<p>
+		The title was: <%= findvalue("/article/artheader/title/text()") %>
+	</body>
+</html>
+]]></programlisting>
+</informalexample>
+
+</para>
+<para>
+There are lots of features to the expression syntax we used to find that
+"node", and this syntax is called &XPath;. This is a W3C standard for
+finding and matching XML document nodes. The standard is fairly readable
+and is at <ulink
+url="http://www.w3.org/TR/xpath">http://www.w3.org/TR/xpath</ulink>
+alternatively I can recommend <ulink
+url="http://www.arbortext.com/Think_Tank/Norm_s_Column/Issue_One/Issue_One.html"
+>Norm Walsh's XPath introduction</ulink> which covers a slightly older
+version of the specification, but I didn't notice anything in the
+article that is missing or different from the current recommendation.
+</para>
+</sect2>
+
+<sect2>
+<title>Extracting Nodes</title>
+
+<para>
+The above example showed us how to extract single values, but what if we
+have a list of things we wish to extract values from? Here's how we
+might get a table of contents from docbook article sections:
+
+<informalexample>
+<programlisting><![CDATA[
+...
+<%
+for my $sect1 (findnodes("/article/sect1")) {
+	print findvalue("title/text()", $sect1), "<br>\n";
+	for my $sect2 (findnodes("sect2", $sect1)) {
+		print " + ", findvalue("title/text(), $sect2), "<br>\n";
+		for my $sect3 (findnodes("sect3", $sect2)) {
+			print " + + ", findvalue("title/text(), $sect3), "<br>\n";
+		}
+	}
+}
+%>
+...
+]]></programlisting>
+</informalexample>
+
+This gives us a table of contents down to three levels (adding links to
+the actual part of the document is left as an exercise). The first call
+to findnodes gives use all sect1 nodes that are children of the root
+element (article). The &XPath; expressions following that are relative to the
+current node. You can see that by the absence of the leading
+<literal>/</literal>. Again, &XPath; is a very interesting query language,
+and you would be best to visit <ulink
+url="http://www.w3.org/TR/xpath">the XPath specification</ulink> to
+learn more.
+</para>
+<para>
+Note in the above how we specify the current
+<literal>$sect<emphasis>X</emphasis></literal> variable in the calls to
+the API. This is the context for the &XPath; expression, and is vital so
+that we get the right values for the expression. The context in
+XPathScript is never set automatically. This is something that XSLT
+authors might miss, or expect to be done automatically for you. This
+does give some added flexibility, in that you can always specify your
+own context and pass context nodes around in your script.
+</para>
+</sect2>
+
+<sect2>
+<title>Declarative Templates</title>
+
+<para>
+The examples up to now have all covered a concept of a single global
+template with a search/replace type functionality from the source XML
+document. This is a powerful concept in itself, especially when combined
+with loops and the ability to change the context of searches. But that
+style of template is limited in utility to well structured data, rather
+than processing large documents. In order to ease the processing of
+documents, XPathScript includes a declarative template processing model
+too, so that you can simply specify the format for a particular element
+and let XPathScript do the work for you.
+</para>
+<para>
+In order to support this method, XPathScript introduces one more API
+function: <literal>apply_templates()</literal>. The name is intended to
+appeal to people already familiar with XSLT. The
+<literal>apply_templates()</literal> function takes either a list of
+start nodes, or an &XPath; expression (that must result in a node set) and
+optional context. Starting at the start nodes it traverses the document
+tree applying the templates defined by the <literal>$t</literal> hash
+reference.
+</para>
+<para>
+First a simple example to introduce this feature. Lets assume for a
+moment that our source XML file is valid XHTML, and we want to change
+all anchor links to italics. Here is the very simple XPathScript
+template that will do that:
+
+<informalexample>
+<programlisting><![CDATA[
+<%
+$t->{'a'}{pre} = '<i>';
+$t->{'a'}{post} = '</i>';
+$t->{'a'}{showtag} = 1;
+%>
+<%= apply_templates() %>
+]]></programlisting>
+</informalexample>
+
+Note that <literal>apply_templates()</literal> has to be output using
+<literal>&lt;%= %></literal>. That's because
+<literal>apply_templates()</literal> actually outputs a string
+representation of the transformation, it doesn't do the output to the
+browser for you.
+</para>
+<para>
+The first thing this example does is sets up a hash reference
+<literal>$t</literal> that XPathScript knows about (lets call it
+magical). The keys of <literal>$t</literal> are element names (including
+namespace prefix if we are using namespaces). The hash can have the
+following sub-keys:
+<itemizedlist>
+	<listitem><literal>pre</literal></listitem>
+	<listitem><literal>post</literal></listitem>
+	<listitem><literal>showtag</literal></listitem>
+	<listitem><literal>testcode</literal></listitem>
+</itemizedlist>
+We'll cover <literal>testcode</literal> in more depth later in <xref
+linkend="template_sect"/>, but for now know that it is a place holder
+for code that allows for more complex templates.
+</para>
+<para>
+Unlike XSLT's declarative transformation syntax, the keys of
+<literal>$t</literal> do <emphasis>not</emphasis> specify &XPath; match
+expressions. Instead they are simple element names. This is a trade off
+of speed of execution over flexibility. Perl hash lookups are extremely
+quick compared to XPath matching. Luckily because of the
+<literal>testcode</literal> option, more complex matches are quite
+possible with XPathScript.
+</para>
+<para>
+The simple explanation for now is that <literal>pre</literal> specifies
+output to appear before the tag, <literal>post</literal> specifies
+output to appear after the tag, and <literal>showtag</literal> specifies
+that the tag itself should be output as well as the pre and post values.
+</para>
+</sect2>
+</sect1>
+
+<!-- ################################### -->
+<sect1>
+<title>A Complete Example</title>
+
+<para>
+Now lets put all of these ideas together into a (almost) complete
+example. This is part of the stylesheet I use to process my docbook articles
+online:
+
+<informalexample>
+<programlisting><![CDATA[
+<!--#include file="docbook_tags.xps"-->
+<%
+
+my %links;
+my $linkid = 0;
+$t->{'ulink'}{testcode} = sub { 
+		my $node = shift;
+		my $t = shift;
+		my $url = findvalue('@url', $node);
+		if (!exists $links{$url}) {
+			$linkid++;
+			$links{$url} = $linkid;
+		}
+		my $link_number = $links{$url};
+		$t->{pre} = "<i><a href=\"$url\">";
+		$t->{post} = " [$link_number]</a></i>";
+		return 1;
+	};
+
+%>
+<html>
+<head>
+	<title><%= findvalue('/article/artheader/title/text()') %></title>
+</head>
+<body bgcolor="white">
+
+<%
+# display title/TOC page
+print apply_templates('/article/artheader/*');
+%>
+
+<hr>
+
+<%
+# display particular page
+foreach my $section (findnodes("/article/sect1")) {
+	print apply_templates($section);
+}
+%>
+
+<h1>List of Links</h1>
+<table border="1">
+<th>URL</th>
+<%
+for my $link (sort {$links{$a} <=> $links{$b}} keys %links) {
+%>
+<tr>
+<td><%= "[$links{$link}] $link" %></td>
+</tr>
+<% } %>
+</table>
+
+</body>
+</html>
+]]></programlisting>
+</informalexample>
+
+The very first line there imports a library of tags that are shared
+between this stylesheet, and one that is easier for web viewing with
+clickable links between sections (which can be downloaded <ulink
+url="http://xml.sergeant.org/docbook_screen.xps">here</ulink>). The
+import system is based on Server Side Includes (SSI) although only SSI
+file includes are supported at this time (SSI virtual includes can be
+implemented using mod_include). Here is part of the docbook_tags.xps
+file:
+
+<informalexample>
+<programlisting><![CDATA[
+<%
+
+$t->{'attribution'}{pre} = "<i>";
+$t->{'attribution'}{post} = "</i><br>\n";
+
+$t->{'para'}{pre} = '<p>';
+$t->{'para'}{post} = '</p>';
+
+$t->{'ulink'}{testcode} = sub { 
+		my $node = shift;
+		my $t = shift;
+		$t->{pre} = "<i><a href=\"" .
+						findvalue('./@url', $node) . "\">";
+		$t->{post} = '</a></i>';
+		return 1;
+	};
+
+$t->{'title'}{testcode} = sub { 
+		my $node = shift;
+		my $t = shift;
+		if (findvalue('parent::blockquote', $node)) {
+			$t->{pre} = "<b>";
+			$t->{post} = "</b><br>\n";
+		}
+		elsif (findvalue('parent::artheader', $node)) {
+			$t->{pre} = "<h1>";
+			$t->{post} = "</h1>";
+		}
+		else {
+			my $parent = findvalue('name(..)', $node);
+			if (my ($level) = $parent =~ m/sect(\d+)$/) {
+				$t->{pre} = "<h$level>";
+				$t->{post} = "</h$level>";
+			}
+		}
+
+		return 1;
+	};
+
+%>
+]]></programlisting>
+</informalexample>
+</para>
+<para>
+We go into detail of what is happening in this example in the next
+section.
+</para>
+</sect1>
+
+<!-- ################################### -->
+<sect1>
+<title>Stepping Through the Example</title>
+
+<para>
+Careful readers will note that the first thing we see is a
+<literal>$t</literal> specification for <literal>&lt;ulink></literal>
+tags, and you'll also note that the included
+<filename>docbook_tags.xps</filename> contains a specification for
+<literal>&lt;ulink></literal>. The reason is to override the default
+behaviour for ulink tags in the print version of my articles to contain
+a reference that we can use later in a list of links. We can also see
+that this specification uses a <literal>testcode</literal> parameter
+that we haven't encountered before. We'll see how and why that's used
+later in <xref linkend="template_sect"/>.
+</para>
+<para>
+Next we see the <literal>findvalue()</literal> function used exactly as
+we already saw in <xref linkend="extract_values"/>.
+</para>
+<para>
+Then we have a section with a comment marked: "display Title/TOC page".
+This uses the <literal>apply_templates()</literal> function with an
+&XPath; expression. Note that rather than use the <literal>&lt;%=
+%></literal> delimiters around the apply_templates() call, we simply use
+the print function. This has the same effect, and is used here to show
+the flexibility in this approach.
+</para>
+<para>
+The main part of the code loops through all sect1 tags, and calls
+apply_templates on those nodes. Note how this is another demonstration
+of Perl's TMTOWTDI (There's More Than One Way To Do It) approach - the
+same code could have been written:
+
+<informalexample>
+<programlisting><![CDATA[
+<%= apply_templates("/article/sect1") %>
+]]></programlisting>
+</informalexample>
+
+</para>
+<para>
+Finally, because this is the print version of our article, we provide a
+list of links so that people viewing a printed version of this article
+can type in those links, and they can also refer to the link by
+reference number, as we saw earlier. We use the hash of links in the
+<literal>%links</literal> variable that we built in the
+<literal>testcode</literal> handler for our <literal>ulink</literal>
+template.
+</para>
+
+<para>
+The other file, <filename>docbook_tags.xps</filename>, is included only
+in part here, to demonstrate a few of the transformations we're applying
+to various docbook article tags. We can see that we're turning
+<literal>&lt;para></literal> tags into <literal>&lt;p></literal> tags,
+and doing some more complex processing with <literal>testcode</literal>
+to <literal>&lt;title></literal> tags. We'll see in <xref
+linkend="template_sect"/> exactly what <literal>testcode</literal>
+allows us to achieve.
+</para>
+
+</sect1>
+
+
+<!-- ################################### -->
+<sect1 id="template_sect">
+<title>The Template Hash</title>
+<para>
+The <literal>apply_templates()</literal> function iterates over the
+nodes of your XML file applying the templates in the
+<literal>$t</literal> hash reference. This is the most important feature
+of XPathScript, because it allows you to define the appearance for
+individual tags without having to do it programmatically. This is the
+declarative part of XPathScript. There is an important point to make
+here: XSLT is a purely declarative syntax, and people are having to work
+procedural code into XSLT via work arounds. XPathScript takes a much
+more pragmatic approach (much like Perl itself) - it is both declarative
+and procedural, allowing you the flexibility to use real code for real
+problems. It is important to note that apply_templates returns a string,
+so you must either use <literal>print apply_templates()</literal> if
+using it from a Perl section of code, or via <literal>&lt;%=
+apply_templates() %></literal>.
+</para>
+<para>
+The keys of <literal>$t</literal> are the names of the elements, including namespace
+prefixes. When you call <literal>apply_templates()</literal>, every
+element visited is looked up in the <literal>$t</literal> hash, and the
+template items stored in that hash are applied to the node. It's worth
+noting at this point, that unlike XSLT, XPathScript does not perform
+tree transformations from one tree to another. It simply sends its
+output to the browser directly. This has advantages and disadvantages,
+but they are beyond the scope of this guide.
+</para>
+<para>
+The following sub-keys define the transformation:
+<itemizedlist>
+	<listitem><literal>pre</literal> - the output to occur before the
+	tag.</listitem>
+	<listitem><literal>post</literal> - the output to occur after the
+	tag.</listitem>
+	<listitem><literal>prechildren</literal> - the output to occur before
+	the children of this tag are output.</listitem>
+	<listitem><literal>postchildren</literal> - the output to occur after
+	the children of this tag are output.</listitem>
+	<listitem><literal>prechild</literal> - the output to occur before
+	each child of this tag.</listitem>
+	<listitem><literal>postchild</literal> - the output to occur after
+	each child of this tag.</listitem>
+	<listitem><literal>showtag</literal> - set to a true value to display
+	the tag as well as the pre and post values. If unset or false the tag
+	itself is not displayed.</listitem>
+	<listitem><literal>testcode</literal> - code to execute upon visiting
+	this tag. See below.</listitem>
+</itemizedlist>
+The showtag option is mostly equivalent to the XSLT
+<literal>&lt;xsl:copy></literal> tag, only less verbose. The pre and post
+options are useful because generally in transformations we want to
+specify what comes before and after a tag. For example, to change an
+HTML A tag to be in italics, but still have the link, we would use the
+following:
+<informalexample>
+<programlisting><![CDATA[
+$t->{A}{pre} = "<i>";
+$t->{A}{post} = "</i>";
+$t->{A}{showtag} = 1;
+]]></programlisting>
+</informalexample>
+</para>
+
+<sect2>
+<title>"testcode"</title>
+
+<para>
+The <literal>testcode</literal> option is where we perform really
+powerful transformations. Its how we can do more complex tests on the
+node that are available in XPath, and locally modify the transformation
+based on what we find.
+</para>
+<para>
+The value stored in <literal>testcode</literal> is simply a reference to
+a subroutine. In Perl these are incredibly simple to create using the
+anonymous sub keyword (note that these are often erroneously called
+closures, but they only become closures if they reference a lexical
+variable outside the scope of the subroutine itself). The sub is called
+every time one of these elements is visited. The subroutine is passed two parameters:
+The node itself, and an empty hash reference that you can populate using
+the <literal>pre</literal>, <literal>post</literal>,
+<literal>prechildren</literal>, <literal>prechild</literal>,
+<literal>postchildren</literal>, <literal>postchild</literal> and
+<literal>showtag</literal> values that we've discussed already. Unlike
+the global <literal>$t</literal> hashref you don't have to first
+specify the element name as a key. Here's the
+<literal>&lt;ulink></literal> example from the global tags code above:
+<informalexample>
+<programlisting><![CDATA[
+$t->{'ulink'}{testcode} = sub { 
+	my ($node, $t) = @_;
+	$t->{pre} = '<i><a href="' . findvalue('@url', $node) . '">';
+	$t->{post} = '</a></i>';
+	return 1;
+};
+]]></programlisting>
+</informalexample>
+The equivalent XSLT code looks like this:
+<informalexample>
+<programlisting><![CDATA[
+<xsl:template match="ulink">
+	<i><a>
+		<xsl:attribute name="href">
+			<xsl:value-of select="@url"/>
+		</xsl:attribute>
+		<xsl:apply-templates/>
+	</a></i>
+</xsl:template>
+]]></programlisting>
+</informalexample>
+Note in the XPathScript above that the inner <literal>$t</literal> is
+lexically scoped, so changes to it don't affect the outer
+<literal>$t</literal>. To save some confusion we might have named that
+variable <literal>$localtransforms</literal>, but some people like
+myself hate typing... ;-)
+</para>
+<para>
+The return value from the testcode is also important. A return value of
+1 means to process this node and continue processing all the children of
+this node. A return value of -1 means to process this node and stop, and
+a return value of 0 means do not process this node at all. This is
+useful in conditional tests, where you may not wish to process the nodes
+under certain conditions. You may also use a return code of a consisting
+of a string that is an XPath expression. See <xref
+linkend="mini_reference"/> for more information.
+</para>
+<para>
+It is important to note that we can do things here based on XPath
+lookups just as we can in XSLT. While it is a little more verbose than a
+simple XSLT pattern match, the trade off is in performance. An example
+is in XSLT you might match <literal>artheader/title</literal> and
+elsewhere you might match <literal>title[name(..) != "artheader"</literal>. 
+In XPathScript we can only match "title" in the
+template hash. But we can use the testcode section to extend the match:
+<informalexample>
+<programlisting><![CDATA[
+$t->{'title'}{testcode} = sub { 
+	my $node = shift;
+	my $t = shift;
+	if (findvalue('parent::blockquote', $node)) {
+		$t->{pre} = "<b>";
+		$t->{post} = "</b><br>\n";
+	}
+	elsif (findvalue('parent::artheader', $node)) {
+		$t->{pre} = "<h1>";
+		$t->{post} = "</h1>";
+	}
+	else {
+		my $parent = findvalue('name(..)', $node);
+		if (my ($level) = $parent =~ m/sect(\d+)$/) {
+			$t->{pre} = "<h$level>";
+			$t->{post} = "</h$level>";
+		}
+	}
+
+	return 1;
+};
+]]></programlisting>
+</informalexample>
+Here we check what the parent node is before performing our modification
+to the local <literal>$t</literal> hashref. Specifically note the
+utility of being able to perform Perl regular expressions to extract
+values.
+</para>
+</sect2>
+
+<sect2>
+<title>Copying styles</title>
+<para>
+One really neat feature of XPathScript that is really hard to do with
+XSLT is to be able to copy a style completely:
+<informalexample>
+<programlisting><![CDATA[
+<%
+$t->{'foo'}{pre} = "<i>";
+$t->{'foo'}{post} = "</i>";
+$t->{'foo'}{showtag} = 1;
+
+$t->{'bar'} = $t->{'foo'};
+%>
+]]></programlisting>
+</informalexample>
+While this would be possible in XSLT using entities, it's certainly not
+very practical or neat. With XPathScript many tags can share the same
+template. Be careful though - this is a reference copy, not a deep copy,
+so the following may not do what you think it should:
+<informalexample>
+<programlisting><![CDATA[
+<%
+$t->{'foo'}{pre} = "<i>";
+$t->{'foo'}{post} = "</i>";
+$t->{'foo'}{showtag} = 1;
+
+$t->{'bar'} = $t->{'foo'};
+$t->{'bar'}{post} = "</i><br>";
+%>
+]]></programlisting>
+</informalexample>
+Because this is a reference, the last line there changes the values for
+'foo' as well as 'bar'.
+</para>
+</sect2>
+
+<sect2>
+<title>A "Catch All"?</title>
+<para>
+Does XPathScript have a "catch all" option for elements that I don't
+have a <literal>$t</literal> entry for? Yes, of course! Simply set
+<literal>$t->{'*'}</literal> to the template you want to execute. You
+can even do some really clever things, such as using the
+<literal>testcode</literal> section to output a warning to the Apache
+error log about an unrecognised tag, rather than having to place some
+output in the resulting document and bother your users!
+</para>
+<para>
+This feature was introduced in AxKit 0.94.
+</para>
+
+</sect2>
+
+</sect1>
+
+<!-- ################################### -->
+<sect1>
+<title>Writing Dynamic Content</title>
+
+<para>
+Because XPathScript has full access to all the perl builtins, you can
+very easily create dynamic content with XPathScript. There is only 1
+caveat though: The AxKit cache works on the basis of the timestamp of
+the original XML file. This means that your XPathScript code will only
+be executed when the XML resource that is being requested actually
+changes.
+</para>
+<para>
+To work around this limitation you simply need to tell AxKit that this
+stylesheet contains dynamic content, and therefore the output should not
+be cached. The syntax for this duplicates the Apache API for telling
+proxy servers not to cache the output:
+<informalexample>
+<programlisting>
+&lt;%
+...
+
+$r->no_cache(1);
+
+...
+%>
+</programlisting>
+</informalexample>
+</para>
+</sect1>
+
+<!-- ################################### -->
+<sect1 id="mini_reference">
+<title>An XPathScript Mini-Reference</title>
+
+<para>
+Code is separated from output in XPathScript using the <literal>&lt;%
+%></literal> delimiters.
+</para>
+<para>
+Perl expression results can be sent to the browser either using
+<literal>print()</literal> if inside a <literal>&lt;% %></literal>
+section, or via <literal>&lt;%= <emphasis>code</emphasis> %></literal>.
+</para>
+<para>
+The following XPath functions are imported for your use:
+<itemizedlist>
+	<listitem><literal>findnodes($path, [$context])</literal></listitem>
+	<listitem><literal>findvalue($path, [$context])</literal></listitem>
+	<listitem><literal>findnodes_as_string($path, [$context])</literal></listitem>
+	<listitem><literal>apply_templates( $path, [$context])</literal></listitem>
+	<listitem><literal>apply_templates( @nodes )</literal></listitem>
+</itemizedlist>
+These methods are documented more completely in the XML::XPath manual
+pages.
+</para>
+<para>
+Apply templates examines the contents of the local <literal>$t</literal>
+hash reference for elements names. For example, when encountering a
+<literal>&lt;foo></literal> element via apply_templates, XPathScript
+will try to find a transformation hash in the key
+<literal>$t->{'foo'}</literal>.
+</para>
+<para>
+The value in <literal>$t->{'foo'}</literal> above is a hash reference
+with the following optional keys:
+<itemizedlist>
+	<listitem>pre</listitem>
+	<listitem>post</listitem>
+	<listitem>prechildren</listitem>
+	<listitem>postchildren</listitem>
+	<listitem>prechild</listitem>
+	<listitem>postchild</listitem>
+	<listitem>showtag</listitem>
+	<listitem>testcode</listitem>
+</itemizedlist>
+</para>
+<para>
+If a value is <emphasis>not</emphasis> found in <literal>$t</literal> for 
+the current element, then the element is output verbatim, and 
+apply_templates performed on all its children. Except in the case where
+a <literal>$t->{'*'}</literal> value exists, which is a "catchall"
+transformation specification. This might be a useful place to add some
+testcode to output a warning to the error log.
+</para>
+<para>
+If a value <emphasis>is</emphasis> found in <literal>$t</literal> for
+the current element then the tag itself is not displayed unless
+<literal>$t->{&lt;element_name>}{showtag}</literal> is set to a true
+value.
+</para>
+<para>
+<literal>testcode</literal> is a reference to a subroutine (often
+constructed as an anonymous subroutine). The subroutine is called with
+two parameters: The current node and a localised hash reference to store
+new transformations for this node and this node only. The return value
+from this subroutine must be one of:
+<itemizedlist>
+	<listitem><literal>1</literal> - process this node and all children</listitem>
+	<listitem><literal>-1</literal> - process this node but not the children of this
+	node</listitem>
+	<listitem><literal>0</literal> - do not process this node or its children</listitem>
+	<listitem><literal>'string'</literal> - any string (other than
+	<literal>"1"</literal>, <literal>"0"</literal> or <literal>"-1"</literal>)
+	is equivalent to <literal>1</literal>, except rather than processing
+	the node's children, it processes the nodes found by executing
+	<literal>findnodes('string', $node)</literal> where
+	<literal>$node</literal> is the current node. Obviously
+	<literal>'string'</literal> has to be a valid XPath expression.</listitem>
+</itemizedlist>
+</para>
+<para>
+XPathScript stylesheets can be modularised using SSI #include
+directives. The code in #included files is added verbatim into the
+current code at the position of the include. This allows you to use this
+fact to override defaults (as we saw in the first example where the
+template for ulink is overridden).
+</para>
+</sect1>
+
+<!-- ################################### -->
+<sect1>
+<title>Using XPathScript to Write XSP TagLibs</title>
+<para>
+XSP is an alternative server side XML programming API. It is not a
+stylesheet system though - the XSP page is executed directly without a
+stylesheet. XSP was originally incorporated into the <ulink
+url="http://xml.apache.org/cocoon">Cocoon</ulink> application
+framework, and AxKit included XSP capabilities because it's a very
+interesting and useful tool.
+</para>
+<para>
+One of the interesting things about XSP is the ability to write taglibs
+using some form of stylesheet transformation language. A taglib is a
+separate sheet of tags that have special meaning to your code. They can
+execute external functions or simply be used in a similar way to
+external parsed entities. Here's the classic example of a usage of a
+taglib from the Cocoon documentation (slightly modified from the
+original):
+<informalexample>
+<programlisting><![CDATA[
+<xsp:page
+language="Perl"
+xmlns:xsp="http://www.apache.org/1999/XSP/Core"
+xmlns:example="http://www.plenix.com/DTD/XSP/Example"
+>
+<page title="Time of Day">
+<p>
+  To the best of my knowledge, it's now
+  <!-- Substitute time of day here -->
+  <example:time-of-day format="%y/%m/%d %r"/>
+</p>
+</page>
+</xsp:page>
+]]></programlisting>
+</informalexample>
+</para>
+<para>
+Here the <literal>&lt;example:time-of-day></literal> tag gets converted
+at run time to the current time using the <literal>strftime</literal>
+format specified in the format attribute.
+</para>
+<para>
+A taglib implementation is a stylesheet that is evaluated against this
+file prior to passing it to the XSP processor. The stylesheet converts
+the tags that it recognises into pure XSP code (see <ulink
+url="http://xml.apache.org/cocoon/xsp.html">http://xml.apache.org/cocoon/xsp.html</ulink>
+for more information on XSP). While this seems a rather redundant
+feature, it allows even further separation between code and design.
+Designers can just introduce these special tags, without worrying about
+the logic behind them.
+</para>
+<para>
+The Cocoon recommendation is to write taglibs using XSLT. This works
+well, but the code often looks confusing. My recommendation for AxKit is
+to use XPathScript. Here's our implementation of the time-of-day tag
+using XPathScript:
+<informalexample>
+<programlisting><![CDATA[
+<%
+$t->{'xsp:page'}{prechildren} = <<EOXML;
+<xsp:structure>
+	<xsp:include>POSIX</xsp:include>
+</xsp:structure>
+EOXML
+
+$t->{'example:time-of-day'}{testcode} = sub {
+        my ($node, $t) = @_;
+        $t->{pre} = 
+'<xsp:expr>
+	POSIX::strftime("' . findvalue('@format', $node) . '", localtime)
+</xsp:expr>';
+        return 1;
+    };
+%>
+<%= apply_templates() %>
+]]></programlisting>
+</informalexample>
+This is a rather trivial example of a taglib, but hopefully it
+introduces the possibilities of further extending your tag library.
+</para>
+<para>
+In order to enable this tag library, we simply make the taglib
+stylesheet the first in our stylesheet cascade:
+<informalexample>
+<programlisting><![CDATA[
+<?xml version="1.0"?>
+<?xml-stylesheet type="application/x-xpathscript" href="example.taglib"?>
+<?xml-stylesheet type="application/x-xsp" href="."?>
+<?xml-stylesheet type="text/xsl" href="example.xsl"?>
+<xsp:page
+language="Perl"
+xmlns:xsp="http://www.apache.org/1999/XSP/Core"
+xmlns:example="http://www.plenix.com/DTD/XSP/Example"
+>
+<page title="Time of Day">
+  <p>
+    To the best of my knowledge, it's now
+    <!-- Substitute time of day here -->
+    <example:time-of-day format="%y/%m/%d %r"/>
+  </p>
+</page>
+</xsp:page>
+]]></programlisting>
+</informalexample>
+Note that the XSP script is executed using the stylesheet processing
+instruction, with a stylesheet of ".". This stylesheet could be anything
+in the case of XSP, since there is actually no stylesheet associated
+with it, and the "." is merely a convention.
+</para>
+<para>
+For comparison, here's the equivalent XSLT based taglib:
+<informalexample>
+<programlisting><![CDATA[
+<?xml version="1.0"?>
+<xsl:stylesheet xmlns:xsl="http://www.w3.org/XSL/Transform/1.0"
+  xmlns:xsp="http://www.apache.org/1999/XSP/Core"
+  xmlns:example="http://www.plenix.com/DTD/XSP/Example"
+>
+  <xsl:template match="xsp:page">
+    <xsp:page>
+      <xsl:copy>
+        <xsl:apply-templates select="@*"/>
+      </xsl:copy>
+      <xsp:structure>
+        <xsp:include>POSIX</xsp:include>
+      </xsp:structure>
+      <xsl:apply-templates/>
+    </xsp:page>
+  </xsl:template>
+
+  <xsl:template match="example:time-of-day">
+    <xsp:expr>
+			POSIX::strftime("<xsl:value-of select="@format"/>", localtime)
+    </xsp:expr>
+  </xsl:template>
+
+  <xsl:template match="@*|node()" priority="-1">
+    <xsl:copy><xsl:apply-templates select="@*|node()"/></xsl:copy>
+  </xsl:template>
+
+</xsl:stylesheet>
+]]></programlisting>
+</informalexample>
+Some people may find one version easier to work with than the other,
+although I personally prefer the simplicity of XPathScript.
+</para>
+</sect1>
+</article>

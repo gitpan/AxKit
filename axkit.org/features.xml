@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="ISO-8859-1"?>
+<?xml-stylesheet type="application/x-xpathscript"
+		href="/stylesheets/webpage_html.xps"
+		title="default"?>
+<!DOCTYPE webpage [
+<!ENTITY sidebar SYSTEM "/sidebar.xml">
+<!ENTITY news SYSTEM "/news.xml">
+]>
+<webpage>
+	<head>
+		<title>AxKit - Features</title>
+	</head>
+	<body>
+		<section>
+			<title>Summary of AxKit Features</title>
+			<para>
+				XSLT based pipelined XML transformations
+			</para>
+			<para>
+				Standards base stylesheet selection criteria
+			</para>
+			<para>
+				XSP support for the Perl language, including Perl DBI based SQL
+				taglib
+			</para>
+			<para>
+				Built in Perl interpreter - no more CGI overhead
+			</para>
+			<para>
+				Plug-in API - All components are replaceable with custom components.
+			</para>
+			<para>
+				Support for almost every platform around: Linux, Solaris, HPUX,
+				AIX, Windows NT, BeOS, *BSD, VMS.
+			</para>
+		</section>
+	</body>
+</webpage>

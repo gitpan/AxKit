@@ -1,4 +1,4 @@
-# $Id: XMLNewsNITF.pm,v 1.4 2000/06/02 13:41:50 matt Exp $
+# $Id: XMLNewsNITF.pm,v 1.5 2000/08/06 12:15:18 matt Exp $
 
 package Apache::AxKit::Language::XMLNewsNITF;
 
@@ -18,7 +18,7 @@ sub handler {
 	
 	$template_processor->readTemplate($style->get_fh());
 	
-	$template_processor->applyTemplate(*STDOUT, $xml->get_fh(), undef);
+	$template_processor->applyTemplate($r, $xml->get_fh(), undef);
 	
 	return OK;
 }

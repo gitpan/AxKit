@@ -1,0 +1,66 @@
+<?xml version="1.0" encoding="ISO-8859-1"?>
+<?xml-stylesheet type="application/x-xpathscript"
+		href="/stylesheets/webpage_html.xps"
+		title="default"?>
+		
+<?xml-stylesheet type="application/x-xpathscript"
+		href="/stylesheets/new/webpage_html.xps"
+		title="new"
+		alternate="yes"?>
+
+<!DOCTYPE webpage [
+<!ENTITY sidebar SYSTEM "/sidebar.xml">
+<!ENTITY news SYSTEM "/news.xml">
+]>
+
+<webpage>
+	<head>
+		<title>AxKit</title>
+	</head>
+	<body>
+		<section>
+			<title>Welcome to AxKit!</title>
+			<para>
+				AxKit is an XML Application Server for <ulink
+				url="http://www.apache.org/httpd.html">Apache</ulink>. It provides
+				on-the-fly conversion from XML to <ulink
+				url="http://www.w3.org/TR/REC-html40/types.html#type-media-descriptors"
+				>any format</ulink>, such as HTML, WAP
+				or text using either <ulink url="http://www.w3.org/">W3C</ulink>
+				standard techniques, or flexible custom code. AxKit also
+				uses a built-in Perl interpreter to provide some amazingly
+				powerful techniques for XML transformation.
+			</para>
+			<para>
+				The emphasis with AxKit is on separation of content from
+				presentation. The pipelining technique that AxKit uses allows
+				content to be converted to a presentable format in stages,
+				allowing certain platforms to see data differently to others.
+				AxKit allows web designers to focus on web site design,
+				content developers to work on a purely content basis, and
+				webmasters to focus on their core competencies.
+			</para>
+			<para>
+				Ax<emphasis>Kit</emphasis> is based on components that
+				are replaceable. This allows the web site developer to create a
+				completely custom XML Application Server based around the AxKit
+				API. AxKit can either automatically provide caching facilities,
+				or you can create your own cache handler, so that XML
+				transformations (which can be time consuming) only happen when
+				required.
+			</para>
+			<para>
+				The toolkit also provides ability to build component based web
+				sites, and dynamic content. Database integration is fully
+				supported, allowing either deliver of XML from a database, or
+				XML generation from a database query. Dynamic web components can
+				be built using the Perl language, making the possibilities as
+				infinite as CGI scripts, without the potential mess that CGI
+				programming can cause.
+			</para>
+			<para>
+				For more information please follow the links on this page.
+			</para>
+		</section>
+	</body>
+</webpage>

@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="ISO-8859-1"?>
+<?xml-stylesheet type="application/x-xpathscript"
+		href="/stylesheets/webpage_html.xps"
+		title="default"?>
+<!DOCTYPE webpage [
+<!ENTITY sidebar SYSTEM "/sidebar.xml">
+<!ENTITY news SYSTEM "/news.xml">
+]>
+<webpage>
+	<head>
+		<title>AxKit - Installation</title>
+	</head>
+	<body>
+		<section>
+			<title>Installing AxKit</title>
+			<para>
+			Please see the "Introduction to AxKit" article in the
+			Documentation section.
+			</para>
+		</section>
+	</body>
+</webpage>

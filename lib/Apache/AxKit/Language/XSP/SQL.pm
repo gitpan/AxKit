@@ -1,4 +1,4 @@
-# $Id: SQL.pm,v 1.3 2000/06/10 14:33:36 matt Exp $
+# $Id: SQL.pm,v 1.5 2000/07/14 07:48:30 matt Exp $
 
 package Apache::AxKit::Language::XSP::SQL;
 use strict;
@@ -157,7 +157,7 @@ sub parse_char {
 	
 	return '' unless $text;
 	
-	$text =~ s/\|/\|\|/g;
+	$text =~ s/\|/\\\|/g;
 	return ". q|$text|";
 }
 
@@ -185,13 +185,13 @@ sub parse_start {
 	elsif ($tag eq 'column-format') {
 		return "{ # new column format\nmy \@params;\n";
 	}
-	elsif ($tag eq 'name' && $e->current_tag() eq 'column-format') {
+	elsif ($tag eq 'name' && $e->current_element() eq 'column-format') {
 		return "my \$name = ''";
 	}
-	elsif ($tag eq 'class' && $e->current_tag() eq 'column-format') {
+	elsif ($tag eq 'class' && $e->current_element() eq 'column-format') {
 		return "my \$class = ''";
 	}
-	elsif ($tag eq 'parameter' && $e->current_tag() eq 'column-format') {
+	elsif ($tag eq 'parameter' && $e->current_element() eq 'column-format') {
 		return "push \@params, ''";
 	}
 }
@@ -206,7 +206,7 @@ sub parse_end {
 	}
 	elsif ($tag eq 'column-format') {
 		return "\$dbparams{'column-format'}{\$name}{'class'} = \$class;\n" .
-				"\$dbparams{'column-format'}{\$name}{'parameters'} = \@params;\n" .
+				"\$dbparams{'column-format'}{\$name}{'parameters'} = \\\@params;\n" .
 				"} # end column-format\n";
 	}
 	return ";";

@@ -1,0 +1,411 @@
+<?xml version="1.0" encoding="ISO-8859-1"?>
+<?xml-stylesheet href="/stylesheets/docbook_screen.xps" type="application/x-xpathscript"
+title="default"?>
+<?xml-stylesheet href="/stylesheets/docbook_print.xps"
+type="application/x-xpathscript" title="print" alternate="yes"?>
+<!DOCTYPE article [
+<!ENTITY prompt "&#x25; ">
+]>
+<article>
+
+<artheader>
+	<title>An Introduction to AxKit</title>
+	
+	<author>
+		<firstname>Matt</firstname>
+		<surname>Sergeant</surname>
+		<affiliation>
+			<address><email>matt@sergeant.org</email></address>
+		</affiliation>
+	</author>
+	
+	<copyright>
+		<year>2000</year>
+		<holder role="mailto:matt@sergeant.org">Fastnet Software Ltd</holder>
+	</copyright>
+
+	<abstract>
+		<para>An introduction to AxKit, an XML Delivery Toolkit for
+		Apache</para>
+	</abstract>
+</artheader>
+
+<sect1>
+<title>Introduction</title>
+<para>
+XML has, in theory, solved one of the problems facing web site
+developers: How to develop a consistent look across your site using a
+template/stylesheet system. Unfortunately a lot of the solution to that
+problem still remains out of reach of the majority of web sites. One
+major piece of the puzzle that still has not been perfected is the
+authoring stage. Authoring XML for non-XML savvy designers is still
+problematic. Some tools exist to solve this problem, such as XMetaL, but
+as first generation tools these still have rather large weak spots. I
+expect to see this side of the puzzle solved with this seasons software
+releases - I hope I'm not wrong.
+</para>
+<para>
+The other side of the puzzle for web developers is delivery. Its going
+to be an extremely long time until all clients support some sort of
+client side transformation. And I remain unconvinced this is the right
+way to do it. Take XSLT as an example; the Apache group are right now
+trying to develop a way to do XSLT without building an in-memory tree
+structure of the XML document. However, as an implementor of XPath
+(Perl's XML::XPath module) myself, I think they are going to find this
+a really tough nut to crack. Not only that, but all this parsing is
+extremely resource intensive, and I think that's the wrong model to be
+looking at, especially when we want to deliver to handheld devices.
+</para>
+<para>
+That leaves server side transformation. There are several available
+options for this. The most immediately obvious is static transformation.
+However that can start to become a maintainence nightmare. Then there
+are application servers that operate within their own world, such as
+Enhydra and Zope. These are excellent solutions for shops that already
+use those solutions. Finally there is <application>Cocoon</application>,
+a truly awsome technology,
+now part of the <application><ulink url="http://www.apache.org/">Apache
+project</ulink></application>. Cocoon is a full blown Application
+server built around XML technology. Part of Cocoon is a system which
+associates stylesheets with XML files. See <ulink
+url="http://www.w3.org/TR/xml-stylesheet">http://www.w3.org/TR/xml-stylesheet</ulink>
+for details on this method. I don't personally have any gripes with
+Cocoon (I do have gripes with Java, but thats another issue). To an
+extent AxKit emulates Cocoon (although in reality, Cocoon and AxKit are
+just implementing suggested standards).
+</para>
+<para>
+AxKit fits into this picture by providing simple intuitive ways for web
+developers to deliver XML to clients in different media formats and
+stylesheets. AxKit also, very much like Cocoon, provides caching
+facilities built into its core, so that only at single points of change
+will AxKit attempt to re-create the document being delivered. Unless, of
+course, the developer explicitly decides not to cache the document.
+Unlike Cocoon though, AxKit is built in perl, and integrates extremely
+tightly with Apache. AxKit also provides some of the technology natively
+that Cocoon 2 is going to deliver (AxKit also doesn't provide some of
+the technology that Cocoon does deliver!).
+</para>
+</sect1>
+
+<sect1>
+<title>Why Choose AxKit?</title>
+<para>
+AxKit is based on a plugin architecture. This allows the developer to
+very quickly design modules based on currently available technology to
+achieve: New stylesheet languages, new methods for delivering alternate
+stylesheets and new methods for determining media types. Because it's
+built in perl, these sort of plugins are incredibly simple to develop.
+Not long after releasing AxKit, a developer wrote a file suffix
+stylesheet chooser module, which returns different stylesheets if the
+user requests file.xml.html or file.xml.text, in just 15 lines of code.
+This plugin architecture also makes developing new stylesheet modules
+very simple, using some of the readily available code in Perl's
+excellent CPAN (the Comprehensive Perl Archive Network). A stylesheet
+module to deliver XML-News files as HTML would only take a few lines of
+code based on David Megginson's XMLNews::HTMLTemplate module, and AxKit
+works out all the nuances of caching for you.
+</para>
+<para>
+Another important part of this is that AxKit is
+<emphasis>pragmatic</emphasis> about what it delivers to clients. It
+doesn't have to be HTML, or XHTML, strict HTML 4, or indeed compliant to
+any particular standard. This decision was made because no matter what,
+clients are still not going to upgrade their browsers just because you
+want them to. So AxKit says that you can deliver XML or XHTML if you
+want to (and the tools are there for you to do so), but its just as easy
+to deliver any other format.
+</para>
+<para>
+AxKit comes with a number of pre-built stylesheet modules, including
+two XSLT modules: one built around Perl's XML::XSLT module, a DOM based
+XSLT implementation that is in the beginning stages, and one built
+around Ginger Alliance Ltd's Sablotron XSLT library, which is a much
+more complete XSLT implementation built in C++, and is extremely fast.
+For the closet XSLT haters out there (come on - I know there are quite
+a few!) there's XPathScript - a language that takes some of the good
+features of XSLT, such as node matching and finding using XPath, and
+combines it with the power of ASP-like code integration and in-built
+Perl scripting. XPathScript also compiles your stylesheet into native
+perl code whenever it changes, so execution times are very good for XML
+stylesheet processing. As an example of XPathScript's power, I've
+created a DocBook stylesheet that dynamically can show separate sections
+of a DocBook/XML file.
+</para>
+<para>
+The core of AxKit is also very quick. Delivering cached results
+it runs at about 80% of the speed of Apache. It achieves this primarily
+because it's built in mod_perl. The tight coupling with Apache that
+mod_perl provides means that an awful lot of the code is running in
+compiled C. In order to deliver cached results, AxKit just tells Apache
+where to find the cached file, and that it doesn't want to handle it.
+Apache comes up with the goods at its usual lightning speed.
+</para>
+<para>
+Finally, AxKit works hand-in-hand with Apache. So any webmaster skills
+will not go to waste. Cocoon 2 is about to deliver a sitemap feature,
+whereby you don't have to use <literal>&lt;?xml-stylesheet?></literal> processing
+instructions everywhere to build up your site. AxKit already provides
+this, and integrates directly with Apache's
+<literal>&lt;Files></literal>,
+<literal>&lt;Location></literal> and <literal>&lt;Directory></literal>
+directives. All AxKit's configuration takes this
+approach, so you never have to teach a webmaster any new tricks to build
+up your XML site.
+</para>
+
+</sect1>
+
+<sect1>
+<title>Putting it all together</title>
+<para>
+In simple terms, how does AxKit work? AxKit registers with Apache a "handler". In
+Apache terms this is a module that works in a particular part of the request
+phase (which cover things like Authentication, Type checking, Response,
+and Logging). When a request for a file comes in, AxKit does some very
+quick checking to see if the file is XML. The main checks performed are
+to see if the file extension is <filename>.xml</filename>, and/or to check the first few
+characters of the file for the <literal>&lt;?xml?></literal> declaration. If the file is
+not XML, AxKit lets Apache deliver the file as it would normally. Note
+that using Apache's configuration methods described above, it's quite
+possible to apply this only to certain parts of your web site.
+</para>
+<para>
+When an XML file is detected, the next step is to call any plugin
+modules that determine the media type and/or stylesheet preference.
+Media type chooser plugins normally look at the User-Agent header, or
+at the Accept header, however its possible to use any method at
+all to determine the media type. Stylesheet choosers exist currently
+based on Path Info (this is a path following the filename, so you could
+request <filename>myfile.xml/mystyle</filename>), querystring (for example
+<filename>myfile.xml?style=mystyle</filename>), and file suffix
+(<filename>myfile.xml.mystyle</filename>).
+</para>
+<para>
+The final part, and the most significant part, is the plumbing together
+of all the stylesheets with the XML file in the right order,
+implementing cascading where appropriate, and also to "do the right
+thing" with regards to the cache. One "leg-up" we have on Cocoon here is
+that AxKit invalidates the cache when external entities (parsed or
+unparsed) change too. This allows modular stylesheets to change only
+part of their make-up and ensure that changes to these sub-components
+cause a re-build of the cache.
+</para>
+<sect2>
+<title>Mapping XML Files to Stylesheets</title>
+<para>
+AxKit uses two separate methods for mapping XML files to stylesheets.
+The primary method is to use the W3C recommendation at <ulink
+url="http://www.w3.org/TR/xml-stylesheet">http://www.w3.org/TR/xml-stylesheet</ulink>.
+This specifies that a <literal>&lt;?xml-stylesheet?></literal> processing instruction at
+the beginning of the xml file (after the <literal>&lt;?xml?></literal> declaration, and
+before the first element) defines the location and type of the
+stylesheet. The actual details of how all this works are defined in
+<ulink url="http://www.w3.org/TR/REC-html40">TR/REC-html40</ulink>
+(which has just recently been superceded by html 4.01). The second
+method of mapping XML files to stylesheets is used when no usable
+<literal>&lt;?xml-stylesheet?></literal> directives are found in the XML
+file. This uses a <option>DefaultStyleMap</option>
+option in your Apache configuration files. These directives can be used
+anywhere within Apache's <literal>&lt;Files></literal>,
+<literal>&lt;Location></literal>, <literal>&lt;Directory></literal> and
+<filename>.htaccess</filename> configuration system. In this way it's possible to define
+complex mapping rules for different file types and locations in
+whichever manner pleases you.
+</para>
+<para>
+AxKit then uses the type of the stylesheet (in the
+<literal>type="..."</literal> attribute
+of the <literal>&lt;?xml-stylesheet?></literal> directive, or the first parameter of the
+<option>AxAddDefaultStyleMap</option> option) to decide on a module to use to process that
+type of file. Again this is slightly different to
+<application>Cocoon 1.x</application>, which requires
+special <literal>&lt;?cocoon?></literal> directives to be added to your XML files to
+determine the processor module to use. The type is then mapped to a
+module using another Apache configuration option:
+<option>AxAddStyleMap</option>. Again,
+this directive can appear anywhere within Apache's configuration
+structure. This allows you to try different modules for your processing
+of the same file (for example, you might like to try both XSLT
+processors to see which suits your needs best).
+</para>
+</sect2>
+<sect2>
+<title>Choosing a Stylesheet</title>
+<para>
+In the course of examining the options of which stylesheets to choose,
+often a single XML file (or a <option>DefaultStyleMap</option> - see above) can provide
+more than one option. There are two important parts of this to consider.
+The first is choosing from multiple stylesheets based on media type, and
+stylesheet preference. The Media type of a stylesheet must always match the
+requested media type, or be of media type <literal>"all"</literal>, however it's worth
+noting here that <application>Cocoon</application> provides many alternative media types to the
+W3C's specification list, such as "wap", "lynx", "explorer" and
+"netscape". The merits of this are debatable. The stylesheet preference
+is based on 3 types of stylesheet: A persistant stylesheet, a preferred
+stylesheet and an alternate stylesheet. Persistant stylesheets
+declarations contain no <literal>title="..."</literal> attribute, preferred stylesheets
+contain a <literal>title="..."</literal> attribute, but have
+<literal>alternate="no"</literal> (or no
+<literal>alternate="..."</literal> attribute), and alternate stylesheets contain a
+<literal>title="..."</literal> attribute and have explicitly set
+<literal>alternate="yes"</literal>.
+</para>
+<para>
+AxKit always applies persistant stylesheets, and will apply alternate
+stylesheets only if a plugin has determined that one should be
+displayed, otherwise the preferred stylesheets are used. This all seems
+rather confusing and long winded, but it allows a very modular system,
+and also allows for wonderful flexibility in choosing stylesheets for
+users. For example, a plugin could connect to a database and retrieve
+the correct alternate stylesheet for a particular user based on an
+authentication token. This would allow users to change the whole look of
+their favourite web site, and AxKit will do all the hard work for you.
+</para>
+</sect2>
+
+<sect2>
+<title>Cascading Stylesheets</title>
+<para>
+It's easy to get confused by the term "stylesheet" here. A quick read of
+this might make it seem like all they are good for is transforming
+static XML files into further static XML files. This is especially the
+case if all you can picture is XSL(T) (or even CSS). However stylesheets
+in AxKit's terms can do anything, provided you can build a Language
+module to parse it. The concept of stylesheets in AxKit replace all the
+stages in Cocoon: Producer, Processor and Formatter. So it becomes
+possible to, just as in Cocoon, return database results, format add
+tags, and format the result to WAP, HTML or any possible format.
+</para>
+<para>
+The term cascading here therefore refers to the case of one stylesheet's
+results "cascading" into the next. With AxKit there are a number of ways
+to achieve that. The first and simplest method is to have all your
+stylesheets based on DOM, and produce DOM trees. When all the
+stylesheets have finished processing, AxKit takes care to dispose of
+your DOM tree and output the results to the user agent.
+</para>
+<para>
+The second method of cascading is to simply cascade the textual results
+of your output. This is necessary with modules like Sablotron where
+there is no DOM tree available. Modules further down the processing
+stream are able to parse this string directly (provided they are
+designed to work this way) as XML, and continue processing.
+</para>
+<para>
+The final, and possibly most interesting method, is to use "end-to-end
+SAX". This is where AxKit sets up a chain of SAX handlers to process the
+document with. AxKit stylesheet languages based on SAX are responsible
+for simply sending on SAX events to the next SAX handler up the chain
+(they are provided a SAX handler to pass events to on construction). The
+final SAX handler in the chain simply outputs its results to the
+browser. This doesn't sound particularly interesting, until you consider
+that this end-to-end system starts outputting data to the browser
+immediately as soon as parsing begins. This system allows database
+modules to not build DOM trees in memory, which can be resource
+consuming, but to simply fire SAX events, and the output from the
+database will appear as results are available. Cocoon 2 will have a
+system similar, if not identical, to this.
+</para>
+</sect2>
+
+</sect1>
+
+<sect1>
+<title>A Simple Setup Example</title>
+<para>
+Setting up AxKit is simple. I don't believe in tools like this being
+hard to use or even hard to setup. Provided you can use an editor and
+modify a few Apache configuration files, setup should be a breeze.
+</para>
+<para>
+Unfortunately AxKit requires mod_perl, so there is an extra component to
+install first. Installation of mod_perl can be complex, depending upon
+your setup. To that end I will just provide a link: <ulink
+url="http://perl.apache.org/guide/install.html">The mod_perl Guide -
+Installation</ulink>.
+</para>
+<para>
+Now onto AxKit itself. First, installing the required perl modules is very simple. Download
+AxKit (see link below), extract the archive and change to the directory created. Then
+simply type:
+<informalexample>
+<screen>
+&prompt;<userinput>perl Makefile.PL</userinput>
+&prompt;<userinput>make</userinput>
+&prompt;<userinput>make test</userinput>
+&prompt;<userinput>make install</userinput>
+</screen>
+</informalexample>
+If you don't have apxs in your path, mod_perl versions below 1.24 will
+produce a warning at the first step. This warning can be ignored.
+</para>
+<para>
+Next up, editing Apache's configuration files. First you need to enable
+AxKit so that Apache understands AxKit's configuration directives, so
+add the following line to your httpd.conf file:
+<informalexample>
+<screen>
+PerlModule AxKit
+</screen>
+</informalexample>
+Finally, you can add in the core components of AxKit - the XMLFinder and
+the StyleFinder. These can be added to any .htaccess file, or other
+Apache configuration file:
+<informalexample>
+<screen>
+SetHandler perl-script
+PerlHandler AxKit
+
+AxAddStyleMap text/xsl Apache::AxKit::Language::XSLT
+</screen>
+</informalexample>
+The last line there associates the type "text/xsl" with the stylesheet
+module specified.
+</para>
+<para>
+Now you're ready to start serving up XML files. Check out the example
+files in the AxKit distribution, these should get you started.
+</para>
+</sect1>
+
+<sect1>
+<title>Conclusions</title>
+<para>
+AxKit provides web developers with the tools they need to deliver
+complex systems quickly, and eases them into the development process. It
+gives them the power to develop their own system for stylesheet decision
+making and also the flexibility to design completely new stylesheet
+languages. All of this while integrating tightly with Apache, providing
+a fast, scalable and well architectured system. But then, I'm biased.
+</para>
+<para>
+AxKit is not finished yet, however the majority of the features
+described above are built and working very reliably. The most
+significant things missing from AxKit are SAX based stylesheet
+languages (which just need to be designed and built - which I have a
+number of ideas for), and alternate ways to generate the initial XML
+file (which cocoon calls "Producers"). These will be coming in a future
+release. Being free software I hope people will jump in and help. We
+have the beginnings of an active mailing list, where you can vote on
+features, or help develop them, or simply lurk. We're moving extremely
+quickly with the features. Developing in Perl allows us to do this,
+while still maintaining readable code (something I deem very important
+- so don't assume because it's written in Perl that it's going to be a
+ball of spaghetti!). If there's something you'd like to see in AxKit,
+please join the mailing list and participate with us.
+</para>
+</sect1>
+
+<sect1>
+<title>Links</title>
+<para>
+The following are links relevant to this article:
+<itemizedlist>
+	<listitem><ulink url="http://axkit.org/">AxKit</ulink> - The
+	main homepage for AxKit.</listitem>
+</itemizedlist>
+</para>
+</sect1>
+
+</article>

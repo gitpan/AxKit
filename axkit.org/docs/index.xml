@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="ISO-8859-1"?>
+<?xml-stylesheet type="application/x-xpathscript"
+		href="/stylesheets/webpage_html.xps"
+		title="default"?>
+<!DOCTYPE webpage [
+<!ENTITY sidebar SYSTEM "/sidebar.xml">
+<!ENTITY news SYSTEM "/news.xml">
+]>
+<webpage>
+	<head>
+		<title>AxKit - Documentation</title>
+	</head>
+	<body>
+		<section>
+			<title>Documentation</title>
+			<para>
+				AxKit is a complex and powerful system, although getting started
+				in AxKit is as easy as 1,2,3. The documentation here hopes to
+				guide you through AxKit right from simple tasks such as
+				transforming XML files using stylesheets, up to extending the
+				AxKit application server to suit your needs.
+			</para>
+			<para>
+				Please start with the getting started with AxKit guide. More
+				advanced XMLers might be interested in XPathScript - an
+				alternative transformation language to XSLT. If XSLT were
+				likened to awk, XPathScript would be Perl.
+			</para>
+		</section>
+	</body>
+</webpage>

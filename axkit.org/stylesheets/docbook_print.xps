@@ -1,0 +1,54 @@
+<!--#include file="docbook_tags.xps"-->
+<%
+
+my %links;
+my $linkid = 0;
+$t->{'ulink'}{testcode} = sub { 
+		my $node = shift;
+		my $t = shift;
+		my $url = findvalue('@url', $node);
+		if (!exists $links{$url}) {
+			$linkid++;
+			$links{$url} = $linkid;
+		}
+		my $link_number = $links{$url};
+		$t->{pre} = "<i><a href=\"$url\">";
+		$t->{post} = " [$link_number]</a></i>";
+		return 1;
+	};
+
+%>
+<html>
+<head>
+	<title><%= findvalue('/article/artheader/title/text()') %></title>
+</head>
+<body bgcolor="white">
+
+<%
+# display title/TOC page
+print apply_templates('/article/artheader/*');
+%>
+
+<hr>
+
+<%
+# display all pages
+foreach my $section (findnodes("/article/sect1")) {
+	print apply_templates($section);
+}
+%>
+
+<h1>List of Links</h1>
+<table border="1">
+<th>URL</th>
+<%
+for my $link (sort {$links{$a} <=> $links{$b}} keys %links) {
+%>
+<tr>
+<td><%= "[$links{$link}] $link" %></td>
+</tr>
+<% } %>
+</table>
+
+</body>
+</html>

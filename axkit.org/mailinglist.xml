@@ -1,0 +1,46 @@
+<?xml version="1.0" encoding="ISO-8859-1"?>
+<?xml-stylesheet href="/stylesheets/webpage_html.xps"
+	type="application/x-xpathscript" title="default"?>
+<webpage>
+<head>
+	<title>AxKit - Mailing List</title>
+</head>
+<body>
+	<section>
+		<title>Mailing List</title>
+		<para>
+			AxKit has a flourishing mailing list for both support and
+			development of AxKit. Any questions you have about AxKit are best
+			asked on the list, rather than directly emailing someone.
+		</para>
+		<para>
+			To join the AxKit mailing list, send a blank email to: <ulink
+			url="mailto:axkit-users-subscribe@axkit.org?subject=Just%20Hit%20Send..."
+			>axkit-users-subscribe@axkit.org</ulink>.
+		</para>
+		<para>
+			Alternatively you can use this web form to either join or leave
+			the list:
+			<form method="POST" action="/cgi-bin/ml-sub-request-axkit">
+			<table>
+			<tr><td>
+			<input type="radio" name="list_request" value="subscribe" checked="checked"></input>Subscribe<br></br>
+			<input type="radio" name="list_request" value="unsubscribe"></input>Unsubscribe
+			</td><td>Email Address: <input type="text" name="user_email" size="40" maxlength="100"></input></td><td><input type="submit" value="submit"></input></td></tr>
+			</table>
+			<input type="hidden" name="listtarget" value="axkit-users"></input>
+			<input type="hidden" name="acktitle" value="Thank You!"></input>
+			<input type="hidden" name="acktext" value="Thanks for your interest! Click &lt;a href=&quot;/&quot;&gt;here&lt;/a&gt; to return to the main page."></input>
+			</form>
+		</para>
+		<subsection>
+			<title>List Archive</title>
+			<para>
+				The AxKit mailing list archive is online at <ulink
+				url="http://axkit.org/cgi-bin/ezmlm-cgi/3"
+				>http://axkit.org/cgi-bin/ezmlm-cgi/3</ulink>.
+			</para>
+		</subsection>
+	</section>
+</body>
+</webpage>

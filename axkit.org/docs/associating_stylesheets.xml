@@ -1,0 +1,105 @@
+<?xml version="1.0" encoding="ISO-8859-1"?>
+<?xml-stylesheet href="/stylesheets/webpage_html.xps" type="application/x-xpathscript"?>
+<webpage>
+	<head>
+		<title>How AxKit Picks Stylesheets and/or Processors</title>
+	</head>
+<body>
+<section>
+<title>Introduction</title>
+<p>
+AxKit works mainly by associating stylesheets (and by inference, a
+stylesheet processor), with XML files when you request the XML file. The
+process is defined in <a
+href="http://www.w3.org/TR/REC-html40">REC-html40</a>, however the links
+are confusing so I hope to clear things up a bit here.
+</p>
+<p>
+Please note that while the specification we're talking about is the HTML
+4 specification, this has nothing specifically to do with HTML. The <a
+href="http://www.w3.org/TR/xml-stylesheet">xml-stylesheet</a> document
+simply references the HTML 4 spec to save re-iterating what has already
+been specified elsewhere.
+</p>
+</section>
+<section>
+<title>How it works</title>
+<p>
+When an XML file is encountered (determined by AxKit's XMLFinder module
+- which checks first for a .xml extension, then for a &lt;?xml?>
+processing instruction), AxKit needs to determine how to process that
+file. To do so it needs a list of stylesheets to process that file
+against. The stylesheet type (a MIME type) determines the module used to
+actually process the XML file together with the Stylesheet. It's also
+worth noting that a stylesheet file isn't necessary if using a
+DefaultStyleMap - this benefit could be useful, for example, for a
+Cocoon-like XSP page where there is no stylesheet to interact with.
+</p>
+<p>
+First, the &lt;?xml-stylesheet?> processing instructions are considered
+</p>
+<p>
+If the media doesn't match it is discarded immediately. Media types in
+&lt;?xml-stylesheet?> are processed as follows: First they are split
+on /,\s*/. Then each element of the resulting array is stripped of
+characters following and including the first non-ascii-alphanumeric
+character. So "printer and dpi > 90" gets turned into "printer". Then they
+are grepped for
+/^screen|tty|printer|handheld|braille|tv|projection|aural|all$/ (case
+sensitive). Finally the match test: A media type of "all" always matches
+regardless of what is in preferred_media. Otherwise, a case sensitive
+match is done (in perl terms, the "eq" operator). Provided a media
+matches, then we go on to determine if this stylesheet should be used
+depending on the title="..." attribute and the
+alternate="..." attribute. The terms "Persistant", "Preferred" and
+"Alternate" below are straight from REC-html40.
+</p>
+<subsection>
+<title>Persistant Stylesheets</title>
+<p>
+If there is no title and alternate="no" (or no
+alternate="..." attribute) then the stylesheet is added to the front of the list
+of stylesheets - this is a persistant stylesheet and is _always_ applied
+first (unless there are other persistant stylesheets, in which case this
+is applied after those).
+</p>
+</subsection>
+<subsection>
+<title>Preferred Stylesheets</title>
+<p>
+If there is a title and alternate="no" (or no alternate attrib) then the
+stylesheet is pushed onto the list of stylesheets to apply if there is
+either no preferred_style, or preferred_style matches.
+</p>
+</subsection>
+<subsection>
+<title>Alternate Stylesheets</title>
+<p>
+If there is a title and alternate="yes", then the stylesheet is pushed
+onto the list of stylesheets to apply if there is a preferred_style and it
+matches the title.
+</p>
+</subsection>
+<subsection>
+<title>If all else fails</title>
+<p>
+Finally, just to be safe, StyleFinder maintains a list of
+media="screen" stylesheets. If there are no stylesheets in the list at the
+end of processing, the "screen" ones are used. Note though that the same
+rules as above apply there too, and media="screen" is just used as a last
+resort.
+</p>
+</subsection>
+</section>
+<section>
+<title>And Finally...</title>
+<p>
+So when the parser that reads the &lt;?xml-stylesheet?>'s returns, if it
+returns a list of stylesheets, then fine. If not, we read
+$cfg->DefaultStyleMap, the default implementation of which is to read the
+AxAddDefaultStyleMap options in your httpd.conf or .htaccess. The details
+of AxAddDefaultStyleMap are in the AxKit manpage.
+</p>
+</section>
+</body>
+</webpage>
