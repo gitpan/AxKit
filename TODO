@@ -84,6 +84,15 @@ Remember that this is a community thing, we need consensus ;-)
     provider that uses an XML DB on the backend.
 
 
+  . Separate Provider for stylesheets
+
+    It would appear that one of the main problems people have when writing
+    providers is that stylesheets are also looked up through them, which
+    causes various problems to people. One (backcompat) way of doing this
+    would be to have it still work this way if no AxStyleProvider is setup,
+    but AxStyleProvider would be able to override AxProvider.
+
+
   . More control on the interaction between the configuration and PIs
 
     Some would like it to be possible to use both the configuration and PIs
@@ -116,3 +125,11 @@ Remember that this is a community thing, we need consensus ;-)
     a user must either do processing of that element himself or rely on a particular
 	module's implementation. Moreover, in XSP difficulties can arise. Having a
 	global xml:lang policy would make multi-language support easier.
+
+  . Binary data support
+
+    It's easy to be bitten when dealing with binary support in AxKit. It should be 
+    possible to flag one's output (at *any* stage) as binary, and have 
+    binary-unsafe operations (such as char conversion, xml parsing, etc.) be
+    skipped.
+

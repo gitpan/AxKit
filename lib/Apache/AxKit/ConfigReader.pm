@@ -1,4 +1,4 @@
-# $Id: ConfigReader.pm,v 1.1 2002/01/13 20:45:11 matts Exp $
+# $Id: ConfigReader.pm,v 1.2 2002/04/02 16:27:54 matts Exp $
 
 package Apache::AxKit::ConfigReader;
 
@@ -143,6 +143,20 @@ sub LogDeclines {
     my $self = shift;
     return $self->{cfg}{LogDeclines} ||
             $self->{apache}->dir_config('AxLogDeclines') ||
+            0;
+}
+
+sub HandleDirs {
+    my $self = shift;
+    return $self->{cfg}{HandleDirs} ||
+            $self->{apache}->dir_config('AxHandleDirs') ||
+            0;
+}
+
+sub IgnoreStylePI {
+    my $self = shift;
+    return $self->{cfg}{IgnoreStylePI} ||
+            $self->{apache}->dir_config('AxIgnoreStylePI') ||
             0;
 }
 

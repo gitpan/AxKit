@@ -1,4 +1,4 @@
-# $Id: PassiveTeX.pm,v 1.1 2002/01/13 20:45:11 matts Exp $
+# $Id: PassiveTeX.pm,v 1.2 2002/03/25 14:06:09 jwalt Exp $
 
 package Apache::AxKit::Language::PassiveTeX;
 
@@ -66,28 +66,30 @@ sub handler {
             close($fh) || fail("Cannot close: $!");
         }
     }
-    
+
     chdir($tempdir) || fail("Cannot cd: $!");
-    
-    local $ENV{TEXINPUTS} = dirname($r->filename()); 
+
+    local $ENV{TEXINPUTS} = dirname($r->filename());
     AxKit::Debug(8, "About to shell out to pdfxmltex - hope you have passivetex installed...");
     my $retval = system("pdfxmltex temp.fo");
     $retval >>= 8;
-    
+
     if ($retval) {
         fail("pdfxmltex exited with $retval");
     }
-    
+
     my $pdfh = Apache->gensym();
     open($pdfh, "temp.pdf") || fail("Cannot open PDF: $!");
-    
+
     $AxKit::Cfg->AllowOutputCharset(0);
-    
+
     $r->content_type("application/pdf");
-    
+
     local $/;
-    
+
     $r->print(<$pdfh>);
+
+    return Apache::Constants::OK;
 }
 
 sub cleanup {

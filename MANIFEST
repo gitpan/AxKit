@@ -77,6 +77,7 @@ axkit.org/stylesheets/spacer.xps
 axkit.org/stylesheets/webpage_html.xps
 axkit.org/support.xml
 demo/.htaccess
+demo/AxKit/XSP/Demo/Object.pm
 demo/AxKit/XSP/Demo/Simple.pm
 demo/axkit.conf
 demo/axpoint/.htaccess
@@ -109,7 +110,9 @@ demo/xsp/perform.xsp
 demo/xsp/sendmail.xsp
 demo/xsp/session.xsp
 demo/xsp/showsource.xsp
+demo/xsp/simpletaglib-object.xsp
 demo/xsp/simpletaglib-simple.xsp
+demo/xsp/tlh.xsp
 demo/xsp/util.xsp
 demo/xsp/webutils.xsp
 examples/.htaccess
@@ -129,6 +132,7 @@ lib/Apache/AxKit/ConfigReader.pm
 lib/Apache/AxKit/Exception.pm
 lib/Apache/AxKit/Language.pm
 lib/Apache/AxKit/Language/AxPoint.pm
+lib/Apache/AxKit/Language/HtmlDoc.pm
 lib/Apache/AxKit/Language/LibXSLT.pm
 lib/Apache/AxKit/Language/PassiveTeX.pm
 lib/Apache/AxKit/Language/Query.pm

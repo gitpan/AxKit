@@ -176,9 +176,11 @@ my @errors;
 
             eval {
                 require Apache::AxKit::Language::XSP::SimpleTaglib;
+                require Time::Piece;
             };
             if (!$@) {
-                <li><a href="simpletaglib-simple.xsp">SimpleTaglib Taglib Example</a></li>
+                <li><a href="simpletaglib-simple.xsp">SimpleTaglib Simple Taglib Example</a></li>
+                <li><a href="simpletaglib-object.xsp">SimpleTaglib OO Taglib Example</a></li>
             }
             else {
                 AxKit::Debug(1, "SimpleTaglib failed to load: $@");

@@ -1,4 +1,4 @@
-# $Id: File.pm,v 1.2 2002/03/17 11:13:22 matts Exp $
+# $Id: File.pm,v 1.4 2002/04/21 14:07:16 matts Exp $
 
 package Apache::AxKit::Provider::File;
 use strict;
@@ -17,29 +17,29 @@ use Fcntl qw(O_RDONLY LOCK_SH);
 sub init {
     my $self = shift;
     my (%p) = @_;
-    
+
     my $stats_done;
     if ($p{key}) {
         $self->{file} = $p{key};
     }
     else {
-        
+
         if ($p{uri} and $p{uri} =~ s|^file:(//)?||) {
             $p{file} = delete $p{uri};
         }
-        
+
         if ($p{uri}) {
             my $r = $p{rel} ? $p{rel}->apache_request() : $self->apache_request();
-            
+
             AxKit::Debug(8, "[uri] File Provider looking up" . ($p{rel} ? " relative" : "") . " uri $p{uri}");
-    
+
             $self->{apache} = $r->lookup_uri($p{uri});
             my $status = $self->{apache}->status();
             if ($status != HTTP_OK) {
                 throw Apache::AxKit::Exception::Error(-text => "Subrequest failed with status: " . $status);
             }
             $self->{file} = $self->{apache}->filename();
-            
+
             AxKit::Debug(8, "[uri] File Provider set filename to $self->{file}");
         }
         elsif ($p{file}) {
@@ -73,7 +73,7 @@ sub init {
             $stats_done++;
         }
     }
-    
+
     if (!$stats_done) {
         my @stats = stat($self->{file});
         $self->{mtime} = $stats[9];
@@ -121,19 +121,23 @@ sub exists {
 
 sub process {
     my $self = shift;
-    
+
     my $xmlfile = $self->{file};
-    
+
     unless ($self->exists()) {
         AxKit::Debug(5, "file '$xmlfile' does not exist or is not readable");
         return 0;
     }
-    
-    if ($self->_is_dir) {
+
+    if ( $self->_is_dir ) {
+        if ($AxKit::Cfg->HandleDirs()) {
+            return 1;
+        }
+        # else
         AxKit::Debug(5, "'$xmlfile' is a directory");
         return 0;
     }
-    
+
     local $^W;
     if (($xmlfile =~ /\.xml$/i) ||
         ($self->{apache}->content_type() =~ /^(text|application)\/xml/) ||
@@ -142,7 +146,7 @@ sub process {
             # chdir(dirname($xmlfile));
             return 1;
     }
-    
+
     AxKit::Debug(5, "'$xmlfile' not recognised as XML");
     return 0;
 }
@@ -158,6 +162,9 @@ sub get_fh {
     if (!$self->exists()) {
         throw Apache::AxKit::Exception::IO(-text => "File '$self->{file}' does not exist or is not readable");
     }
+    if ($self->_is_dir()) {
+        throw Apache::AxKit::Exception::IO(-text => "$self->{file} is a directory");
+    }
     my $filename = $self->{file};
     # chdir(dirname($filename));
     my $fh = Apache->gensym();
@@ -170,6 +177,9 @@ sub get_fh {
 
 sub get_strref {
     my $self = shift;
+    if ($self->_is_dir()) {
+        throw Apache::AxKit::Exception::IO(-text => "$self->{file} is a directory - please overload File provider and use AxProvider option");
+    }
     my $fh = $self->get_fh();
     local $/;
     my $contents = <$fh>;

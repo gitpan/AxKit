@@ -1,4 +1,4 @@
-# $Id: LibXSLT.pm,v 1.3 2002/02/18 18:36:20 darobin Exp $
+# $Id: LibXSLT.pm,v 1.7 2002/04/22 13:06:39 jwalt Exp $
 
 package Apache::AxKit::Language::LibXSLT;
 
@@ -72,7 +72,7 @@ sub handler {
 
     my $stylesheet;
     my $cache = $style_cache{$style->key()};
-    if (!$style->has_changed($cache->{mtime})) {
+    if (!$style->has_changed($cache->{mtime}) && ref($cache->{depends}) eq 'ARRAY') {
         my $changed = 0;
         DEPENDS:
         foreach my $depends (@{ $cache->{depends} }) {
@@ -88,7 +88,7 @@ sub handler {
         }
     }
     
-    if (!$stylesheet) {
+    if (!$stylesheet || ref($stylesheet) ne 'XML::LibXSLT::Stylesheet') {
         my $style_doc;
         reset_depends();
         my $style_uri = $style->apache_request->uri();
@@ -122,12 +122,13 @@ sub handler {
     }
 
     $stylesheet->output_fh($results, $r) if $last_in_chain;
-    
+
     $r->pnotes('dom_tree', $results);
-     
+
 #         warn "LibXSLT returned $output \n";
 #         print $stylesheet->output_string($results);
-    
+    return Apache::Constants::OK;
+
 }
 
 sub fixup_params {

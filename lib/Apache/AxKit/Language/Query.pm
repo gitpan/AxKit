@@ -8,7 +8,7 @@ use XML::DOM;
 sub handler {
 	my $r = shift;
 	my ($xmlfile, $stylesheet) = @_;
-	
+
 	my $vals;
 	open(STYLE, $stylesheet) || die "Can't open stylesheet '$stylesheet': $!";
 	flock(STYLE, 1);
@@ -20,7 +20,7 @@ sub handler {
 		next unless $key;
 		$vals->{$key} = $val;
 	}
-	
+
 	my $dsn;
 	if ($vals->{CONNECT_STRING}) {
 		$dsn = $vals->{CONNECT_STRING};
@@ -28,7 +28,7 @@ sub handler {
 	else {
 		$dsn = "dbi:$vals->{DRIVER}:$vals->{CONNECT_EXTRA}";
 	}
-	
+
 	my %attr;
 	foreach my $key (keys %$vals) {
 		next unless $key =~ /^ATTR_(.*)$/;
@@ -36,8 +36,8 @@ sub handler {
 	}
 
 	my $dbh = DBI->connect($dsn, $vals->{USER}, $vals->{PASSWORD}, \%attr);
-	
-	
+
+    return Apache::Constants::OK;
 }
 
 1;

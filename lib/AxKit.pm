@@ -1,4 +1,4 @@
-# $Id: AxKit.pm,v 1.3 2002/03/15 13:37:52 matts Exp $
+# $Id: AxKit.pm,v 1.7 2002/04/22 12:42:36 matts Exp $
 
 package AxKit;
 use strict;
@@ -21,7 +21,7 @@ use File::Basename ();
 Apache::AxKit::CharsetConv::raise_error(1);
 
 BEGIN {
-    $VERSION = "1.51";
+    $VERSION = "1.52";
     if ($ENV{MOD_PERL}) {
         $AxKit::ServerString = "AxKit/$VERSION";
         @AxKit::ISA = qw(DynaLoader);
@@ -91,7 +91,7 @@ sub get_output_transformer {
             return map { $map->convert( $_ ) } ($outputfunc->(@_));
         };
     }
-    
+
     foreach my $AxOutputTransformer ( $AxKit::Cfg->OutputTransformers() ) {
         $actually_transform = 1;
         my $outputfunc = $func;
@@ -135,9 +135,9 @@ sub get_depends {
 
 sub fast_handler {
     my $r = shift;
-    
+
     local $SIG{__DIE__} = sub { AxKit::prep_exception(@_)->throw };
-    
+
     $AxKit::Cfg = Apache::AxKit::ConfigReader->new($r);
 
 #    if ($AxKit::Cfg->DebugTime) {
@@ -180,7 +180,7 @@ sub handler {
 #     ##############################
 
     local $SIG{__DIE__} = sub { AxKit::prep_exception(@_)->throw };
-    
+
     local $AxKit::Cfg;
     local $AxKit::Cache;
     local $AxKit::HeadersSent;
@@ -210,36 +210,37 @@ sub handler {
     return $provider->decline(reason => "passthru set")
             if $r->notes('axkit_passthru');
 
-    # Do we process this URL?
-    AxKit::Debug(2, "checking if we process this resource");
-    if (!$provider->process()) {
-        return $provider->decline();
-    }
-    
     return main_handler($r, $provider);
 }
 
 sub main_handler {
     my ($r, $provider) = @_;
-    
+
+    # Do we process this URL?
+    # (moved down here from slow_handler because of AxHandleDirs)
+    AxKit::Debug(2, "checking if we process this resource");
+    if (!$provider->process()) {
+        return $provider->decline();
+    }
+
     my $retcode = eval {
         # $r->header_out('X-AxKit-Version', $VERSION);
-        
+
         chdir(File::Basename::dirname($r->filename));
-        
+
         $AxKit::OrigType = $r->content_type('changeme');
-        
+
         # get preferred stylesheet and media type
         my ($preferred, $media) = get_style_and_media();
         AxKit::Debug(2, "media: $media, preferred style: $preferred");
-        
+
         # get cache object
         my $cache = Apache::AxKit::Cache->new($r, $r->filename() . '.gzip' . ($ENV{PATH_INFO} || ''), $preferred, $media, $r->notes('axkit_cache_extra'));
-        
+
         my $recreate; # regenerate from source (not cached)
-        
+
         my $styles = get_styles($media, $preferred, $cache, $provider);
-        
+
         {
             local $^W;
             if ($preferred && ($styles->[0]{title} ne $preferred)) {
@@ -250,14 +251,14 @@ sub main_handler {
                 $cache = Apache::AxKit::Cache->new($r, $r->filename() . '.gzip' . $ENV{PATH_INFO}, '', $media, $r->notes('axkit_cache_extra'));
             }
         }
-        
+
         if (!$cache->exists()) {
             AxKit::Debug(2, "cache doesn't exist");
             # set no_cache header if cache doesn't exist due to no_cache option
             $r->no_cache(1) if $cache->no_cache();
             $recreate++;
         }
-        
+
         if (!$recreate && $AxKit::Cfg->DependencyChecks()) {
             $recreate = check_dependencies($r, $provider, $cache);
         }
@@ -521,7 +522,7 @@ sub process_request {
                     $styleprovider, 
                     !@$styles, # any more left?
                     );
-	        $result_code = $retval if $retval != OK;
+            $result_code = $retval if $retval != OK;
         }
         else {
             throw Apache::AxKit::Exception::Error(
@@ -610,9 +611,9 @@ sub check_dependencies {
 
 sub save_dependencies {
     my ($r, $cache) = @_;
-    
+
     return if $cache->no_cache();
-    
+
     eval {
         my @depends = get_depends();
         my $depend_cache = Apache::AxKit::Cache->new($r, $cache->key(), '.depends');
@@ -630,7 +631,7 @@ sub deliver_to_browser {
     if (not $r->pnotes('xml_string') and $r->pnotes('dom_tree')) {
         $r->pnotes('xml_string', $r->pnotes('dom_tree')->toString );
     }
-    
+
     if ($r->content_type eq 'changeme' && !$r->notes('axkit_passthru_type')) {
         $AxKit::Cfg->AllowOutputCharset(1);
         $r->content_type('text/html; charset=' . ($AxKit::Cfg->OutputCharset || "UTF-8"));
@@ -638,14 +639,14 @@ sub deliver_to_browser {
     elsif ($r->notes('axkit_passthru_type')) {
         $r->content_type($AxKit::OrigType);
     }
-    
+
     if (my $charset = $AxKit::Cfg->OutputCharset()) {
         my $ct = $r->content_type;
         $ct =~ s/charset=.*?(;|$)/charset=$charset/i;
         $r->content_type($ct);
     }
-            
-    if ($result_code != OK) {
+
+    if ($result_code != OK && $result_code != 200) {
     	# no caching - probably makes no sense, and will be turned off
 	    # anyways, as currently only XSP pages allow to send custom responses
     	AxKit::Debug(4,"sending custom response: $result_code");
@@ -817,7 +818,7 @@ sub print {
         $self->pnotes('xml_string', '');
         $self->notes('resetstring', 0);
     }
-    
+
     my $current = $self->pnotes('xml_string');
     $self->pnotes('xml_string', $current . join('', @_));
 }
@@ -1098,6 +1099,21 @@ If you prefix the module name with a + sign, it will be pre-loaded on
 server startup (assuming that the config directive is in a httpd.conf,
 rather than a .htaccess file).
 
+=head2 AxIgnoreStylePI
+
+Turn off parsing and overriding stylesheet selection for XML files containing
+an C<xml-stylesheet> processing instruction at the start of the file. This is
+a FLAG option - On or Off. The default value is "Off".
+
+  AxIgnoreStylePI On
+
+=head2 AxHandleDirs
+
+Enable this option to allow AxKit to process directories. Uses XML::Directory
+and XML::SAX::Writer to create the directory listing.
+
+  AxHandleDirs On
+
 =head2 AxStyle
 
 A default stylesheet title to use. This is useful when a single XML
@@ -1145,8 +1161,10 @@ a directory processed by a different XSLT engine.
 
 There are several directives specifically designed to allow you to build
 a flexible sitemap that specifies how XML files get processed on your
-system. These directives are used only if your XML file does not have the
-<?xml-stylesheet?> directives.
+system.
+
+B<Note:> <?xml-stylesheet?> directives in your XML files override these
+directives unless you enable the AxIgnoreStylePI option listed above.
 
 =head2 AxAddProcessor
 

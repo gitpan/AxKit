@@ -5,7 +5,7 @@ require "t/test_module.pl";
 
 test_module("Apache::AxKit::Language::XPathScript", "XML::XPath");
 
-test_module("Apache::AxKit::Language::AxPoint", "PDFLib");
+test_module("Apache::AxKit::Language::AxPoint", "XML::Handler::AxPoint");
 
 test_module("Apache::AxKit::Language::Sablot", "XML::Sablotron");
 

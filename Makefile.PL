@@ -1,4 +1,4 @@
-# $Id: Makefile.PL,v 1.4 2002/03/17 11:17:25 matts Exp $
+# $Id: Makefile.PL,v 1.6 2002/04/02 16:27:53 matts Exp $
 
 package AxKit;
 # file Makefile.PL
@@ -71,10 +71,10 @@ output before delivery to the browser. You will need to install
 that module before installing AxKit.
 REASON
 
-test_module('Error', '0.13', <<"REASON") || die;
+test_module('Error', '0.14', <<"REASON") || die;
 ***** ERROR *****
 
-Error 0.13 or higher required. This module is required for 
+Error 0.14 or higher required. This module is required for 
 AxKit's internal exception handling
 routines. You will need to install that module before installing
 AxKit.
@@ -227,6 +227,8 @@ if ($DEBUG) {
     }
 }
 
+my %prereq_pm = %{delete $config{PREREQ_PM}||{}};
+
 foreach my $k (keys %config) {
     push @ARGV, "$k=$config{$k}";
 }
@@ -242,6 +244,7 @@ WriteMakefile(
         'DIR' => [ @DIRS ],
         'OBJECT' => '$(O_FILES)',
         %config,
+        PREREQ_PM => \%prereq_pm,
 );
 
 #################################################################
@@ -265,11 +268,11 @@ BEGIN {
         if ($@) { $DEVNULL = '/dev/null' }
     }
     my $cwd = cwd();
-    if ($cwd =~ /\.cpan/) {
+    if ($cwd =~ /cpan/i) {
         $RUNNING_UNDER_CPAN = 1;
     }
     else {
-        $RUNNING_UNDER_CPAN = 0;
+        $RUNNING_UNDER_CPAN = $ENV{RUNNING_UNDER_CPAN} || 0;
     }
 }
 

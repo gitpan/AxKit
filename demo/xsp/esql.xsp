@@ -1,4 +1,4 @@
-<xsp:page 
+<xsp:page
     xmlns:xsp="http://apache.org/xsp/core/v1"
     xmlns:esql="http://apache.org/xsp/SQL/v2"
 >
@@ -12,18 +12,18 @@
         <title>ESQL Example</title>
         <link rel="stylesheet" url="/axkit/stylesheets/style.css"/>
     </head>
-    
+
     <body>
     <h1>ESQL Example (<xsp:expr>$dbname</xsp:expr>)</h1>
-    
+
     <!-- remove/recreate the db on every hit -->
     <xsp:logic>
       <esql:connection>
         <esql:driver transactions="yes">SQLite</esql:driver>
         <esql:dburl>dbname=<xsp:expr>$dbname</xsp:expr></esql:dburl>
-        
+
         <xsp:logic>
-        
+
         if ($cgi->param('reset')) {
           eval {
             <esql:execute-query>
@@ -42,8 +42,24 @@
                 </esql:update-results>
             </esql:execute-query>
         };
-        
-        if ($cgi->param('type') eq 'query') {
+
+        if ($cgi->param('type') eq 'insert') {
+            AxKit::Debug(1, "**** Inserting *****");
+            <!-- Insert new row -->
+            <esql:execute-query>
+                <esql:query>
+                    insert into example (firstname, lastname, email) values (
+                        <esql:parameter><xsp:expr>$cgi->param('firstname')</xsp:expr></esql:parameter>,
+                        <esql:parameter><xsp:expr>$cgi->param('lastname')</xsp:expr></esql:parameter>,
+                        <esql:parameter><xsp:expr>$cgi->param('email')</xsp:expr></esql:parameter>
+                        )
+                </esql:query>
+                <esql:update-results>
+                    <p>Row inserted successfully.</p>
+                </esql:update-results>
+            </esql:execute-query>
+        }
+        elsif ($cgi->param('type') eq 'query') {
             <!-- Query Database -->
             <esql:execute-query>
                 <esql:query>
@@ -100,22 +116,7 @@
                 </esql:no-results>
             </esql:execute-query>
         }
-        elsif ($cgi->param('type') eq 'insert') {
-            <!-- Insert new row -->
-            <esql:execute-query>
-                <esql:query>
-                    insert into example (firstname, lastname, email) values (
-                        <esql:parameter><xsp:expr>$cgi->param('firstname')</xsp:expr></esql:parameter>,
-                        <esql:parameter><xsp:expr>$cgi->param('lastname')</xsp:expr></esql:parameter>,
-                        <esql:parameter><xsp:expr>$cgi->param('email')</xsp:expr></esql:parameter>
-                        )
-                </esql:query>
-                <esql:update-results>
-                    <p>Row inserted successfully.</p>
-                </esql:update-results>
-            </esql:execute-query>
-        }
-            
+
         <p>
         <!-- Show Form -->
         <form method="GET">
@@ -158,16 +159,16 @@
         </table>
         </form>
         </p>
-        
+
         </xsp:logic>
-    
+
       </esql:connection>
     </xsp:logic>
-    
+
     <p><a href="esql.xsp?reset=1">Reset Database</a></p>
-    
+
     <p><a href="showsource.xsp?esql.xsp">View Source</a></p>
-    
+
     </body>
 </html>
 

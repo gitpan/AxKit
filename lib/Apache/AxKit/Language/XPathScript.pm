@@ -1,4 +1,4 @@
-# $Id: XPathScript.pm,v 1.1 2002/01/13 20:45:11 matts Exp $
+# $Id: XPathScript.pm,v 1.3 2002/03/25 14:52:20 jwalt Exp $
 
 package Apache::AxKit::Language::XPathScript;
 
@@ -89,9 +89,7 @@ sub handler {
         compile($package, $style_provider);
         $stash->{$style_key}{mtime} = get_mtime($class, $style_provider);
     }
-    
-    my $old_status = $r->status;
-    
+
     no strict 'refs';
     my $cv = \&{"$package\::handler"};
 
@@ -99,29 +97,30 @@ sub handler {
     my $t = {};
     local $Apache::AxKit::Language::XPathScript::trans = $t;
     local $Apache::AxKit::Language::XPathScript::style_provider = $style_provider;
-    
+
     AxKit::Debug(7, "Running XPathScript script\n");
     local $^W;
+    my $rc = Apache::Constants::OK;
     eval {
-        $cv->($r, $xpath, $t);
+        $rc = $cv->($r, $xpath, $t);
     };
     if ($@) {
         AxKit::Debug(1, "XPathScript error: $@");
         throw $@;
     }
-    
-    if (!$r->pnotes('xml_string') && 
+
+    if (!$r->pnotes('xml_string') &&
         !$r->dir_config('XPSNoApplyTemplatesOnEmptyOutput')) { # no output? Try apply_templates
         print Apache::AxKit::Language::XPathScript::Toys::apply_templates();
     }
-    
+
 #    warn "Run\n";
 
     $Apache::AxKit::Language::XPathScript::xp = undef;
     $Apache::AxKit::Language::XPathScript::trans = undef;
     $Apache::AxKit::Language::XPathScript::style_provider = undef;
 #    warn "Returning $old_status\n";
-    return $r->status($old_status);
+    return $rc;
 }
 
 sub get_source_tree {
@@ -268,11 +267,13 @@ sub compile {
             'my ($r, $xp, $t) = @_;',
             "\n#line 1 " . $provider->key() . "\n",
             $script,
+            ";\n",
+            'return Apache::Constants::OK;',
             "\n}",
             );
-    
+
     local $^W;
-    
+
     AxKit::Debug(10, "Compiling script:\n$eval\n");
     eval $eval;
     if ($@) {
@@ -287,7 +288,7 @@ sub include_file {
     # return if already included
     my $key = $provider->key();
     return '' if grep {$_ eq $filename} @{$stash->{$key}{includes}};
-    
+
     push @{$stash->{$key}{includes}}, $filename;
     
     my $inc_provider = Apache::AxKit::Provider->new(
@@ -469,7 +470,7 @@ sub get_package_name {
     sub matches {
         $Apache::AxKit::Language::XPathScript::xp->matches(@_);
     }
-    
+
     sub set_namespace {
         eval {
             $Apache::AxKit::Language::XPathScript::xp->set_namespace(@_);
@@ -529,7 +530,7 @@ sub get_package_name {
         
         return $retval;
     }
-    
+
     sub translate_node {
         my $node = shift;
         
@@ -589,7 +590,7 @@ sub get_package_name {
                 return empty_tag($node);
             }
         }
-        
+
         local $^W;
         
         my $dokids = 1;
@@ -657,7 +658,7 @@ sub get_package_name {
         my $post = interpolate($node, $trans->{postchildren}, $testcode_output) .
                 ($trans->{showtag} ? end_tag($node) : '') .
                 interpolate($node, $trans->{post}, $testcode_output);
-        
+
         if ($dokids) {
             my $middle = '';
             for my $kid ($node->getChildNodes()) {

@@ -1,5 +1,14 @@
 AxKit Changes
 
+1.5.2
+ - Allow AxKit to handle directory requests.
+ - Fixed all Language modules to return 200/OK
+ - Added AxIgnoreStylePI directive
+ - Ported AxPoint to use XML::Handler::AxPoint
+ - TaglibHelper taglibs no longer need to have parse_* subs 
+ - Added HtmlDoc language module
+ - Fixed strange bug in cached LibXSLT stylesheets
+
 1.5.1
  - Allow XSP pages to return a result code to make redirects and other
    HTTP status codes easier.

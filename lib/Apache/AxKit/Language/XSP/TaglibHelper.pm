@@ -1,4 +1,4 @@
-# $Id: TaglibHelper.pm,v 1.1 2002/01/13 20:45:12 matts Exp $
+# $Id: TaglibHelper.pm,v 1.4 2002/04/15 16:04:50 barries Exp $
 
 package Apache::AxKit::Language::XSP::TaglibHelper;
 @ISA = qw(Apache::AxKit::Language::XSP);
@@ -279,7 +279,7 @@ sub parse_start {
     # arbitrarily here.
     $tag =~ s/-/_/g;
 
-    my $pkg = caller;
+    my $pkg = $AxKit::XSP::TaglibPkg;
 
     # horrible hack: if the caller is the SAX library directly,
     # then we'll just have to assume that we're testing TaglibHelper
@@ -396,7 +396,7 @@ sub parse_end {
     my $origtag = $tag;
     $tag =~ s/-/_/g;
 
-    my $pkg = caller;
+    my $pkg = $AxKit::XSP::TaglibPkg;
     $pkg = "Apache::AxKit::Language::XSP::TaglibHelper" if $pkg eq "AxKit::XSP::SAXHandler";
     my $funspec = is_function($pkg, $tag);
 
@@ -515,27 +515,38 @@ TaglibHelper - module to make it easier to write a taglib
 
 =head1 SYNOPSIS
 
-Put this code at the top of your taglib module:
+    package My::Taglib;
 
-    # this stuff, you change for each taglib
+    use Apache::AxKit::Language::XSP::TaglibHelper;
+
+    @ISA = qw( Apache::AxKit::Language::XSP::TaglibHelper );
+
+    ## Edit $NS to be the namespace URI you want
     $NS = 'http://apache.org/xsp/testtaglib/v1';
+
+    ## Edit @EXPORT_TAGLIB as needed
     @EXPORT_TAGLIB = (
-    'func1($arg1)',
-    'func2($arg1,$arg2)',
-    'func3($arg1,$arg2;$optarg)',
-    'func4($arg1,*treearg)',
-    'func4($arg1,*treearg):listtag=mylist:itemtag=item',
+        'func1($arg1)',
+        'func2($arg1,$arg2)',
+        'func3($arg1,$arg2;$optarg)',
+        'func4($arg1,*treearg)',
+        'func4($arg1,*treearg):listtag=mylist:itemtag=item',
     );
 
-    # this stuff you don't
-    use Apache::AxKit::Language::XSP::TaglibHelper;
-    sub parse_char { Apache::AxKit::Language::XSP::TaglibHelper::parse_char(@_); }
-    sub parse_start { Apache::AxKit::Language::XSP::TaglibHelper::parse_start(@_); }
-    sub parse_end { Apache::AxKit::Language::XSP::TaglibHelper::parse_end(@_); }
     use strict;
 
-...and then edit the $NS and @EXPORT_TAGLIB to reflect
-your taglib's namespace and list of functions.
+    sub func1 {
+        my ( $arg1 ) = @_ ;
+        ...
+        return $scalar_or_reference;
+    }
+
+    ...
+
+    1;
+
+
+the functions with the same names as listed in C<@EXPORT_TAGLIB>.
 
 =head1 DESCRIPTION
 

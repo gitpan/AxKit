@@ -1,4 +1,4 @@
-# $Id: Provider.pm,v 1.3 2002/03/15 13:35:04 matts Exp $
+# $Id: Provider.pm,v 1.4 2002/04/02 16:27:54 matts Exp $
 
 package Apache::AxKit::Provider;
 use strict;
@@ -21,7 +21,7 @@ sub new {
     $self->init(@_);
     
     AxKit::add_depends($self->key());
-    
+
     return $self;
 }
 
@@ -46,7 +46,7 @@ sub has_changed {
 
 sub decline {
     my $self = shift;
-    
+
     AxKit::Debug(4, "provider declined");
     return DECLINED;
 }
@@ -78,7 +78,7 @@ sub get_ext_ent_handler {
             }
             die "Cannot download https (SSL) or ftp URL's yet. Patches welcome";
         }
-        
+
 #        warn "File provider ext_ent_handler called with '$sysid'\n";
         my $provider = Apache::AxKit::Provider->new(
                 AxKit::Apache->request,
@@ -95,46 +95,48 @@ sub get_ext_ent_handler {
 sub get_styles {
     my $self = shift;
     my ($media, $pref_style) = @_;
-    
+
     if ($pref_style eq '#default') {
         undef $pref_style;
     }
-    
+
     my $xml_styles = [];
     my $vals = [];
-    
+
     my $key = $self->key();
-    
+
     # need to extract the following from the XML file:
     #   DocType Public Identifier
     #   DTD filename
     #   Root element name (including namespace)
     # use three element array @$vals
-    
+
     if (defined &Apache::AxKit::Provider::xs_get_styles_fh) {
         AxKit::Debug(2, "using XS get_styles (libxml2)");
-        my ($xs_styles, $doctype, $dtd, $root) = 
+        my ($xs_styles, $doctype, $dtd, $root) =
                 $self->xs_get_styles($media, $pref_style);
-        @$xml_styles = @$xs_styles;
+        @$xml_styles = @$xs_styles unless $AxKit::Cfg->IgnoreStylePI();
         @$vals = ($doctype, $dtd, $root);
     }
     else {
         require XML::Parser;
-        
+
         AxKit::Debug(4, "get_styles: creating XML::Parser");
-        
+
+        my $handlers = {
+                    Start => \&parse_start,
+                    Doctype => \&parse_dtd,
+                    $AxKit::Cfg->IgnoreStylePI() ? () : (Proc => \&parse_pi),
+                    };
+
         my $xml_parser = XML::Parser->new(
                 Namespaces => 1,
                 ErrorContext => 2,
-                Handlers => {
-                    Start => \&parse_start,
-                    Doctype => \&parse_dtd,
-                    Proc => \&parse_pi,
-                },
+                Handlers => $handlers,
             );
-    
+
         my $to_parse;
-        eval { 
+        eval {
             $to_parse = $self->get_fh();
         };
         if ($@) {

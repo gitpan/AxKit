@@ -1,4 +1,4 @@
-# $Id: XSP.pm,v 1.8 2002/03/10 16:16:59 matts Exp $
+# $Id: XSP.pm,v 1.9 2002/03/25 07:28:17 matts Exp $
 
 package Apache::AxKit::Language::XSP;
 
@@ -308,6 +308,7 @@ sub start_document {
     foreach my $ns (keys %Apache::AxKit::Language::XSP::tag_lib) {
         my $pkg = $Apache::AxKit::Language::XSP::tag_lib{$ns};
         my $sub;
+        local $AxKit::XSP::TaglibPkg = $pkg;
         if (($sub = $pkg->can("start_document")) && ($sub != \&start_document)) {
             $e->{XSP_Script} .= $sub->($e);
         }
@@ -323,6 +324,7 @@ sub end_document {
     foreach my $ns (keys %Apache::AxKit::Language::XSP::tag_lib) {
         my $pkg = $Apache::AxKit::Language::XSP::tag_lib{$ns};
         my $sub;
+        local $AxKit::XSP::TaglibPkg = $pkg;
         if (($sub = $pkg->can("end_document")) && ($sub != \&end_document)) {
             $e->{XSP_Script} .= $sub->($e);
         }
@@ -389,6 +391,7 @@ sub start_element {
         $e->manage_text(1); # set default for xsp tags
         my $pkg = $Apache::AxKit::Language::XSP::tag_lib{ $ns };
         my $sub;
+        local $AxKit::XSP::TaglibPkg = $pkg;
         if (($sub = $pkg->can("start_element")) && ($sub != \&start_element)) {
             $e->{XSP_Script} .= $sub->($e, $element);
         }
@@ -417,6 +420,7 @@ sub end_element {
         my $tag = $element->{Name};
         my $pkg = $Apache::AxKit::Language::XSP::tag_lib{ $ns };
         my $sub;
+        local $AxKit::XSP::TaglibPkg = $pkg;
         if (($sub = $pkg->can("end_element")) && ($sub != \&end_element)) {
             $e->{XSP_Script} .= $sub->($e, $element);
         }
@@ -444,6 +448,7 @@ sub characters {
     else {
         my $pkg = $Apache::AxKit::Language::XSP::tag_lib{ $ns };
         my $sub;
+        local $AxKit::XSP::TaglibPkg = $pkg;
         if (($sub = $pkg->can("characters")) && ($sub != \&characters)) {
             $e->{XSP_Script} .= $sub->($e, $text);
         }
@@ -468,6 +473,7 @@ sub comment {
 #        local $^W;
         my $pkg = $Apache::AxKit::Language::XSP::tag_lib{ $ns };
         my $sub;
+        local $AxKit::XSP::TaglibPkg = $pkg;
         if (($sub = $pkg->can("comment")) && ($sub != \&comment)) {
             $e->{XSP_Script} .= $sub->($e, $comment);
         }
@@ -492,6 +498,7 @@ sub processing_instruction {
 #        local $^W;
         my $pkg = $Apache::AxKit::Language::XSP::tag_lib{ $ns };
         my $sub;
+        local $AxKit::XSP::TaglibPkg = $pkg;
         if (($sub = $pkg->can("processing_instruction")) && ($sub != \&processing_instruction)) {
             $e->{XSP_Script} .= $sub->($e, $pi);
         }

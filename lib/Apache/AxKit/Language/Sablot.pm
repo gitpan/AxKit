@@ -1,4 +1,4 @@
-# $Id: Sablot.pm,v 1.2 2002/01/30 18:17:21 darobin Exp $
+# $Id: Sablot.pm,v 1.3 2002/03/25 14:06:09 jwalt Exp $
 
 package Apache::AxKit::Language::Sablot;
 
@@ -61,8 +61,10 @@ sub handler {
     }
 
     print $xslt_processor->GetResultArg("result");
-    
+
     $xslt_processor->FreeResultArgs();
+
+    return Apache::Constants::OK;
 }
 
 END {

@@ -1,4 +1,4 @@
-/* $Id: axconfig.h,v 1.1 2002/01/13 20:45:08 matts Exp $ */
+/* $Id: axconfig.h,v 1.2 2002/04/02 16:27:53 matts Exp $ */
 
 #ifdef WIN32
 #define _INC_DIRENT
@@ -43,7 +43,7 @@ typedef struct {
     char * output_charset;
     int    debug_level;
     int    translate_output;
-    int    gzip_output; 
+    int    gzip_output;
     int    reset_processors;
     int    log_declines;
     int    stack_trace;
@@ -51,7 +51,9 @@ typedef struct {
     int    dependency_checks;
     int    reset_output_transformers;
     int    reset_plugins;
-    
+    int    handle_dirs;
+    int    ignore_style_pi;
+
     /* complex types */
     HV *   type_map;            /* mime type => module mapping */
     HV *   processors;          /* processor map */
@@ -62,7 +64,7 @@ typedef struct {
     AV *   error_stylesheet;
     AV *   output_transformers;
     AV *   current_plugins;
-    
+
 } axkit_dir_config;
 
 extern module MODULE_VAR_EXPORT XS_AxKit;

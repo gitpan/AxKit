@@ -1,10 +1,9 @@
-# $Id: SimpleTaglib.pm,v 1.1 2002/03/15 00:02:55 jwalt Exp $
+# $Id: SimpleTaglib.pm,v 1.2 2002/03/28 20:09:38 jwalt Exp $
 # Apache::AxKit::XSP::Language::SimpleTaglib - alternate taglib helper code
 package Apache::AxKit::Language::XSP::SimpleTaglib;
 require 5.006;
 use strict;
 use Apache::AxKit::Language::XSP;
-use CGI::Carp;
 use attributes;
 $Apache::AxKit::Language::XSP::SimpleTaglib::VERSION = 0.1;
 @Apache::AxKit::Language::XSP::SimpleTaglib::ISA = ('Apache::AxKit::Language::XSP');
