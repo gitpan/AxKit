@@ -7,7 +7,7 @@ $t->{'sb:sidebar'}{pre} = q(<table width='154' border='0' cellspacing='0' cellpa
 $t->{'sb:sidebar'}{post} = '</table></td></tr></table>';
 
 $t->{'sb:section'}{pre} = q(<tr>);
-$t->{'sb:section'}{post} = q(</span></td></tr>);
+$t->{'sb:section'}{post} = q(</td></tr>);
 
 $t->{'sb:title'}{pre} = q(<td align='left' valign='top' bgcolor='#eeddff'>
 <span class='toplevel'><b>);
@@ -25,22 +25,15 @@ $t->{'sb:item'}{testcode} = sub {
 	return -1;
 };
 
-my $sbsubpre = q(<table width="100%" border="0" cellspacing="0" cellpadding="0">
-<tr><td>) . spacer(10, 1) . q(</td><td><span class='sublevel'>); # "
-
 $t->{'sb:subsection'}{testcode} = sub {
 	my ($node, $t) = @_;
-	if ($node->findvalue('@expand') eq "no") {
+	if (findvalue('@expand', $node) eq "no") {
 		my $title = findvalue('sb:title/text()', $node);
 		my $url = findvalue('sb:url/text()', $node);
 		my $sel = '';
 		$sel = '_sel' if $r->uri eq $url;
 		$t->{pre} = "<a href=\"$url\"><img src=\"/img/arrow$sel.gif\" width='16' height='14' border='0'
 		vspace='0' hspace='0' alt='' align='absmiddle' />$title</a><br />";
-		if ($r->uri eq $url) {
-			$t->{pre} .= $sbsubpre;
-			return 'sb:item';
-		}
 		$t->{post} = '';
 		return -1;
 	}
@@ -49,7 +42,8 @@ $t->{'sb:subsection'}{testcode} = sub {
 	}
 };
 
-$t->{'sb:subsection'}{pre} = $sbsubpre;
-$t->{'sb:subsection'}{post} = q(</span></td></tr></table>);
+$t->{'sb:subsection'}{pre} = q(<table width="100%" border="0" cellspacing="0" cellpadding="0">
+<tr><td width="10">) . spacer(10, 1) . q(</td><td>);
+$t->{'sb:subsection'}{post} = q(</td></tr></table>);
 
 %>

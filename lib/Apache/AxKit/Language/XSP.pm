@@ -1,11 +1,11 @@
-# $Id: XSP.pm,v 1.13 2000/09/10 15:04:02 matt Exp $
+# $Id: XSP.pm,v 1.17 2000/09/21 11:54:43 matt Exp $
 
 package Apache::AxKit::Language::XSP;
 
 use strict;
 use Apache::AxKit::Language;
-use Apache::AxKit::Language::XSP::SQL;
 use Apache::Request;
+use Apache::AxKit::Exception ':try';
 use XML::Parser;
 
 use vars qw/@ISA $NS/;
@@ -24,14 +24,22 @@ sub register {
     $class->register_taglib($NS);
 }
 
+sub _register_me_and_others {
+    __PACKAGE__->register();
+    
+    foreach my $package ($AxKit::Cfg->XSPTaglibs()) {
+        AxKit::load_module($package);
+        $package->register();
+    }
+}
+
 my $cache;
 
 # useful for debugging - not actually used by AxKit:
 sub get_code {
     my $filename = shift;
     
-    __PACKAGE__->register();
-    Apache::AxKit::Language::XSP::SQL->register();
+    _register_me_and_others();
     
     my $package = get_package_name($filename);
     my $parser = get_parser($package, $filename);
@@ -42,8 +50,7 @@ sub handler {
     my $class = shift;
     my ($r, $xml, undef, $reparse) = @_;
     
-    $class->register();
-    Apache::AxKit::Language::XSP::SQL->register();
+    _register_me_and_others();
     
 #    warn "XSP Parse: $xmlfile\n";
     
@@ -54,7 +61,7 @@ sub handler {
     
     my $to_eval;
     
-    eval {
+    try {
         if (my $dom_tree = $r->pnotes('dom_tree')) {
             AxKit::Debug(5, 'XSP: parsing dom_tree');
             $to_eval = $parser->parse($dom_tree->toString);
@@ -85,20 +92,21 @@ sub handler {
             }
             else {
                 AxKit::Debug(5, 'XSP: parsing fh');
-                my $fh = eval { $xml->get_fh() };
-                if ($@) {
-                    $to_eval = $parser->parse(${$xml->get_strref()});
+                $to_eval = try {
+                    $parser->parse($xml->get_fh());
                 }
-                else {
-                    $to_eval = $parser->parse($fh);
-                }
+                catch Error with {
+                    $parser->parse(${ $xml->get_strref() });
+                };
+                
                 $cache->{$key}{mtime} = $mtime;
             }
         }
-    };
-    if ($@) {
-        die "Parse of '$key' failed: $@";
     }
+    catch Error with {
+        my $err = shift;
+        die "Parse of '$key' failed: $err";
+    };
     
     if ($to_eval) {
         undef &{"${package}::handler"};
@@ -126,14 +134,13 @@ sub handler {
     
     $r->no_cache(1);
 
-    $r->pnotes('dom_tree', 
-                eval {
-                    local $^W;
-                    $cv->($r, $cgi);
-                }
-        );
-    if ($@) {
-        die "XSP Script failed: $@";
+    try {
+        local $^W;
+        $r->pnotes('dom_tree', $cv->($r, $cgi));
+    }
+    catch Error with {
+        my $err = shift;
+        die "XSP Script failed: $err";
     }
     
 }

@@ -1,4 +1,4 @@
-# $Id: Scalar.pm,v 1.3 2000/09/14 20:35:45 matt Exp $
+# $Id: Scalar.pm,v 1.5 2000/10/02 17:36:20 matt Exp $
 
 package Apache::AxKit::Provider::Scalar;
 use strict;
@@ -57,7 +57,7 @@ sub mtime {
 }
 
 sub get_fh {
-    throw Apache::AxKit::Exception::Error(-text => "Can't get fh for Scalar");
+    throw Apache::AxKit::Exception::IO( -text => "Can't get fh for Scalar" );
 }
 
 sub get_strref {

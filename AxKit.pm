@@ -1,4 +1,4 @@
-# $Id: AxKit.pm,v 1.37 2000/09/14 21:29:06 matt Exp $
+# $Id: AxKit.pm,v 1.44 2000/10/02 17:38:35 matt Exp $
 
 package AxKit;
 use strict;
@@ -10,7 +10,7 @@ use Apache;
 use Apache::Log;
 use Apache::Constants;
 use Apache::ModuleConfig ();
-use Apache::AxKit::Exception qw(:try);
+use Apache::AxKit::Exception ':try';
 use Apache::AxKit::ConfigReader;
 use Apache::AxKit::Cache;
 use Apache::AxKit::Provider;
@@ -30,7 +30,7 @@ use Apache::Request ();
 use Apache::AxKit::Language::XPathScript;
 use Apache::AxKit::Language::Sablot;
 
-$VERSION = "0.99";
+$VERSION = "1.00";
 
 if ($ENV{MOD_PERL}) {
     no strict;
@@ -99,8 +99,13 @@ sub AxGzipOutput ($$$) {
 
 # TODO - may want >1 error stylesheet
 sub AxErrorStylesheet ($$$$) {
-    my ($cfg, $parms, $style, $type) = @_;
-    $cfg->{ErrorStylesheet} = [$style, $type];
+    my ($cfg, $parms, $type, $style) = @_;
+    $cfg->{ErrorStylesheet} = [$type, $style];
+}
+
+sub AxAddXSPTaglib ($$$) {
+    my ($cfg, $parms, $package) = @_;
+    $cfg->{XSPTaglibs}{$package}++;
 }
 
 ################################################
@@ -335,8 +340,8 @@ sub Debug {
     }
 }
 
-sub reconsecrate {
-    my ($object, $class) = @_;
+sub load_module {
+    my $class = shift;
     
     my $module = $class . '.pm';
     $module =~ s/::/\//g;
@@ -345,6 +350,12 @@ sub reconsecrate {
         AxKit::Debug(9, "(Re)loading $module");
         require $module;
     }
+}
+
+sub reconsecrate {
+    my ($object, $class) = @_;
+    
+    load_module($class);
     
     bless $object, $class;
 }
@@ -419,6 +430,7 @@ sub handler {
         
         $AxKit::Cfg = Apache::AxKit::ConfigReader->new($r);
         $AxKit::DebugLevel = $AxKit::Cfg->DebugLevel();
+        $Error::Debug = 1 if $AxKit::DebugLevel > 3;
         
         my $provider = Apache::AxKit::Provider->new($r);
         
@@ -522,12 +534,16 @@ sub handler {
         my $E = shift;
         $r->log->error("[AxKit] [Error] $E->{-text}");
         $r->log->error("[AxKit] From: $E->{-file} : $E->{-line}");
+        
+        if ($Error::Debug) {
+            $r->log->error("[AxKit] [Backtrace] " . $E->stacktrace);
+        }
 
         my $error_styles = $AxKit::Cfg->ErrorStyles;
         if (@$error_styles) {
             my $error = '<error><file>' .
                     xml_escape($r->filename) . '</file><msg>' . 
-                    xml_escape($@->{text}) . '</msg>' .
+                    xml_escape($E->{-text}) . '</msg>' .
                     '<stack_trace><bt level="0">'.
                     '<file>' . xml_escape($E->{'-file'}) . '</file>' .
                     '<line>' . xml_escape($E->{'-line'}) . '</line>' .
@@ -541,10 +557,17 @@ sub handler {
 
             $r->notes('xml_string', $error);
 
-            $r->send_http_header();
-            process_request($r, $provider, 1, $error_styles);
-
-            return OK;
+            $r->send_http_header() unless lc($r->dir_config('Filter')) eq 'on';
+            
+            return try {
+                process_request($r, $provider, 1, $error_styles);
+                return OK;
+            }
+            catch Error with {
+                my $E = shift;
+                $r->log->error("[AxKit] [FATAL] Error occured while processing Error XML: $E");
+                return SERVER_ERROR;
+            };
         }
 
         return SERVER_ERROR;
@@ -565,6 +588,11 @@ sub handler {
     catch Error::Simple with {
         my $E = shift;
         $r->log->error("[AxKit] [UnCaught] $E");
+
+        if ($Error::Debug) {
+            $r->log->error("[AxKit] [Backtrace] " . $E->stacktrace);
+        }
+        
         # return error page here somehow...
         my $error_styles = $AxKit::Cfg->ErrorStyles;
         if (@$error_styles) {
@@ -578,10 +606,18 @@ sub handler {
 
             $r->notes('xml_string', $error);
 
-            $r->send_http_header();
-            process_request($r, $provider, 1, $error_styles);
+            $r->send_http_header() unless lc($r->dir_config('Filter')) eq 'on';
+            
+            return try {
+                process_request($r, $provider, 1, $error_styles);
+                return OK;
+            }
+            catch Error with {
+                my $E = shift;
+                $r->log->error("[AxKit] [FATAL] Error occured while processing Error XML: $E");
+                return SERVER_ERROR;
+            };
 
-            return OK;
         }
 
         return SERVER_ERROR;
@@ -731,12 +767,12 @@ sub check_resource_mtimes {
 sub deliver_to_browser {
     my ($r) = @_;
     
-    if ($AxKit::Cache->no_cache()) {
+    if ($AxKit::Cache->no_cache() || lc($r->dir_config('Filter')) eq 'on') {
         AxKit::Debug(4, "writing xml string to browser");
         my ($transformer, $doit) = get_output_transformer();
         if ($AxKit::Cfg->DoGzip) {
             AxKit::Debug(4, 'Sending gzipped xml string to browser');
-            $r->send_http_header();
+            $r->send_http_header() unless lc($r->dir_config('Filter')) eq 'on';
             if ($doit) {
                 $r->print( Compress::Zlib::memGzip(
                         $transformer->( $r->notes('xml_string') )
@@ -748,7 +784,7 @@ sub deliver_to_browser {
         }
         else {
             my $transformer = get_output_transformer();
-            $r->send_http_header();
+            $r->send_http_header() unless lc($r->dir_config('Filter')) eq 'on';
             if ($doit) {
                 $r->print(
                         $transformer->( $r->notes('xml_string') )
@@ -882,12 +918,15 @@ AxKit - an XML Delivery Toolkit for Apache
 
 AxKit provides the user with an application development environment
 for mod_perl, using XML, Stylesheets and a few other tricks. See 
-http://xml.sergeant.org/axkit/ for details.
+http://axkit.org/ for details.
 
 =head1 SYNOPSIS
 
 In httpd.conf:
 
+    # we add custom configuration directives
+    # so this *must* be in httpd.conf outside of 
+    # all request based conditionals
     PerlModule AxKit
 
 Then in any Apache configuration section (Files, Location, Directory,
@@ -902,11 +941,12 @@ Then in any Apache configuration section (Files, Location, Directory,
     AxAddStyleMap application/x-xpathscript \
             Apache::AxKit::Language::XPathScript
     
-    # Optionally setup a default style mapping
-    AxAddDefaultStyleMap /default.xsl text/xsl
-    
     # Optionally set a hard coded cache directory
+    # make sure this is writable by nobody
     AxCacheDir /opt/axkit/cachedir
+    
+    # turn on debugging (1 - 10)
+    AxDebugLevel 5
     
 Now simply create xml files with stylesheet declarations:
 
@@ -942,14 +982,347 @@ you can change the directives to ordinary PerlSetVar directives:
     PerlSetVar AxStyleMap "text/xsl => Apache::AxKit::Language::XSLT, \
         application/x-xpathscript => Apache::AxKit::Language::XPathScript"
     
-    # note brackets here
-    PerlSetVar AxDefaultStyleMap "(/default.xsl text/xsl) \
-                (/other.xsl text/xsl)"
-    
     PerlSetVar AxCacheDir /opt/axkit/cache
-    
+
 It's worth noting that the PerlSetVar option is available regardless of
 whether you compile with NO_DIRECTIVES set, although it is marginally
 slower to use PerlSetVar.
+
+=head1 CONFIGURATION DIRECTIVES
+
+AxKit installs a number of new first class configuration directives for
+you to use in Apache's httpd.conf or .htaccess files. These provide very
+fine grained control over how AxKit performs transformations and sends its
+output to the user.
+
+Each directive below is listed along with how to use that directive with
+NO_DIRECTIVES=1 (i.e. via PerlSetVar).
+
+=head2 AxCacheDir
+
+This option takes a single argument, and sets the directory that the cache
+module stores its files in. These files are an MD5 hash of the file name
+and some other information. Make sure the directory you specify is writable
+by either the nobody user or the nobody group (or whatever user your Apache
+servers run as). It is probably best to not make these directories world
+writable!
+
+    AxCacheDir /tmp/axkit_cache
+
+or
+
+    PerlSetVar AxCacheDir /tmp/axkit_cache
+
+=head2 AxDebugLevel
+
+If present this makes AxKit send output to Apache's error log. The
+valid range is 0-10, with 10 producing more output. We recommend not to
+use this option on a live server.
+
+    AxDebugLevel 5
+
+or
+
+    PerlSetVar AxDebugLevel 5
+
+=head2 AxGzipOutput
+
+This allows you to use the Compress::Zlib module to gzip output to browsers
+that support gzip compressed pages. It uses the Accept-Encoding HTTP header
+and some information about User agents who can support this option but
+don't correctly send the Accept-Encoding header. This option allows either
+On or Off values (default being Off). This is very much worth using on sites
+with mostly static pages because it reduces outgoing bandwidth significantly.
+
+    AxGzipOutput On
+
+or
+
+    PerlSetVar AxGzipOutput 1
+
+=head2 AxOutputCharset
+
+Fix the output character set, rather than using either UTF-8 or the user's
+preference from the Accept-Charset HTTP header. If this option is present,
+all output will occur in the chosen character set, by loading Unicode::Map8
+and using that character set. Only 8 bit character sets are supported. It
+is recommended to not use this option if you can avoid it.
+
+    AxOutputCharset iso-8859-1
+
+or
+
+    PerlSetVar AxOutputCharset iso-8859-1
+
+=head2 AxErrorStylesheet
+
+If an error occurs during processing that throws an exception, the
+exception handler will try and find an ErrorStylesheet to use to process
+XML of the following format:
+
+    <error>
+        <file>/usr/htdocs/xml/foo.xml</file>
+        <msg>Something bad happened</msg>
+        <stack_trace>
+            <bt level="0">
+                <file>/usr/lib/perl/site/AxKit.pm</file>
+                <line>342</line>
+            </bt>
+        </stack_trace>
+    </error>
+
+There may potentially be multiple bt tags. If an exception occurs when
+the error stylesheet is transforming the above XML, then a SERVER ERROR
+will occur and an error written in the Apache error log.
+
+    AxErrorStylesheet text/xsl /stylesheets/error.xsl
+
+or
+
+    PerlSetVar AxErrorStylesheet "text/xsl => /stylesheets/error.xsl"
+
+=head2 AxAddXSPTaglib
+
+XSP supports two types of tag libraries. The simplest type to understand
+is merely an XSLT or XPathScript (or other transformation language)
+stylesheet that transforms custom tags into the "raw" XSP tag form.
+However there is another kind, that is faster, and these taglibs transform
+the custom tags into pure code which then gets compiled. These taglibs
+must be loaded into the server using the AxAddXSPTaglib configuration
+directive.
+
+    # load the SQL taglib
+    AxAddXSPTaglib Apache::AxKit::Language::XSP::SQL
+    AxAddXSPTaglib Apache::AxKit::Language::XSP::Util
+
+or
+
+    PerlSetVar AxAddXSPTaglibs \
+        Apache::AxKit::Language::XSP::SQL \
+        Apache::AxKit::Language::XSP::Util
+
+=head2 AxStyle
+
+A default stylesheet title to use. This is useful when a single XML
+resource maps to multiple choice stylesheets. One possible way to use
+this is to symlink the same file in different directories with .htaccess
+files specifying different AxStyle directives.
+
+    AxStyle "My custom style"
+
+or
+
+    PerlSetVar AxPreferredStyle "My custom style"
+
+=head2 AxMedia
+
+Very similar to the previous directive, this sets the media type. It is
+most useful in a .htaccess file where you might have an entire directory
+for the media "handheld".
+
+    AxMedia tv
+
+or
+
+    PerlSetVar AxPreferredMedia tv
+
+=head2 AxAddStyleMap
+
+This is one of the more important directives. It is responsible for mapping
+module stylesheet MIME types to stylesheet processor modules (the reason
+we do this is to make it easy to switch out different modules for the same
+functionality, for example different XSLT processors).
+
+    AxAddStyleMap text/xsl Apache::AxKit::Language::Sablot
+    AxAddStyleMap application/x-xpathscript \
+        Apache::AxKit::Language::XPathScript
+    AxAddStyleMap application/x-xsp \
+        Apache::AxKit::Language::XSP
+
+or
+
+  PerlSetVar AxStyleMap \
+     "text/xsl => Apache::AxKit::Language::Sablot, \
+      application/x-xpathscript => Apache::AxKit::Language::XPathScript, \
+      application/x-xsp => Apache::AxKit::Language::XSP"
+
+=head2 AxResetStyleMap
+
+Since the style map will continue deep into your directory tree, it may
+occasionally be useful to reset the style map (I don't have an example
+usage of this at this time).
+
+    # option takes no arguments.
+    AxResetStyleMap
+
+or
+
+    PerlSetVar AxStyleMap ""
+
+Note that the PerlSetVar version of resetting the style map does I<not>
+work with the custom directive version of AxAddStyleMap and vice versa.
+
+=head2 AxAddProcessor
+
+This directive maps all XML files to a particular stylesheet to be
+processed with. You can do this in a <Files> directive if you need
+to do it by file extension:
+
+    <Files *.dkb>
+    AxAddProcessor text/xsl /stylesheets/docbook.xsl
+    </Files>
+
+Multiple directives for the same set of files make for a chained set
+of stylesheet processing instructions, where the output of one processing
+stage goes into the input of the next. This is especially useful for
+XSP processing, where the output of the XSP processor will likely not
+be HTML (or WAP or whatever your chosen output format is):
+
+    <Files *.xsp>
+    # use "." to indicate that XSP gets processed by itself.
+    AxAddProcessor application/x-xsp .
+    AxAddProcessor text/xsl /stylesheets/to_html.xsl
+    </Files>
+
+There is no PerlSetVar equivalent of this directive.
+
+=head2 AxAddDocTypeProcessor
+
+This allows you to map all XML files conforming to a particular XML
+public identifier in the document's DOCTYPE declaration, to the specified
+stylesheet(s):
+
+    AxAddDocTypeProcessor text/xsl /stylesheets/docbook.xsl \
+            "-//OASIS//DTD DocBook XML V4.1.2//EN"
+
+There is no PerlSetVar equivalent of this directive.
+
+=head2 AxAddDTDProcessor
+
+This allows you to map all XML files that specify the given DTD file or
+URI in the SYSTEM identifier to be mapped to the specified stylesheet(s):
+
+    AxAddDTDProcessor text/xsl /stylesheets/docbook.xsl \
+            /dtds/docbook.dtd
+
+There is no PerlSetVar equivalent of this directive.
+
+=head2 AxAddRootProcessor
+
+This allows you to map all XML files that have the given root element
+to be mapped to the specified stylesheet(s):
+
+    AxAddRootProcessor text/xsl /stylesheets/book.xsl book
+
+Namespaces are fully supported via the following syntax:
+
+    AxAddRootProcessor text/xsl /stylesheets/homepage.xsl \
+        {http://myserver.com/NS/homepage}homepage
+
+This syntax was taken from James Clark's Introduction to Namespaces article.
+
+There is no PerlSetVar equivalent of this directive.
+
+=head2 <AxMediaType>
+
+This is a configuration directive block. It allows you to have finer
+grained control over the mappings, by specifying that the mappings (which
+have to be specified using the 4 directives above) contained within the
+block are only relevant when the requested media type is as specified
+in the block parameters:
+
+    <AxMediaType screen>
+    AxAddProcessor text/xsl /stylesheets/webpage_screen.xsl
+    </AxMediaType>
+    
+    <AxMediaType handheld>
+    AxAddProcessor text/xsl /stylesheets/webpage_wap.xsl
+    </AxMediaType>
+    
+    <AxMediaType tv>
+    AxAddProcessor text/xsl /stylesheets/webpage_tv.xsl
+    </AxMediaType>
+
+There is no PerlSetVar equivalent of this directive block.
+
+=head2 <AxStyleName>
+
+This configuration directive block is very similar to the above, only
+it specifies alternate stylesheets by name, which can be then requested
+via a StyleChooser:
+
+    <AxMediaType screen>
+        AxAddProcessor text/xsl /styles/webpage_screen.xsl
+        <AxStyleName printable>
+            AxAddProcessor text/xsl /styles/webpage_printable.xsl
+        </AxStyleName>
+    </AxMediaType>
+
+This and the above directive block can be nested, and can also be
+contained within <Files> directives to give you even more control over
+how your XML is transformed.
+
+There is no PerlSetVar equivalent of this directive block.
+
+=head1 CUSTOMISING AXKIT
+
+There are some configuration directives that are specifically reserved
+for customising how AxKit works. These directives allow you to specify
+a new class to replace the one being used for certain operations.
+
+These directives all take as a single argument, the name of a module
+to load in place of the default. They are:
+
+    AxConfigReader
+    AxProvider
+    AxCacheModule
+
+The ConfigReader module returns information about various configuration
+options. Currently it takes most of its information from the above
+mentioned configuration directives, or from PerlSetVar.
+
+The Provider module is the means by which AxKit gets its resources from.
+The default Provider simply picks up files from the filesystem, but 
+alternate providers could pull the information from a DBMS, or perhaps
+create some XML structure for directories. There currently exists one
+alternate Provider module, which allows AxKit to work as a recipient
+for Apache::Filter output. This module is Apache::AxKit::Provider::Filter.
+
+The Cache module is responsible for storing cache data for later
+retrieval.
+
+Implementing these is non trivial, and it is highly recommended to join
+the AxKit-devel mailing list before venturing to do so, and to also
+consult the source for the current default modules. Details of
+joining the mailing list are at http://axkit.org/mailinglist.xml
+
+=head1 KNOWN BUGS
+
+There are currently some incompatibilities between the versions of expat
+loaded by Apache when compiled with RULE_EXPAT=yes (which is a default,
+unfortunately), and XML::Parser's copy of expat. This can cause sporadic
+segmentation faults in Apache's httpd processes. The solution is to
+recompile Apache with RULE_EXPAT=no. If you have a recent mod_perl and
+use mod_perl's Makefile.PL to compile Apache for you, this option will
+be enabled automatically for you.
+
+There are a number of known bugs in XSP at this time. This is being
+re-written to use SAX2, and so we are not focusing on fixing these bugs
+until the re-write is further down the line.
+
+=head1 AUTHOR and LICENSE
+
+AxKit is developed by AxKit.com Ltd. See http://axkit.com/ for more details.
+
+AxKit is licensed under either the GNU GPL Version 2, or the Perl Artistic
+License.
+
+Copyright AxKit.com, 2000.
+
+=head1 MORE DOCUMENTATION
+
+For more documentation on things like XPathScript, XSP and XSLT, and a quick
+getting started guide, please visit our community web site at 
+http://axkit.org/
 
 =cut

@@ -1,0 +1,94 @@
+<!-- Resume/CV DTD -->
+
+<!--
+
+This is my first shot at a resume dtd. It hopefully encompasses quite a bit of
+detail so that you can create complex or simple resume's. It also should cover
+a fair bit of international issues. Let me know if it doesn't.
+
+Changes:
+
+	Added time attribute to skill items, so you can say how long
+	you've had that skill.
+
+	Fixed spelling of professional.
+
+	Made phone type attribute IMPLIED instead of REQUIRED.
+	Ditto for publication.
+
+Matt Sergeant, matt@sergeant.org
+
+-->
+<!ELEMENT resume (	person,
+					skills?,
+					education?,
+					professional_organisations?,
+					publications?,
+					experience?,
+					training?,
+					interests?,
+					references?)>
+
+	<!ELEMENT person (persname,address,phone*,email*,web_site?,dob?)>
+
+		<!ELEMENT persname (title,forename,middlename?,surname)>
+			<!ELEMENT title (#PCDATA)>
+			<!ELEMENT forename (#PCDATA)>
+			<!ELEMENT middlename (#PCDATA)>
+			<!ELEMENT surname (#PCDATA)>
+
+		<!ELEMENT address (line*,postcode?,country?)>
+			<!ELEMENT line (#PCDATA)>
+			<!ELEMENT postcode (#PCDATA)>
+			<!ELEMENT country (#PCDATA)>
+
+		<!ELEMENT phone (#PCDATA)>
+		<!ATTLIST phone
+					type	CDATA #IMPLIED>
+
+		<!ELEMENT email (#PCDATA)>
+		<!ELEMENT web_site (#PCDATA)>
+		<!ELEMENT dob (#PCDATA)> <!-- Date of Birth -->
+
+	<!ELEMENT skills (area)*>
+		<!ELEMENT area (item)*>
+		<!ATTLIST area name CDATA #REQUIRED>
+			<!ELEMENT item (#PCDATA)>
+			<!ATTLIST item time CDATA #IMPLIED> <!-- Length of time you've had this skill - e.g. "6 months" -->
+
+	<!ELEMENT education (establishment)*>
+		<!ELEMENT establishment (name,address,datefrom,dateto,level?,qualification*)>
+
+			<!ELEMENT name (#PCDATA)>
+			<!ELEMENT datefrom (#PCDATA)>
+			<!ELEMENT dateto (#PCDATA)>
+			<!ELEMENT qualification (name,grade?)>
+				<!ELEMENT grade (#PCDATA)>
+
+	<!ELEMENT professional_organisations (organisation)*>
+		<!ELEMENT organisation (name,offices_held,datefrom)>
+			<!ELEMENT offices_held (#PCDATA)>
+
+	<!ELEMENT publications (publication)>
+		<!ELEMENT publication (name,details)>
+		<!ATTLIST publication
+			type CDATA #IMPLIED> <!-- Specify book, article, etc -->
+
+			<!ELEMENT details ANY> <!-- Expecting markup here? -->
+
+	<!ELEMENT experience (employee)*>
+		<!ELEMENT employee (name,address,datefrom,dateto,role,details)>
+
+			<!ELEMENT role (#PCDATA)>
+
+	<!ELEMENT training (course)*>
+		<!ELEMENT course (name,date,trainee?,level?)>
+			<!ELEMENT date (#PCDATA)>
+			<!ELEMENT trainee (#PCDATA)>
+			<!ELEMENT level (#PCDATA)>
+
+	<!ELEMENT interests (#PCDATA)> <!-- Someone can fill out structure here if they want -->
+
+	<!ELEMENT references (reference)*>
+		<!ELEMENT reference (person,relationship,address)>
+			<!ELEMENT relationship (#PCDATA)> <!-- Describe relationship to this person -->

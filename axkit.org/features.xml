@@ -20,6 +20,10 @@
 				Standards base stylesheet selection criteria
 			</para>
 			<para>
+			  Output in more than 180 different character sets (although
+				browser support means that only about 10 of those are useful).
+			</para>
+			<para>
 				XSP support for the Perl language, including Perl DBI based SQL
 				taglib
 			</para>
@@ -32,6 +36,20 @@
 			<para>
 				Support for almost every platform around: Linux, Solaris, HPUX,
 				AIX, Windows NT, BeOS, *BSD, VMS.
+			</para>
+			<para>
+				Intelligent caching technology means your pages will be
+				delivered as fast as static pages
+			</para>
+			<para>
+				Deliver to different media using the sames set of URLs for all
+				media types. Media types supported are: Screen (web browsers),
+				Handheld (such as palmtop computers and mobile phones), TV (for
+				example Sky's "Open", or Microsoft's WebTV), braille, aural,
+				print, projection and tty (for text-only browsers).
+			</para>
+			<para>
+				GZipped output encoding - great for slower links
 			</para>
 		</section>
 	</body>

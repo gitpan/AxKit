@@ -38,15 +38,15 @@ sub spacer {
 	return "<img src='/img/pix.gif' 
 	width='$width' height='$height'" . ($align ? " align='$align'" : '') .
  " border='0' vspace='0' hspace='0' 
-	alt='' />";
+	alt=''>";
 }
 
 %>
-<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/strict.dtd">
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.0 Transitional//EN" "http://www.w3.org/TR/REC-html40/loose.dtd">
 <html>
 <head>
 <title><%= findvalue('/webpage/head/title/text()') %></title>
-<meta name='Author' content='Matt Sergeant' />
+<meta name='Author' content='Matt Sergeant'>
 <link rel='stylesheet' href='/stylesheets/axkit.css' type='text/css' />
 </head>
 
@@ -77,9 +77,9 @@ topmargin='0' leftmargin='0' background='/img/bg.gif'>
 <table width='100%' border='0' cellspacing='0' cellpadding='0'>
 <tr>
 <!-- navbar -->
-<td align='left' valign='top' width='172'>
+<td align='left' valign='top' width='170'>
 
-    <table width='170' border='0' cellspacing='0' cellpadding='0'>
+    <table width='100%' border='0' cellspacing='0' cellpadding='0'>
     <tr>
     <td colspan='3' style='line-height: 0;'><img
         src='/img/vsep.gif' width='170' height='25' border='0' vspace='0' hspace='0' alt='--sep--' /></td>
@@ -90,8 +90,11 @@ topmargin='0' leftmargin='0' background='/img/bg.gif'>
         src='/img/nav_top.gif' width='170' height='12' border='0' vspace='0' hspace='0' alt='Start Navigation' /></td>
     </tr>
 
+
     <tr>
     <td background='/img/nav_left.gif'><%= spacer(8,20) %></td>
+
+
 
     <td bgcolor='#330066'>
         <!-- actual navigation -->
@@ -139,7 +142,7 @@ foreach my $part (split('/', $uri)) {
 		print $part, " :: ";
 	}
 	else {
-		print "<a href=\"$local\">", $title, "</a> :: ";
+		print "<a href=\"$local\">", , "</a> :: ";
 	}
 	$local =~ s/\/index\.xml$//;
 }

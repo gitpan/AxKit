@@ -1,4 +1,4 @@
-# $Id: ConfigReader.pm,v 1.13 2000/09/14 20:12:36 matt Exp $
+# $Id: ConfigReader.pm,v 1.17 2000/10/01 22:08:40 matt Exp $
 
 package Apache::AxKit::ConfigReader;
 
@@ -122,7 +122,7 @@ sub OutputCharset {
             my $score;
 
             ($charset, $score) = split(/;\s*q=/, $charset, 2);
-            $score = 1 unless defined $score;
+            $score = 1 unless (defined($score) && ($score =~ /^(\+|\-)?\d+(\.\d+)?$/));
             
             if ($score > $retscore || $charset =~ /^utf\-?8$/) { # we like utf8
                 $retcharset = $charset;
@@ -143,9 +143,16 @@ sub ErrorStyles {
     my $self = shift;
     
     my $style = $self->{cfg}{ErrorStylesheet};
-    return [] unless $style;
-    
-    my ($href, $type) = @$style;
+    my ($type, $href);
+    if (!$style) {
+        ($type, $href) = split(/\s*=>\s*/,
+                $self->{apache}->dir_config('AxErrorStylesheet'),
+                2);
+        return [] unless $href;
+    }
+    else {
+        ($type, $href) = @$style;
+    }
     
     my $style_map = $self->StyleMap;
     
@@ -169,19 +176,15 @@ sub DoGzip {
     my $r = $self->{apache};
     my($can_gzip);
     
-    # This Vary stuff seems to leak memory exponentially,
-    # so it is commented out for now. I don't know why or how.
-    # but commenting it out worked for me... I've prodded Doug
-    # on the matter.
-    
-#     AxKit::Debug(5, 'Getting Vary header');
-#     my @vary = $r->header_out('Vary') if $r->header_out('Vary');
-#     push @vary, "Accept-Encoding", "User-Agent";
-#     AxKit::Debug(5, 'Setting Vary header');
-#     $r->header_out('Vary',
-#                     join ", ",
-#                     @vary
-#                 );
+    AxKit::Debug(5, 'Getting Vary header');
+    my @vary;
+    @vary = $r->header_out('Vary') if $r->header_out('Vary');
+    push @vary, "Accept-Encoding", "User-Agent";
+    AxKit::Debug(5, 'Setting Vary header');
+    $r->header_out('Vary',
+                    join ", ",
+                    @vary
+                );
     my($accept_encoding) = $r->header_in("Accept-Encoding") || '';
     $can_gzip = 1 if index($accept_encoding,"gzip")>=0;
     unless ($can_gzip) {
@@ -242,6 +245,21 @@ sub GetMatchingProcessors {
     }
     
     return @results;
+}
+
+sub XSPTaglibs {
+    my $self = shift;
+    
+    my @others;
+    
+    @others = eval { keys %{ $self->{cfg}{XSPTaglibs} } };
+    
+    return @others if @others;
+    
+    local $^W;
+    @others = split(/\s+/, $self->{apache}->dir_config('AxAddXSPTaglibs'));
+    
+    return @others;
 }
 
 1;

@@ -1,19 +1,19 @@
 <?xml version="1.0"?>
-<?xml-stylesheet href="/docbook_screen.xps" 
+<?xml-stylesheet href="/stylesheets/docbook_screen.xps" 
 				type="application/x-xpathscript" 
 				media="screen"
 				title="default" ?>
-<?xml-stylesheet href="/docbook_screen_fancy.xps" 
+<?xml-stylesheet href="/stylesheets/docbook_screen_fancy.xps" 
 				type="application/x-xpathscript" 
 				media="screen"
 				title="fancy"
 				alternate="yes" ?>
-<?xml-stylesheet href="/docbook_print.xps" 
+<?xml-stylesheet href="/stylesheets/docbook_print.xps" 
 				type="application/x-xpathscript" 
 				media="screen"
 				title="print"
 				alternate="yes" ?>
-<?xml-stylesheet href="/docbook_handheld.xps" 
+<?xml-stylesheet href="/stylesheets/docbook_handheld.xps" 
 				type="application/x-xpathscript" 
 				media="handheld"
 				title="default"?>
@@ -41,8 +41,7 @@
 -->
 
 	<abstract>
-		<para>A complete example of a docbook stylesheet using the
-			Apache XML Delivery Toolkit</para>
+		<para>A complete example of a docbook stylesheet using AxKit</para>
 	</abstract>
 </artheader>
 
@@ -50,7 +49,7 @@
 <title>Introduction</title>
 <para>
 This aims to be a complete example of rendering DocBook documents
-using the <ulink url="http://xml.sergeant.org/axkit/">AxKit</ulink> and
+using <ulink url="http://axkit.org/">AxKit</ulink> and
 XPathScript. It offers several different styles to render the document
 in: Normal, Fancy and Printer. And also offers an alternative media to
 render the document for: handheld. How you select the different styles
@@ -62,6 +61,11 @@ tried rendering this document with the standard docbook tools, so I may
 have some elements wrong. If I do, you have my appologies. Hopefully you
 might be encouraged enough by this to fix the problems I've introduced
 and do it right, as it were.
+</para>
+<para>
+Note: This example remains unfinished. Please see the "Introduction to
+AxKit" on the AxKit web site for a current better example of using
+DocBook.
 </para>
 </sect1>
 

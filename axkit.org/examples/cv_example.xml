@@ -1,0 +1,26 @@
+<?xml version="1.0"?>
+<?xml-stylesheet href="/stylesheets/webpage_html.xps" type="application/x-xpathscript"?>
+<webpage>
+	<head>
+		<title>CV Example using XPathScript</title>
+	</head>
+<body>
+<section>
+<title>Finally I get around to updating my CV!</title>
+<p>
+People ask me at least once a week to see my updated CV, but I keep it
+on a different ISP's server and never get around to updating it. This
+isn't because I don't want people to see it - but because I'm always
+working on something far more interesting :-)
+</p>
+<p>
+However I figured it makes a good example for XPathScript. So here is
+<a href="cv.xps">the XPathScript source code</a>. The original XML file is available by
+adding the querystring passthru=1 to the XML file. Link <a
+href="cv.xml?passthru=1">here</a>. The passthru option is another
+example of an AxKit plugin. The translated version created by this
+stylesheet is available <a href="cv.xml">here</a>.
+</p>
+</section>
+</body>
+</webpage>

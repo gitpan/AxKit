@@ -1,4 +1,4 @@
-# $Id: Exception.pm,v 1.13 2000/09/14 20:43:29 matt Exp $
+# $Id: Exception.pm,v 1.14 2000/10/01 22:09:27 matt Exp $
 
 package Apache::AxKit::Exception;
 use Error;
@@ -22,6 +22,11 @@ use vars qw/@ISA/;
 @ISA = ('Error');
 
 package Apache::AxKit::Exception::Retval;
+use Error;
+use vars qw/@ISA/;
+@ISA = ('Error');
+
+package Apache::AxKit::Exception::IO;
 use Error;
 use vars qw/@ISA/;
 @ISA = ('Error');

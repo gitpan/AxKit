@@ -1,0 +1,308 @@
+<?xml version='1.0'?>
+<?xml-stylesheet 
+	href="cv.xps" 
+	type="application/x-xpathscript" 
+	title="default" 
+	alternate="no"?>
+<?xml-stylesheet 
+	href="cv-text.xps" 
+	type="application/x-xpathscript" 
+	title="text" 
+	alternate="yes"?>
+<!DOCTYPE resume SYSTEM "http://axkit.org/examples/resume.dtd">
+<resume>
+	<person>
+		<persname>
+			<title>Mr</title>
+			<forename>Matt</forename>
+			<middlename>David</middlename>
+			<surname>Sergeant</surname>
+		</persname>
+		<address>
+			<line>161 Waverley Crescent</line>
+			<line>Livingston</line>
+			<line>West Lothian</line>
+			<postcode>EH54 8JT</postcode>
+			<country>Scotland</country>
+		</address>
+		<phone type="Home">01506 419 813</phone>
+		<phone type="Mobile">07957 593 007</phone>
+    <phone type="Mobile(2)">07718 933 770</phone>
+		<phone type="Fax">01506 419 813</phone>
+		<email>matt@sergeant.org</email>
+    <sms>matt-sms@sergeant.org</sms>
+		<web_site>http://sergeant.org</web_site>
+		<dob>1974/04/01</dob>
+	</person>
+
+	<skills>
+		<area name="Languages">
+			<item time="3 years">Perl 5</item>
+			<item time="2 years">XML</item>
+			<item time="6 months">Java (JDK 1.2, Visual J++)</item>
+			<item>JavaScript</item>
+			<item time="3 years">ASP</item>
+			<item time="3 years">HTML</item>
+			<item time="3 years">(Visual) C++ (all versions)</item>
+		</area>
+		<area name="Protocols">
+			<item>HTTP</item>
+			<item>CGI</item>
+			<item>DCOM</item>
+			<item>SMTP</item>
+			<item>TCP/IP</item>
+			<item>NNTP</item>
+		</area>
+		<area name="Software">
+			<item>Linux (all versions)</item>
+			<item>Apache (1.3)</item>
+			<item>mod_perl</item>
+			<item>CVS, RCS, VSS and PVCS</item>
+			<item>NT (all versions)</item>
+			<item>IIS (3 &amp; 4)</item>
+		</area>
+		<area name="Databases">
+			<item time="2 years">Oracle</item>
+			<item time="3 years">Sybase</item>
+			<item time="2 years">MS SQL Server</item>
+			<item time="1 year">MySQL</item>
+			<item time="1 year">PostgreSQL</item>
+			<item time="3 years">Access</item>
+		</area>
+	</skills>
+
+	<education>
+		<establishment>
+			<name>University of Durham, St Cuthbert's Society</name>
+			<address>
+				<line>12 South Bailey</line>
+				<line>Durham</line>
+				<postcode>DH1 3EE</postcode>
+				<country>England</country>
+			</address>
+			<datefrom>1992/09</datefrom>
+			<dateto>1996/06</dateto>
+			<qualification>
+				<name>BSc Computer Science</name>
+				<grade>2nd Class, Level 2</grade>
+			</qualification>
+		</establishment>
+		<establishment>
+			<name>Huntington Comprehensive School</name>
+			<address>
+				<line>Huntington</line>
+				<line>York</line>
+				<postcode></postcode>
+				<country>England</country>
+			</address>
+			<datefrom></datefrom>
+			<dateto></dateto>
+			<qualification>
+				<name>A Level Maths</name>
+				<grade>A</grade>
+			</qualification>
+			<qualification>
+				<name>A Level Physics</name>
+				<grade>A</grade>
+			</qualification>
+			<qualification>
+				<name>A Level Economics</name>
+				<grade>D</grade>
+			</qualification>
+		</establishment>
+	</education>
+
+	<experience>
+		<employee>
+			<name>O'Reilly and Associates</name>
+			<address>
+				<line>90 Sherman Street</line>
+				<line>Cambridge</line>
+				<line>MA</line>
+				<postcode>02140</postcode>
+				<country>United States of America</country>
+			</address>
+			<datefrom>2000/03</datefrom>
+			<dateto>Present</dateto>
+			<role>Lead Developer</role>
+			<details>
+				Lead developer on an NDA'd project that hopefully will
+				change the world ;-). This project involves nothing but
+				pure Perl, and mod_perl, developing to the highest
+				standards of object oriented, performance aware code.
+				Every aspect of Perl programming is being used: Database
+				access, installation, Object Orientation, Module design,
+				and lots of internet API's.
+			</details>
+		</employee>
+		<employee>
+			<name>Deutsche Bank - Wood MacKenzie</name>
+			<address>
+				<line>74-77 Queen Street</line>
+				<line>Edinburgh</line>
+				<country>Scotland</country>
+			</address>
+			<datefrom>1999/10</datefrom>
+			<dateto>2000/03</dateto>
+			<role>Perl Consultant</role>
+			<details>
+				This role involved consulting on the development of a
+				product using the MediaSurface application server
+				product. Involving all aspects of development and
+				project management. In particular working towards
+				extending MediaSurface to have better templating
+				facilities and XML support.
+			</details>
+		</employee>
+		<employee>
+			<name>British Broadcasting Corporation</name>
+			<address>
+				<line>Bush House</line>
+				<line>Aldwich</line>
+				<line>London</line>
+				<country>England</country>
+			</address>
+			<datefrom>1999/07/01</datefrom>
+			<dateto>1999/08/31</dateto>
+			<role>Web Developer and Web Consultant</role>
+			<details>
+				Investigating several new technologies for the BBC's high profile web site
+				(the most used content based web site in the UK) and developing modules for
+				use on the site. One module is now used on every page on the BBC web site.
+				Investigations into new technology covered search engines, personalisation
+				technology, database backends and mod_perl. All work was conducted using Perl.
+			</details>
+		</employee>
+		<employee>
+			<name>Ericsson Mobile Communications (UK) Limited</name>
+			<address>
+				<line>The Keytech Centre</line>
+				<line>Ashwood Way</line>
+				<line>Basingstoke</line>
+				<line>Hants</line>
+				<postcode>RG23 8BG</postcode>
+				<country>England</country>
+			</address>
+			<datefrom>1998/04/06</datefrom>
+			<dateto>1999/06/30</dateto>
+			<role>Contract Developer</role>
+			<details>
+				Developing an MMI for a "black box" device. Using Java over a tiny web server. Working
+				initially with Visual J++, then with Sun JDK. Following on, working in Development IT
+				doing internet/intranet development. Leading the development teams to create interactive
+				business functionality. Key developments include large amounts of XML work, designing
+				XML search tools (based on XQL and XML-QL), XML re-formatting tools (as a pre-cursor
+				to XSL - see my web site), online XML editing protocols, and indexing techniques. The
+				culmination of this work has been a global XML-based timesheet application, to be
+				deployed all over the world to Ericsson employees. Some of this work has been made
+				available to members of the Perl community via the Perl-XML mailing list and CPAN.
+			</details>
+		</employee>
+		<employee>
+			<name>O'Reilly and Associates</name>
+			<address>
+				<line>90 Sherman Street</line>
+				<line>Cambridge</line>
+				<line>MA</line>
+				<postcode>02140</postcode>
+				<country>United States of America</country>
+			</address>
+			<datefrom>1998/12</datefrom>
+			<dateto>Present</dateto>
+			<role>Author</role>
+			<details>
+				Co-Authoring a new O'Reilly book called "XML applications with Perl". This will
+				detail ways to use
+				perl to process and generate XML. It will included details on XML::Parser, and the
+				many modules that use it. Details of my CGI to XML gateway, are also included and
+				some of my other XML modules. This work is in my "spare" time!
+        [Addendum: This book has now been cancelled due to lack of time
+        for all three authors. This item remains here for reference]
+			</details>
+		</employee>
+		<employee>
+			<name>O'Reilly and Associates</name>
+			<address>
+				<line>90 Sherman Street</line>
+				<line>Cambridge</line>
+				<line>MA</line>
+				<postcode>02140</postcode>
+				<country>United States of America</country>
+			</address>
+			<datefrom>1999/03</datefrom>
+			<dateto>1999/04</dateto>
+			<role>System Architect / Developer</role>
+			<details>
+				Developing the NNTP module for O'Reilly's WebBoard suite of software (see
+				http://webboard.oreilly.com). This involved designing a new system from the
+				ground up to do NNTP to a backend database, implementing authentication and
+				ensuring performance was scalable. WebBoard 4.0 was released in June 1999.
+			</details>
+		</employee>
+		<employee>
+			<name>Integrated Sales Systems Limited</name>
+			<address>
+				<line>Regal House</line>
+				<line>70 London Road</line>
+				<line>Twickenham</line>
+				<postcode>TW1 3QS</postcode>
+				<country>England</country>
+			</address>
+			<datefrom>1996/06/05</datefrom>
+			<dateto>1998/04/01</dateto>
+			<role>Software Engineer, Senior Software Engineer, Team Leader, Project Leader</role>
+			<details>
+				Employeed again as a graduate I rapidly rose through the company, taking on
+				projects such as a major upgrade for Searle Pharmaceuticals (mostly development work),
+				Designing and implementing Comms security over RAS (working with the Win32 RAS and TCP/IP
+				functions in C++), Internationalisation in the Oxygen
+				application, performance improvements and internal tools. While working in
+				Client Development I worked both on and off site for major corporations including
+				Monsanto Searle Pharmaceuticals, Schering Plough, Lombard Business Finance, Astra
+				Pharmaceuticals and Royal &amp; Sun Alliance. A major project
+				while at ISS was developing their intranet. This rapidly grew from a project
+				running on my own workstation, into a dedicated web server, serving up thousands
+				of documents, and running some of the core infrastructure at the company. The server
+				was a test bed for many new web tools - beta testing ASP (when it was called Denali),
+				working with HiP Communications to bring Perl to Win32, and testing out the new IIS 4.
+			</details>
+		</employee>
+		<employee>
+			<name>Integrated Sales Systems Limited</name>
+			<address>
+				<line>Regal House</line>
+				<line>70 London Road</line>
+				<line>Twickenham</line>
+				<postcode>TW1 3QS</postcode>
+				<country>England</country>
+			</address>
+			<datefrom>1995/06/01</datefrom>
+			<dateto>1995/09/01</dateto>
+			<role>Junior Software Engineer</role>
+			<details>
+				Working over the summer at this lively new software house. I worked in small
+				teams helping to realise their first Windows version of their aging DOS
+				application. I worked in Visual C++ and T-SQL. I also designed a database consolidation
+				routine called "Behemoth".
+			</details>
+		</employee>
+	</experience>
+
+	<training>
+		<course>
+			<name>Oracle Performance Tuning</name>
+			<date></date>
+			<trainee>Oracle Training</trainee>
+		</course>
+		<course>
+			<name>Oracle Advanced SQL</name>
+			<date></date>
+			<trainee>Oracle Training</trainee>
+		</course>
+		<course>
+			<name>Object Oriented Design</name>
+			<date></date>
+			<trainee>QA Training</trainee>
+		</course>
+	</training>
+</resume>

@@ -14,7 +14,7 @@ print "ok 1\n";
 
 $encoding;
 
-if ($encoding = Apache::MimeXML::check_for_xml("testnone.xml")) {
+if ($encoding = Apache::MimeXML::check_for_xml_file("testnone.xml")) {
 	print "ok 2\n";
 	if ($encoding ne 'utf-8') {
 		print "not ";
@@ -25,7 +25,7 @@ else {
 	print "not ok 2\nnot ok 3\n";
 }
 
-if ($encoding = Apache::MimeXML::check_for_xml("testebcdic.xml")) {
+if ($encoding = Apache::MimeXML::check_for_xml_file("testebcdic.xml")) {
 	print "ok 4\n";
 	if ($encoding ne 'ebcdic-cp-fi') {
 		print "not ";
@@ -34,7 +34,7 @@ if ($encoding = Apache::MimeXML::check_for_xml("testebcdic.xml")) {
 }
 else { print "not ok 4\nnot ok 5\n"; }
 
-if ($encoding = Apache::MimeXML::check_for_xml("testutf16be.xml")) {
+if ($encoding = Apache::MimeXML::check_for_xml_file("testutf16be.xml")) {
 	print "ok 6\n";
 	if ($encoding ne 'utf-16-be') {
 		print "not ";
@@ -43,7 +43,7 @@ if ($encoding = Apache::MimeXML::check_for_xml("testutf16be.xml")) {
 }
 else { print "not ok 6\nnot ok 7\n"; }
 
-if ($encoding = Apache::MimeXML::check_for_xml("testutf16le.xml")) {
+if ($encoding = Apache::MimeXML::check_for_xml_file("testutf16le.xml")) {
 	print "ok 8\n";
 	if ($encoding ne 'utf-16-le') {
 		print "not ";
@@ -52,7 +52,7 @@ if ($encoding = Apache::MimeXML::check_for_xml("testutf16le.xml")) {
 }
 else { print "not ok 8\nnot ok 9\n"; }
 
-if ($encoding = Apache::MimeXML::check_for_xml("testiso.xml")) {
+if ($encoding = Apache::MimeXML::check_for_xml_file("testiso.xml")) {
 	print "ok 10\n";
 	if ($encoding ne 'ISO-8859-1') {
 		print "not ";
@@ -61,12 +61,12 @@ if ($encoding = Apache::MimeXML::check_for_xml("testiso.xml")) {
 }
 else { print "not ok 10\nnot ok 11\n"; }
 
-if (Apache::MimeXML::check_for_xml("Makefile.PL")) {
+if (Apache::MimeXML::check_for_xml_file("Makefile.PL")) {
 	print "not ";
 }
 print "ok 12\n";
 	
-if ($encoding = Apache::MimeXML::check_for_xml("testzhbig50.xml")) {
+if ($encoding = Apache::MimeXML::check_for_xml_file("testzhbig50.xml")) {
 	print "ok 13\n";
 	if ($encoding ne 'BIG5') {
 		print "not ";
@@ -75,7 +75,7 @@ if ($encoding = Apache::MimeXML::check_for_xml("testzhbig50.xml")) {
 }
 else { print "not ok 13\nnot ok 14\n"; }
 	
-if ($encoding = Apache::MimeXML::check_for_xml("testzhbig512.xml")) {
+if ($encoding = Apache::MimeXML::check_for_xml_file("testzhbig512.xml")) {
 	print "ok 15\n";
 	if ($encoding ne 'Big5') {
 		print "not ";

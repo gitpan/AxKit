@@ -6,6 +6,8 @@ type="application/x-xpathscript" title="print" alternate="yes"?>
 <!DOCTYPE article [
 <!ENTITY prompt "&#x25; ">
 <!ENTITY XPath "<ulink url='http://www.w3.org/TR/xpath'>XPath</ulink>">
+<!ATTLIST sect1 	id      ID  #IMPLIED>
+<!ATTLIST sect2 	id      ID  #IMPLIED>
 ]>
 <article>
 
@@ -22,7 +24,7 @@ type="application/x-xpathscript" title="print" alternate="yes"?>
 	
 	<copyright>
 		<year>2000</year>
-		<holder role="mailto:matt@sergeant.org">Fastnet Software Ltd</holder>
+		<holder role="mailto:matt@sergeant.org">AxKit.com Ltd</holder>
 	</copyright>
 
 	<abstract>
@@ -194,11 +196,11 @@ might get a table of contents from docbook article sections:
 ...
 <%
 for my $sect1 (findnodes("/article/sect1")) {
-	print findvalue("title/text()", $sect1), "<br>\n";
-	for my $sect2 (findnodes("sect2", $sect1)) {
-		print " + ", findvalue("title/text(), $sect2), "<br>\n";
-		for my $sect3 (findnodes("sect3", $sect2)) {
-			print " + + ", findvalue("title/text(), $sect3), "<br>\n";
+	print $sect1->findvalue("title/text()"), "<br>\n";
+	for my $sect2 ($sect1->findnodes("sect2")) {
+		print " + ", $sect2->findvalue("title/text()"), "<br>\n";
+		for my $sect3 ($sect2->findnodes("sect3")) {
+			print " + + ", $sect3->findvalue("title/text()"), "<br>\n";
 		}
 	}
 }
@@ -218,14 +220,10 @@ url="http://www.w3.org/TR/xpath">the XPath specification</ulink> to
 learn more.
 </para>
 <para>
-Note in the above how we specify the current
-<literal>$sect<emphasis>X</emphasis></literal> variable in the calls to
-the API. This is the context for the &XPath; expression, and is vital so
-that we get the right values for the expression. The context in
-XPathScript is never set automatically. This is something that XSLT
-authors might miss, or expect to be done automatically for you. This
-does give some added flexibility, in that you can always specify your
-own context and pass context nodes around in your script.
+Note that in the above we don't use the global function findnodes()
+after finding the sect1 nodes, instead we call the node method
+findnodes(), which does exactly the same thing, but makes the node you
+are calling from the context of the XPath expression.
 </para>
 </sect2>
 

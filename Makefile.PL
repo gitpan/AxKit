@@ -1,4 +1,4 @@
-# $Id: Makefile.PL,v 1.17 2000/09/14 20:43:09 matt Exp $
+# $Id: Makefile.PL,v 1.18 2000/09/19 11:39:24 matt Exp $
 
 package AxKit;
 # file Makefile.PL
@@ -118,9 +118,15 @@ my @directives = (
                   args_how => 'TAKE2',
                   req_override => 'OR_ALL',
                 },
+                { name => 'AxAddXSPTaglib',
+                  errmsg => 'module that provides a taglib functionality',
+                  args_how => 'TAKE1',
+                  req_override => 'OR_ALL',
+                },
             );
 
-unless ($config{NO_DIRECTIVES} == 1) {
+# delete returns the value, which would be 1 if enabled.
+unless (delete $config{NO_DIRECTIVES}) { 
     command_table(\@directives);
     require mod_perl;
     if ($mod_perl::VERSION < 1.25) {

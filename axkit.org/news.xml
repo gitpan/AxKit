@@ -1,73 +1,85 @@
 <?xml version="1.0"?>
+ 	
+ 	<!DOCTYPE rss PUBLIC "-//Netscape Communications//DTD RSS 0.91//EN" "http://my.netscape.com/publish/formats/rss-0.91.dtd">
+ 	<rss version="0.91">
+ 	
+ 	  <channel>
+ 	    <title>XML.com</title>
+ 	    <description>XML.com features a rich mix of information and services for the XML community.</description>
+ 	    <language>en-us</language>
+ 	    <link>http://xml.com/pub</link>
+ 	    <copyright>Copyright 2000, O'Reilly and Associates</copyright>
+ 	    <managingEditor>edd@xml.com (Edd Dumbill)</managingEditor>
+ 	    <webMaster>peter@xml.com (Peter Wiggin)</webMaster>
+ 	
+ 	  <image>
+ 	    <title>XML.com</title>
+ 	    <url>http://xml.com/universal/images/xml_tiny.gif</url>
+ 	    <link>http://xml.com/pub</link>
+ 	    <width>88</width>
+ 	    <height>31</height>
+ 	  </image>
+ 	
+   <item>
+     <title>The Beginning of the Endgame</title>
+     <link>http://xml.com/pub/2000/09/27/schemas1.html?wwwrrr_rss</link>
+     <description>The W3C's XML Schemas technology, vital to the use of XML in e-business,  is finally nearing completion. This article catalogs the most  significant changes from the recent draft specs,and highlights areas  where priority feedback is required from implementors and users.  </description>
+   </item>
+ 
+   <item>
+     <title>From DTDs to Documents</title>
+     <link>http://xml.com/pub/2000/09/27/qanda.html?wwwrrr_rss</link>
+     <description>This month our question and answer column covers  guidelines for good DTD design and the thorny  problem of generating Microsoft Word or Adobe Acrobat  documents from XML.</description>
+   </item>
+ 
+   <item>
+     <title>Schemas in the Wild</title>
+     <link>http://xml.com/pub/2000/09/27/deviant.html?wwwrrr_rss</link>
+     <description>As adoption of W3C XML Schema technology increases, the need  for documenting best practices is becoming more important, not least  where namespaces are concerned. The XML-Deviant investigates.</description>
+   </item>
+ 
+ <item>
+ 	<title>COSCA/NACM JTC XML Court Filing Project.</title>
+ 	<link>http://xml.com/pub/coverpage/newspage.html#ni2000-10-02-c</link>
+ 	<description>       The Electronic Filing Standards sub-committee of the COSCA/NACM Joint Technology XML Standards Committee is working with LegalXML.org to develop an XML standard for electronic court filing via the Internet. Within the framework of LegalXML.org, "the Court Filing Workgroup focuses on document and information exchange formats for electronic court filing applications. The chair of the Court Filing Workgroup is John Greacen (email: aocjmg@nmcourts.com). In July 2000, a second revised vers...
+ </description>
+ </item>
+ <item>
+ 	<title>Creating Barcodes Using XSL.</title>
+ 	<link>http://xml.com/pub/coverpage/newspage.html#ni2000-10-02-a</link>
+ 	<description>       In the category of creative applications: the 'XSL Barcode Generator' from RenderX.  Nikolai Grigoriev recently announced the XSL-based barcode generator on the Mulberry XSL-List: "As a byproduct of our main activity, we have developed an XSL stylesheet that draws barcodes from digit sequences.  We hope a thing like this may be useful for people wishing to add barcode labelling to their XSL-based publishing solutions.  Barcodes implemented are the most popular ones that you can see on...
+ </description>
+ </item>
+ <item>
+ 	<title>QARE: An Open Source XML/Java Portal.</title>
+ 	<link>http://xml.com/pub/coverpage/newspage.html#ni2000-10-02-b</link>
+ 	<description>       Bill la Forge posted an announcement for the alpha release of QARE -- 'Quick Agent Runtime Environment'.  "QARE (pronounced 'care') is an XML/Java Portal, providing an easy-to-use platform for processing XML over HTTP.  QARE, which runs as a simple Java Servlet, is now complete, except for plugins (jar file extensions), though testing has been minimal.  The documentation is currently limited to the API.  QARE can handle any number of different markup languages. The type of markup lang...
+ </description>
+ </item>
+ <item>
+ 	<title>Microsoft's September 2000 MSXML Beta Release.</title>
+ 	<link>http://xml.com/pub/coverpage/newspage.html#ni2000-09-30-a</link>
+ 	<description>       Microsoft has published an article in the MSDN Web Workshop which outlines new features in the September 2000 MSXML Beta Release. "The September 2000 Microsoft XML Parser (MSXML) Beta Release is an update to the July 2000 MSXML Beta Release.  This latest release of MSXML [9/29/2000] represents a step beyond the July 2000 release, providing: (1) Server-safe HTTP access; (2) Complete implementation of XSLT/Xpath; (3) Changes to the SAX2 implementation, including new SAX2 helper classes;...
+ </description>
+ </item>
+ <item>
+ 	<title>Web Services Description Language (WSDL).</title>
+ 	<link>http://xml.com/pub/coverpage/newspage.html#ni2000-09-29-c</link>
+ 	<description>       Ariba, IBM, and Microsoft have jointly issued a specification for a 'Web Services Description Language (WSDL)' which defines an XML grammar "for describing network services as collections of communication endpoints capable of exchanging messages." Authors include Erik Christensen (Microsoft), Francisco Curbera (IBM), Greg Meredith (Microsoft), and Sanjiva Weerawarana (IBM). This published WSDL specification "represents the current thinking with regard to descriptions of services withi...
+ </description>
+ </item>
+ <item>
+ 	<title>Harvesting RDF Statements from XLinks.</title>
+ 	<link>http://xml.com/pub/coverpage/newspage.html#ni2000-09-29-b</link>
+ 	<description>      A new W3C Note on XLink and RDF bears the title Harvesting RDF Statements from XLinks. Reference: W3C Note 29-September-2000, edited by Ron Daniel Jr. (Metacode Technologies Inc.). This Note is not a formal product of the W3C XML Linking Working Group, but "is made available by the W3C XML Linking Working Group for the consideration of the XLink and RDF communities in the hopes that it may prove useful." Abstract: "Both XLink and RDF provide a way of asserting relations between resourc...
+ </description>
+ </item>
+ <item>
+ 	<title>New Release of Redland - An RDF Application Framework.</title>
+ 	<link>http://xml.com/pub/coverpage/newspage.html#ni2000-09-29-a</link>
+ 	<description>       Dave Beckett (Institute for Learning and Research Technology,  University of Bristol) announced the release of Redland version 0.9.4 with a new Perl interface and added support for Linux RPM binaries. Redland (An RDF Application Framework) "is a library that provides a high-level interface for RDF allowing the model to be stored, queried and manipulated. Redland implements each of the RDF model concepts in its own class so provides an object based API for them. Some of the classes pro...
+ </description>
+ </item>
+   </channel>
+ </rss>
 
-<!DOCTYPE rss PUBLIC "-//Netscape Communications//DTD RSS 0.91//EN" "http://my.netscape.com/publish/formats/rss-0.91.dtd">
-
-<rss version="0.91">
-
-  <channel>
-    <title>XML.com</title>
-    <description>XML.com features a rich mix of information and services for the XML community.</description>
-    <language>en-us</language>
-    <link>http://xml.com/pub</link>
-    <copyright>Copyright 1999, O'Reilly and Associates and Seybold Publications</copyright>
-    <managingEditor>dale@xml.com (Dale Dougherty)</managingEditor>
-    <webMaster>peter@xml.com (Peter Wiggin)</webMaster>
-
-  <image>
-    <title>XML.com</title>
-    <url>http://xml.com/universal/images/xml_tiny.gif</url>
-    <link>http://xml.com/pub</link>
-    <width>88</width>
-    <height>31</height>
-  </image>
-
-  <item>
-    <title>XML and Visual Basic</title>
-    <link>http://xml.com/pub/2000/07/12/vbasic/vb_and_xml.html?wwwrrr_rss</link>
-    <description>What happens when one of the most popular programming  languages in the world meets XML? This article  explains how to use XML with Visual Basic, and the effect  XML is having on VB application design.  </description>
-  </item>
-
-  <item>
-    <title>Exposing Application Services With SOAP</title>
-    <link>http://xml.com/pub/2000/07/12/soap/mssoaptutorial.html?wwwrrr_rss</link>
-    <description>In this tutorial for advanced users of Visual Basic, James Snell shares  his experience of the Microsoft SOAP toolkit and demonstrates how to  construct web services.</description>
-  </item>
-
-  <item>
-    <title>Visual Basic and the XML DOM: An Annotated Example</title>
-    <link>http://xml.com/pub/2000/07/12/vbasic/example.html?wwwrrr_rss</link>
-    <description>Our annotated example gives an easy introduction to using Visual  Basic and XML together. This article is an extract from the book "XML Programming with VB  and ASP."</description>
-  </item>
-
-  <item>
-    <title>Schemas Revisited</title>
-    <link>http://xml.com/pub/2000/07/12/deviant.html?wwwrrr_rss</link>
-    <description>The XML-DEV mailing list has seen a renewed vigor in discussion  recently, with the spotlight being turned on the troubled issue of XML  Schemas.</description>
-  </item>
-
-<item>
-	<title>W3C Speech Recognition Grammar Specification.</title>
-	<link>http://xml.com/pub/coverpage/newspage.html#ni2000-07-11-a</link>
-	<description>      The first public working draft version of a 'Speech Recognition Grammar Specification' has been issued by the W3C Voice Browser Working Group as part of the W3C Voice Browser Activity, viz.:  Speech Recognition Grammar Specification for the W3C Speech Interface Framework.  Reference: W3C Working Draft 10-July-2000, edited by Andrew Hunt (SpeechWorks International) and Scott McGlashan (PipeBeach). Abstract: "This document defines syntax for representating grammars for use in speech reco...
-</description>
-</item>
-<item>
-	<title>Revised W3C Working Draft for Scalable Vector Graphics (SVG).</title>
-	<link>http://xml.com/pub/coverpage/newspage.html#ni2000-07-10-a</link>
-	<description>      The SVG Working Group has released a revised working draft for the Scalable Vector Graphics (SVG) 1.0 Specification as part of the W3C Graphics Activity, Reference: W3C Working Draft 29-June-2000, edited by Jon Ferraiolo (Adobe). Abstract: "This specification defines the features and syntax for Scalable Vector Graphics (SVG), a language for describing two-dimensional vector and mixed vector/raster graphics in XML. [...] SVG allows for three types of graphic objects: vector graphic shap...
-</description>
-</item>
-<item>
-	<title>Smalltalk Interchange Format in XML (SMIX).</title>
-	<link>http://xml.com/pub/coverpage/newspage.html#ni2000-07-05-b</link>
-	<description>      Masashi Umezawa is developing 'Smalltalk Interchange Format in XML (SMIX)' as "a new Smalltalk Interchange Format.  It is basically based on the ANSI Smalltalk Interchange Format (version 1.0)."  The web site provides a SMIX XML DTD, a sample  XML document, and  an alpha version of a  simple SMIX generator. The author's Dandelion tool will generate SMIX format.  Dandelion is "a generic Smalltalk code analysis/output framework; you can analyze your code and output the  information in va...
-</description>
-</item>
-<item>
-	<title>W3C XSL Working Group is Rechartered.</title>
-	<link>http://xml.com/pub/coverpage/newspage.html#ni2000-07-05-a</link>
-	<description>      The W3C XSL Working Group, as part of the W3C User Interface Domain and participant in the Style Sheets Activity, has recently published a new charter.  The document supplies detailed [public] information on the working group's Primary deliverables, Duration and Milestones, Relationship to other W3C activities, Liaison with groups outside the W3C, etc.  Excerpt: "The XSL Working Group is chartered to continue the developement of XSL (extensible stylesheet language), a style sheet and t...
-</description>
-</item>
-  </channel>
-</rss>

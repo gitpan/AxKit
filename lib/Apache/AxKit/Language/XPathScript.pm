@@ -1,4 +1,4 @@
-# $Id: XPathScript.pm,v 1.29 2000/09/14 20:39:05 matt Exp $
+# $Id: XPathScript.pm,v 1.33 2000/10/01 22:08:16 matt Exp $
 
 package Apache::AxKit::Language::XPathScript;
 
@@ -15,7 +15,7 @@ use XML::Parser;
 use Apache::AxKit::Provider;
 use Apache::AxKit::Language;
 use Apache::AxKit::Cache;
-use Apache::AxKit::Exception;
+use Apache::AxKit::Exception ':try';
 use Storable;
 use Unicode::Map8 ();
 use Unicode::String ();
@@ -69,31 +69,31 @@ sub handler {
         my $key = $xml_provider->key();
         if (!$reparse) {
             AxKit::Debug(7, "XPathScript: thawing stor cache");
-            eval {
+            try {
                 $source_tree = Storable::thaw($cache->read());
-            };
-            if ($@) {
-                AxKit::Debug(7, "XPathScript: thaw failed: $@");
             }
-        } 
+            catch Error with {
+                my $err = shift;
+                AxKit::Debug(7, "XPathScript: thaw failed: $err");
+            };
+        }
         
         if (!$source_tree) {
             AxKit::Debug(7, "XPathScript: reparsing file");
-            my $fh = eval { $xml_provider->get_fh() };
-            if ($@) {
-                $source_tree = $parser->parse(${$xml_provider->get_strref()});
+            $source_tree = try {
+                $parser->parse($xml_provider->get_fh());
             }
-            else {
-                $source_tree = $parser->parse($fh);
-            }
-
+            catch Error with {
+                $parser->parse(${ $xml_provider->get_strref() });
+            };
+            
             AxKit::Debug(7, "XPathScript: freezing stor cache");
 
             $cache->write(Storable::freeze($source_tree));
         }
         
     }
-
+    
     $xpath->set_context($source_tree);
     
     my $mtime = $style_provider->mtime();
@@ -129,9 +129,9 @@ sub handler {
     local $^W;
     $cv->($r, $xpath, $t);
         
-        if (!$r->notes('xml_string')) { # no output? Try apply_templates
-            print Apache::AxKit::Language::XPathScript::Toys::apply_templates();
-        }
+    if (!$r->notes('xml_string')) { # no output? Try apply_templates
+        print Apache::AxKit::Language::XPathScript::Toys::apply_templates();
+    }
     
 #    warn "Run\n";
 
@@ -163,19 +163,14 @@ sub check_inc_mtime {
 sub extract {
     my ($provider) = @_;
     
-    my $contents;
-    
-#    warn "Extracting\n";
-    my $fh = eval { $provider->get_fh() };
-    if ($@) {
-#        warn "Get from strref\n";
-        $contents = ${$provider->get_strref()};
-    }
-    else {
-#        warn "get from fh\n";
+    my $contents = try { 
+        my $fh = $provider->get_fh();
         local $/;
-        $contents = <$fh>;
+        return <$fh>;
     }
+    catch Error with {
+        return ${ $provider->get_strref() };
+    };
     
     my $r = $provider->apache_request;
     if (my $charset = $r->dir_config('XPathScriptCharset')) {
@@ -292,13 +287,19 @@ sub setup_document_function {
         my ($node, @params) = @_;
         die "document: Function takes 1 parameter\n" unless @params == 1;
         my $results = XML::XPath::NodeSet->new();
-        my $newdoc = eval {
-            $parser->parse($ent_handler->(undef, undef, $params[0]));
-        };
-        if ($@) {
-            die "Parse of '$params[0]' failed: $@";
+        my $newdoc;
+        try {
+            $newdoc = $parser->parse($ent_handler->(undef, undef, $params[0]));
         }
-        $results->push($newdoc);
+        catch Apache::AxKit::Exception::IO with {
+            my $E = shift;
+            AxKit::Debug(2, $E);
+        }
+        catch Error with {
+            my $E = shift;
+            throw Apache::AxKit::Exception::Error(-text => "Parse of '$params[0]' failed: $E");
+        };
+        $results->push($newdoc) if $newdoc;
         return $results;
     };
 }
@@ -359,12 +360,14 @@ sub get_package_name {
     use vars '@ISA', '@EXPORT';
     use Exporter;
     @ISA = ('Exporter');
-    @EXPORT = ('findnodes', 
-                'findvalue',
-                'findvalues',
-                'findnodes_as_string',
-                'apply_templates',
-                'matches',
+    @EXPORT = qw(
+            findnodes 
+            findvalue
+            findvalues
+            findnodes_as_string
+            apply_templates
+            matches
+            set_namespace
             );
 
     sub findnodes {
@@ -386,6 +389,16 @@ sub get_package_name {
     
     sub matches {
         $Apache::AxKit::Language::XPathScript::xp->matches(@_);
+    }
+    
+    sub set_namespace {
+        try {
+            $Apache::AxKit::Language::XPathScript::xp->set_namespace(@_);
+        }
+        catch Error with {
+            my $E = shift;
+            warn "set_namespace failed: $E";
+        };
     }
     
     sub apply_templates (;$@) {
@@ -438,7 +451,7 @@ sub get_package_name {
         if (!$node->isElementNode) {
             # don't output top-level PI's
             if ($node->isPINode) {
-                if (eval {$node->getParentNode->getParentNode}) {
+                if (try {$node->getParentNode->getParentNode}) {
                     return $node->toString;
                 }
                 return '';

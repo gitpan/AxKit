@@ -1,0 +1,131 @@
+<html>
+<head>
+<%
+my $name = join(' ',
+			findvalue('/resume/person/persname/forename'), 
+			findvalue('/resume/person/persname/surname'));
+%>
+<title><%= $name %> - CV</title>
+<link rel="stylesheet" type="text/css" href="cv.css">
+</head>
+<body bgcolor="white">
+<h1 align="center"><%= $name %></h1>
+
+<center>
+<hr width="100%"></hr>
+<i>
+<%
+my ($addr) = findnodes('/resume/person/address');
+print join(' / ', findvalues('line', $addr), findvalue('postcode', $addr), findvalue('country', $addr) );
+%>
+<br><b>Tel:</b>
+<%
+foreach my $tel (findnodes('/resume/person/phone')) {
+	print " <i>", findvalue('@type', $tel), ":</i> ";
+	print findvalue('./text()', $tel);
+}
+%>
+<br>
+<b>e-mail:</b><a href="mailto:<%= findvalue('/resume/person/email') %>"><%= findvalue('/resume/person/email') %></a>
+/
+<b>gsm sms:</b><a href="mailto:<%= findvalue('/resume/person/sms') %>"><%= findvalue('/resume/person/sms') %></a>
+<p><b>DoB:</b> <%= findvalue('/resume/person/dob') %>
+</center>
+<br>
+<b><font size="+1">Education</font></b>
+<center><hr width="100%"></center>
+
+<!-- show most recent education only -->
+<%
+my ($edu) = findnodes('/resume/education/establishment[1]');
+%>
+<table>
+	<tr>
+		<td width="25"> </td>
+		<td width="400"><%= findvalue('name', $edu) %></td>
+		<td><i>Graduated:</i> <%= findvalue('dateto', $edu) %></td>
+	</tr>
+	<tr>
+		<td></td>
+		<td><%= findvalue('qualification/name', $edu) %></td>
+		<td></td>
+	</tr>
+</table>
+<br>
+<b><font size="+1">Key Skills</font></b>
+<hr width="100%">
+<table width="100%" cellpadding="1" cellspacing="0" border="1">
+<tr valign="top">
+<%
+my @areas = findnodes('/resume/skills/area');
+foreach my $area (@areas) {
+%>
+<td width="<%= 100 / @areas %>%">
+	<table width="100%" cellpadding="1" cellspacing="0" border="0">
+		<tr><th><%= findvalue('@name', $area) %></th></tr>
+		<%
+		foreach my $skill (findnodes('item', $area)) {
+		%>
+		<tr>
+			<td><%= findvalue('./text()', $skill) %></td>
+		</tr>
+		<%
+		}
+		%>
+	</table>
+</td>
+<%
+}
+%>
+</tr>
+</table>
+
+<br>
+<b><font size="+1">Current Work</font></b>
+<hr width="100%">
+<table>
+	<tr>
+		<td width="25"> </td>
+		<td width="400"><b><%= findvalue('/resume/experience/employee[1]/name') %></b></td>
+	</tr>
+</table>
+
+<br>
+<b><font size="+1">Work Experience</font></b>
+<hr width="100%">
+<table>
+
+<%
+foreach my $employee (findnodes('/resume/experience/employee[position() <= 7]')) {
+%>
+<tr>
+	<td width="25"> </td>
+	<td><b><%= findvalue('name', $employee) %></b></td>
+	<td><b><%= findvalue('datefrom', $employee) %> - <%= findvalue('dateto', $employee) %></b></td>
+</tr>
+<tr>
+	<td width="25"> </td>
+	<td colspan="2"><%= findvalue('details', $employee) %><br></td>
+</tr>
+<%	
+}
+%>
+</table>
+
+<b><font size="+1">Training</font></b>
+<hr width="100%">
+<table>
+<%
+foreach my $course (findnodes('/resume/training/course')) {
+%>
+	<tr>
+		<td width="25"> </td>
+		<td><%= findvalue('name', $course) %> <i>(<%= findvalue('trainee', $course) %>)</i></td>
+	</tr>
+<%
+}
+%>
+</table>
+
+</body>
+</html>

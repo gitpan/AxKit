@@ -1,0 +1,110 @@
+<?xml version="1.0" encoding="ISO-8859-1"?>
+<?xml-stylesheet type="application/x-xpathscript"
+		href="/stylesheets/webpage_html.xps"
+		title="default"?>
+<!DOCTYPE webpage [
+<!ENTITY sidebar SYSTEM "/sidebar.xml">
+<!ENTITY news SYSTEM "/news.xml">
+]>
+<webpage>
+	<head>
+		<title>AxKit - FAQ</title>
+	</head>
+	<body>
+		<section>
+			<title>Frequently Asked Questions about AxKit</title>
+      <subsection>
+        <title>Upon startup of Apache I get the error: 
+        "Can't locate loadable object for module Apache::Log in
+        @INC"</title>
+        <para>
+          AxKit uses Apache::Log for its logging in some places. This
+          gives us some extra flexibility. However it is not built into
+          mod_perl by default - you need to compile it in explicitly.
+          The simplest way to do this is to just compile all the extra
+          bits of mod_perl:
+          <pre>
+# in the modperl directory
+perl Makefile.PL EVERYTHING=1
+make
+make test install
+          </pre>
+          See also the various INSTALL documents that ship with
+          mod_perl, and also the <a
+          href="http://perl.apache.org/guide/">mod_perl guide</a>.
+        </para>
+      </subsection>
+			<subsection>
+				<title>I install AxKit and Apache segfaults when it
+				starts</title>
+				<para>
+					This can be a result of several problems. First, it might be
+					that AxKit has some problems with XML::Parser 2.28 and 2.29, although
+					these usually don't manifest themselves until a page is
+					requested.
+				</para>
+				<para>
+					The more usual cause is currently a conflict between differing
+					versions of expat that are being loaded at the same time. The
+					problem is too deep to go into in a simple FAQ (although I'll
+					try and find a link to an explanation in a future version of
+					this FAQ). Basically the current work around is to remove
+					expat from your Apache (it is built in by default, and is used
+					for mod_dav), and to be careful with PHP, which can also cause
+					these sorts of conflicts. As a developer I respect that
+					neither of these are particularly great long term work
+					arounds, and I'm trying to bring the community of developers
+					together to solve this problem permanently.
+				</para>
+				<para>
+					To compile Apache without expat, simply supply the option:
+					<pre>RULE_EXPAT=NO</pre>
+					to <code>configure</code> when you build Apache. Alternatively if you build
+					Apache with mod_perl (with mod_perl's DO_HTTPD option) it will
+					supply this option automatically for you.
+				</para>
+				<para>
+					If none of this helps, then you may be having platform
+					difficulties with the custom configuration directives that
+					AxKit creates. Hopefully all of these have been solved
+					already, but there may be some conflicts with PHP with these.
+					If you absolutely can't do without PHP then you'll need to
+					completely remove AxKit and all the binary components from
+					your perl lib directory (check using "perl -V" on the command
+					line) by hand (sorry, but there is no "make uninstall"
+					command). Then re-compile AxKit using the following:
+					<pre>perl Makefile.PL NO_DIRECTIVES=1
+make
+make test install</pre>
+					Then start Apache, and hopefully this will fix the problem. We
+					hope that a later version of mod_perl may not require this
+					hack. When AxKit is installed with the NO_DIRECTIVES option,
+					all configuration is done via PerlSetVar. Please contact the
+					AxKit-users mailing list if you need to use this option so
+					that we can provide more documentation where needed.
+				</para>
+			</subsection>
+			
+			<subsection>
+				<title>Which Processor?</title>
+				<para>
+				AxKit ships out of the box with two processors for using
+				XSLT, and several other stylesheet language modules. The choice
+				between XML::XSLT and XML::Sablotron should generally be based
+				on whether or not XML::Sablotron works on your platform, since
+				it is a more complete implementation of XSLT and is faster than
+				XML::XSLT (which is a pure perl implementation). Sablotron is
+				known to work on Linux and Solaris, and other platforms are
+				coming online all the time.
+				</para>
+			</subsection>
+
+			<subsection>
+				<title>Should I ever run with scissors?</title>
+				<para>
+				No. You should never, ever run with scissors.
+				</para>
+			</subsection>
+		</section>
+	</body>
+</webpage>

@@ -1,7 +1,9 @@
-# $Id: Provider.pm,v 1.10 2000/09/14 20:33:40 matt Exp $
+# $Id: Provider.pm,v 1.13 2000/09/24 15:10:55 matt Exp $
 
 package Apache::AxKit::Provider;
 use strict;
+
+use Apache::AxKit::Exception ':try';
 
 # use vars qw/$COUNT/;
 
@@ -54,6 +56,275 @@ sub get_ext_ent_handler {
         my $str = $provider->get_strref;
         return $$str;
     };
+}
+
+sub get_styles {
+    my $self = shift;
+    my ($media, $pref_style) = @_;
+    
+    if ($pref_style eq '#default') {
+        undef $pref_style;
+    }
+    
+    my $styles = [];
+    my $ext_ents = [];
+    my $vals = [];
+    
+    my $key = $self->key();
+    
+    # need to extract the following from the XML file:
+    #   DocType Public Identifier
+    #   DTD filename
+    #   Root element name (including namespace)
+    # use three element array @$vals
+    
+    AxKit::Debug(4, "get_styles: creating XML::Parser");
+    
+    my $xml_parser = XML::Parser->new(
+                ParseParamEnt => 1, 
+                ErrorContext => 2,
+                Namespaces => 1,
+                );
+    $xml_parser->setHandlers(
+                Start => \&parse_start,
+                Doctype => \&parse_dtd,
+                Proc => \&parse_pi,
+                Entity => \&parse_entity_decl,
+                );
+    
+    my $to_parse = try { 
+        $self->get_fh();
+    } catch Error with {
+        ${ $self->get_strref(); };
+    };
+    
+    try {
+        AxKit::Debug(4, "get_styles: calling XML::Parser->parse('$key')");
+        $xml_parser->parse(
+                $to_parse,
+                XMLStyle_preferred => $pref_style,
+                XMLStyle_style => $styles,
+                XMLStyle_ext_ents => $ext_ents,
+                XMLStyle_vals => $vals,
+                XMLStyle_style_screen => [],
+                XMLStyle_media => $media,
+                );
+    }
+    catch Error with {
+        my $E = shift;
+        AxKit::Debug(4, "get_styles: parse returned: >> $E <<");
+        if ("$E" !~ /^OK/) { # note that regex bindings don't stringify in 5.6.0 - fixed in 5.6.1
+            throw Apache::AxKit::Exception::Error(
+                    -text => "Parsing '$key' returned: $E\n"
+                    );
+        }
+    };
+        
+    AxKit::Debug(4, "get_styles: parse returned successfully");
+
+    my @styles;
+        
+    if (@$styles) {
+        @styles = @$styles;
+    }
+    else {
+        # now get all current styles that match all these properties
+        @styles = $AxKit::Cfg->GetMatchingProcessors($media, $pref_style, @$vals);
+    }
+    
+    if (!@styles) {
+        throw Apache::AxKit::Exception::Error(
+                -text => "No styles defined for '$key'"
+                );
+    }
+    
+    # get mime-type => module mapping
+    my $style_mapping = $AxKit::Cfg->StyleMap;
+
+    AxKit::Debug(3, "get_styles: loading style modules");    
+    for my $style (@styles) {
+        my $mapto;
+        AxKit::Debug(4, "get_styles: looking for mapping for style type: '$style->{type}'");
+        if (!( $mapto = $style_mapping->{ $style->{type} } )) {
+            throw Apache::AxKit::Exception::Declined(
+                    reason => "No implementation mapping available for type '$style->{type}'"
+                    );
+        }
+
+        $style->{module} = $mapto;
+
+        # first load module if it's not already loaded.
+        try {
+            AxKit::load_module($mapto);
+        }
+        catch Error with {
+            my $E = shift;
+            throw Apache::AxKit::Exception::Declined(
+                    reason => "Load of '$mapto' failed with: $E"
+                    );
+        };
+    }
+    
+    return \@styles, $ext_ents;
+}
+
+sub parse_start {
+    my ($e, $el) = @_;
+    my $ns = $e->namespace($el);
+    # use James Clark's universal name format
+    $e->{XMLStyle_vals}[2] = $ns ? "{$ns}$el" : $el;
+    
+#    warn "styles: ", scalar @{$e->{XMLStyle_style_screen_persistant}}, "\n";
+    
+    if (!@{$e->{XMLStyle_style}} && !$e->{XMLStyle_style_persistant}) {
+        if ($e->{XMLStyle_style_screen_persistant}) {
+            push @{$e->{XMLStyle_style}}, @{$e->{XMLStyle_style_screen_persistant}};
+        }
+        if (@{$e->{XMLStyle_style_screen}}) {
+    #        warn "Matching style for media ", $e->{XMLStyle_media}, " not found. Using screen media stylesheets instead\n";
+            push @{$e->{XMLStyle_style}}, @{$e->{XMLStyle_style_screen}};
+        }
+    }
+    elsif ($e->{XMLStyle_style_persistant}) {
+        unshift @{$e->{XMLStyle_style}}, @{$e->{XMLStyle_style_persistant}};
+    }
+    
+    die "OK\n";
+}
+
+sub parse_entity_decl {
+    my $e = shift;
+    my ($name, $val, $sysid, $pubid, $ndata) = @_;
+#    warn "external entity: '$sysid'\n";
+    if (!defined $val) {
+        # external entity - save so the cache gets done properly!
+        push @{$e->{XMLStyle_ext_ents}}, $sysid;
+    }
+}
+
+sub parse_dtd {
+    my ($e, $name, $sysid, $pubid) = @_;
+    
+    $e->{XMLStyle_vals}[0] = $pubid;
+    $e->{XMLStyle_vals}[1] = $sysid;
+}
+
+sub parse_pi {
+    my $e = shift;
+    my ($target, $data) = @_;
+    if ($target ne 'xml-stylesheet') {
+        return;
+    }
+    
+    my $style;
+    
+    $data = ' ' . $data;
+    
+    while ($data =~ /\G
+            \s+
+            (href|type|title|media|charset|alternate)
+            \s*
+            =
+            \s*
+            (["']) # match quotes "'
+            ([^\2<]*?)
+            \2     # balance quotes "'
+            /gcx) {
+        my ($attr, $val) = ($1, $3);
+        AxKit::Debug(10, "parse_pi: $attr = $val");
+        $style->{$attr} = $val;
+    }
+    
+    if (!exists($style->{href}) || !exists($style->{type})) {
+        # href and type are #REQUIRED
+        AxKit::Debug(3, "pi_get_styles: Invalid <?xml-stylesheet?> processing instruction\n");
+        return;
+    }
+    
+    my $mediamatch = 0;
+
+    $style->{media} ||= 'screen'; # default according to TR/REC-html40
+    $style->{alternate} ||= 'no'; # default according to TR/xml-stylesheet
+
+    # See http://www.w3.org/TR/REC-html40/types.html#type-media-descriptors
+    # for details of what we're doing here.
+    my @mediatypes = split(/,\s*/, $style->{media});
+    
+    # strip anything after first non-(A-Za-z0-9\-) character (see REC-html40)
+    @mediatypes = map { $_ =~ s/[^A-Za-z0-9\-].*$//; $_; } @mediatypes;
+
+#    warn "media types are ", join(',', @mediatypes), " [$style->{media}] [$e->{XMLStyle_media}]\n";
+
+    # remove unwanted entries
+    @mediatypes = grep /^(screen|tty|tv|projection|handheld|print|braille|aural|all)$/, @mediatypes;
+
+    if (grep { $_ eq $e->{XMLStyle_media} } @mediatypes) {
+        # found a match for the preferred media type!
+#        warn "Media matches!\n";
+        $mediamatch++;
+    }
+    
+    if (grep { $_ eq 'all' } @mediatypes) {
+        # always match on media type "all"
+#        warn "Media is \"all\"\n";
+        $mediamatch++;
+    }
+    
+    if ($e->{XMLStyle_preferred}) {
+        # warn "someone picked a \"title\" : $e->{XMLStyle_preferred}. Use persistant and alternate styles\n";
+        if (
+                ($style->{alternate} eq 'no') 
+                && (!exists $style->{title})
+            )
+        {
+            # warn "This is a persistant style - always make it first\n";
+            if ($mediamatch) {
+                push @{$e->{XMLStyle_style_persistant}}, $style;
+            }
+            elsif ($style->{media} eq 'screen') {
+                # store away in case we need the screen matches
+                push @{$e->{XMLStyle_style_screen_persistant}}, $style;
+            }
+        }
+        elsif (lc($style->{title}) eq lc($e->{XMLStyle_preferred})) 
+        {
+            # warn "matching style\n";
+            if ($mediamatch) {
+                push @{$e->{XMLStyle_style}}, $style;
+            }
+            elsif ($style->{media} eq 'screen') {
+                push @{$e->{XMLStyle_style_screen}}, $style;
+            }
+        }
+    }
+    else {
+        # warn "no \"title\" selected. Use persistent and preferred styles\n";
+        if (
+                ($style->{alternate} eq 'no')
+                && (!exists $style->{title})
+            ) 
+        {
+            if ($mediamatch) {
+                # This is the persistant style
+                push @{ $e->{XMLStyle_style_persistant} }, $style;
+            }
+            elsif ($style->{media} eq 'screen') {
+                push @{$e->{XMLStyle_style_screen_persistant}}, $style;
+            }
+        }
+        elsif (
+                ($style->{alternate} eq 'no')
+                && (exists $style->{title})
+                )
+        {
+            if ($mediamatch) {
+                push @{ $e->{XMLStyle_style} }, $style;
+            }
+            elsif ($style->{media} eq 'screen') {
+                push @{ $e->{XMLStyle_style_screen} }, $style;
+            }
+        }
+    }
 }
 
 1;

@@ -1,0 +1,118 @@
+<?xml version="1.0" encoding="ISO-8859-1"?>
+<?xml-stylesheet href="/stylesheets/docbook_screen.xps" type="application/x-xpathscript"
+title="default"?>
+<?xml-stylesheet href="/stylesheets/docbook_print.xps"
+type="application/x-xpathscript" title="print" alternate="yes"?>
+<!DOCTYPE article [
+<!ENTITY prompt "&#x25; ">
+]>
+<article>
+
+<artheader>
+	<title>The XSP SQL Taglib</title>
+	
+	<author>
+		<firstname>Matt</firstname>
+		<surname>Sergeant</surname>
+		<affiliation>
+			<address><email>matt@sergeant.org</email></address>
+		</affiliation>
+	</author>
+	
+	<copyright>
+		<year>2000</year>
+		<holder role="mailto:matt@sergeant.org">AxKit.com Ltd</holder>
+	</copyright>
+
+	<abstract>
+		<para>Here we detail the SQL taglib that ships with AxKit's XSP
+		language module. The SQL taglib is responsible for generating XML
+		from relational databases or other resources that make use of the
+		DBI library.</para>
+	</abstract>
+</artheader>
+
+<sect1>
+<title>Introduction</title>
+
+<para>
+While XML continues to make inroads into the relational database's
+market, taking over our views of how we store data, many of use still
+believe in the concept of the high performance relational store and its
+use in today's applications. And many of us still have to work with the
+relational databases that exist in our organisations.
+</para>
+
+<para>
+XSP ships with an SQL taglib that allows developers to generate XML
+directly from relational database queries. This allows you to continue
+to work with the relational model, and yet still work completely in XML,
+from the code to execute the query and return results, to the final
+output and styling.
+</para>
+
+<para>
+The SQL taglib provides almost all facilities that are required for
+working with databases via the DBI module. This allows you to work with
+almost all commercial and free databases, such as MySQL, PostgreSQL,
+Sybase, Oracle, DB2 and Informix.
+</para>
+
+</sect1>
+
+<sect1>
+<title>Starting to use the SQL taglib</title>
+
+<para>
+We'll start off using a simple example. To make use of the SQL taglib
+you need to already be using XSP, so we'll take a look at exactly how
+that works in the context of an XSP page:
+<informalexample>
+<programlisting><![CDATA[
+<?xml version="1.0"?>
+<?xml-stylesheet href="." type="application/x-xsp"?>
+<xsp:page
+	xmlns:xsp="http://www.apache.org/1999/XSP/Core"
+	xmlns:sql="http://www.apache.org/1999/SQL"
+	xmlns="me@my.com?subject='MyHomePage'"
+	language="Perl">
+	<page>
+	<body>
+		Some SQL results (run at <xsp:expr>scalar localtime</xsp:expr>):
+		<sql:execute-query>
+			<sql:driver>Sybase</sql:driver>
+			<sql:dburl>database=mydb</sql:dburl>
+			<sql:username>matt</sql:username>
+			<sql:password>millionaire</sql:password>
+			
+			<sql:query>SELECT MessageId, Subject FROM Messages</sql:query>
+			
+		</sql:execute-query>
+	</body>
+  </page>
+</xsp:page>
+]]></programlisting>
+</informalexample>
+</para>
+
+<para>
+The results of the above, assuming there are three rows in the
+<literal>Messages</literal> table, are:
+
+<informalexample>
+<programlisting><![CDATA[
+<page>
+	<body>
+		Some SQL results (run at Tue Jun 27 16:39:05 2000):
+<MessageId>2</MessageId><Subject>Hello Fred!</Subject>
+<MessageId>3</MessageId><Subject>Re: Hello Fred!</Subject>
+<MessageId>4</MessageId><Subject>Testing 1,2,3</Subject>
+	</body>
+</page>
+]]></programlisting>
+</informalexample>
+
+</para>
+
+</sect1>
+</article>

@@ -1,4 +1,4 @@
-# $Id: Cache.pm,v 1.13 2000/09/14 20:14:26 matt Exp $
+# $Id: Cache.pm,v 1.15 2000/10/02 17:35:34 matt Exp $
 
 package Apache::AxKit::Cache;
 use strict;
@@ -61,10 +61,11 @@ sub write {
         truncate($fh, 0);
         print $fh $_[0];
         close $fh;
-        rename($self->{file}.'new', $self->{file}) || die "Couldn't rename cachefile: $!";
+        rename($self->{file}.'new', $self->{file}) 
+                || throw Apache::AxKit::Exception::IO( -text => "Couldn't rename cachefile: $!");
     }
     else {
-        die "Couldn't open cachefile for writing: $!";
+        throw Apache::AxKit::Exception::IO( -text => "Couldn't open cachefile for writing: $!");
     }
     
     if ($AxKit::Cfg->GzipOutput) {
@@ -77,10 +78,10 @@ sub write {
             print $fh ''.Compress::Zlib::memGzip($_[0]);
             close $fh;
             rename($self->{file}.'new.gz', $self->{file}.'.gz')
-                    || die "Couldn't rename gzipped cachefile: $!";
+                    || throw Apache::AxKit::Exception::IO( -text => "Couldn't rename gzipped cachefile: $!");
         }
         else {
-            die "Couldn't open gzipped cachefile for writing: $!";
+            throw Apache::AxKit::Exception::IO( -text => "Couldn't open gzipped cachefile for writing: $!");
         }
     }
 }
@@ -107,7 +108,7 @@ sub get_fh {
         return $fh;
     }
     else {
-        die "Cannot open cache file for reading: $!";
+        throw Apache::AxKit::Exception::IO( -text => "Cannot open cache file for reading: $!");
     }
 }
 
@@ -129,7 +130,7 @@ sub deliver {
     
     if ($doit) {
         AxKit::Debug(4, "Cache: Transforming content and printing to browser");
-        $r->send_http_header();
+        $r->send_http_header() unless lc($r->dir_config('Filter')) eq 'on';
         $r->print( $transformer->( $self->read() ) );
         throw Apache::AxKit::Exception::OK();
     }

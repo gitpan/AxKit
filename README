@@ -1,32 +1,33 @@
-Introduction
+INTRODUCTION
 
-AxKit is a suite of tools for the Apache httpd server running mod_perl,
-that give developers extremely flexible options for delivering XML to
-all kinds of browsers, from handheld systems, Braille readers, and
-ordinary browsers. All this can be achieved using nothing but W3C
-standards, although the plugin architecture provides the hooks for
-developers to write their own stylesheet systems, should they so
-desire. Two non-W3C stylesheet systems are included as examples. 
+AxKit is an XML Application Server for Apache. It provides on-the-fly
+conversion from XML to any format, such as HTML, WAP or text using
+either W3C standard techniques, or flexible custom code. AxKit also
+uses a built-in Perl interpreter to provide some amazingly powerful
+techniques for XML transformation. 
 
-The toolkit provides full intelligent caching, which ensures that if
-any parameters in the display of the XML file change, the cache is
-overwritten. The toolkit also provides hooks for DOM based stylesheets
-to cascade. This allows (for example) the initial stylesheet to provide
-menu items and table of contents, while the final stylesheet formats
-the finished file to the desired look. It's also possible to provide
-multiple language support this way.
+The emphasis with AxKit is on separation of content from presentation.
+The pipelining technique that AxKit uses allows content to be converted
+to a presentable format in stages, allowing certain platforms to see
+data differently to others. AxKit allows web designers to focus on web
+site design, content developers to work on a purely content basis, and
+webmasters to focus on their core competencies. 
 
-Home Page
+AxKit is based on components that are replaceable. This allows the web
+site developer to create a completely custom XML Application Server
+based around the AxKit API. AxKit can either automatically provide
+caching facilities, or you can create your own cache handler, so that
+XML transformations (which can be time consuming) only happen when
+required. 
 
-The web site for AxKit is http://xml.sergeant.org/axkit/
+The toolkit also provides ability to build component based web sites,
+and dynamic content. Database integration is fully supported, allowing
+either deliver of XML from a database, or XML generation from a
+database query. Dynamic web components can be built using the Perl
+language, making the possibilities as infinite as CGI scripts, without
+the potential mess that CGI programming can cause. 
 
-Mailing List
+HOME PAGE
 
-For questions about AxKit, please join the mailing list, by sending a
-blank mail to: axkit-subscribe@sergeant.org. This is an ezmlm mailing
-list. 
-
-Archive
-
-The archive of the mailing list, containing some useful information 
-and tidbits, is at http://xml.sergeant.org/cgi-bin/ezmlm-cgi/2.
+The web site for AxKit is http://axkit.org/. There you will find lots
+more documentation and example code.
