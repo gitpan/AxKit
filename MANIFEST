@@ -16,6 +16,7 @@ lib/Apache/AxKit/StyleChooser/PathInfo.pm
 lib/Apache/AxKit/StyleChooser/FileSuffix.pm
 lib/Apache/AxKit/MediaChooser/WAPCheck.pm
 lib/Apache/AxKit/Plugins/Passthru.pm
+lib/Apache/AxKit/Plugins/Fragment.pm
 lib/Apache/AxKit/Language.pm
 lib/Apache/AxKit/Language/NotXSLT.pm
 lib/Apache/AxKit/Language/XPathScript.pm
@@ -23,6 +24,7 @@ lib/Apache/AxKit/Language/XSLT.pm
 lib/Apache/AxKit/Language/Sablot.pm
 lib/Apache/AxKit/Language/XMLNewsRDF.pm
 lib/Apache/AxKit/Language/XMLNewsNITF.pm
+lib/Apache/AxKit/Language/XSP.pm
 lib/Apache/AxKit/XMLFinder.pm
 lib/Apache/AxKit/StyleFinder.pm
 lib/Apache/AxKit/ConfigReader.pm
@@ -31,6 +33,10 @@ examples/.htaccess
 examples/index.xml
 examples/default.xps
 examples/default.notxslt
+examples/docbook_tags.xps
+examples/docbook_screen.xps
+examples/docbook_print.xps
+examples/docbook.dkb
 MANIFEST
 README
 Makefile.PL

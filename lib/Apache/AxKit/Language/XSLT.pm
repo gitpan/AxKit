@@ -1,4 +1,4 @@
-# $Id: XSLT.pm,v 1.6 2000/05/10 21:22:19 matt Exp $
+# $Id: XSLT.pm,v 1.10 2000/05/28 07:49:05 matt Exp $
 
 package Apache::AxKit::Language::XSLT;
 
@@ -15,30 +15,33 @@ sub handler {
 	my $class = shift;
 	my ($r, $xmlfile, $stylefile) = @_;
 
-	$r->content_type('text/html');
-	$r->content_encoding('utf-8');
+#	warn "Parsing stylefile '$stylefile'\n";
+	my $parser = XML::XSLT->new($stylefile, "FILE");
 
-	if ($r->pnotes('dom_tree')) {
-		$XSLT::Parser->open_project(
-			$r->pnotes('dom_tree'),
-			$stylefile,
-			"DOM", "FILE"
-		);
+	if (my $dom_tree = $r->pnotes('dom_tree')) {
+#		warn "Parsing dom_tree: ", $dom_tree->toString, "\n";
+		$parser->transform_document($dom_tree, "DOM");
 	}
 	elsif (my $xml = $r->notes('xml_string')) {
-		$XSLT::Parser->open_project($xmlfile, $stylefile, "STRING", "FILE");
+#		warn "Parsing string:\n$xml\n";
+		$parser->transform_document($xml, "STRING");
 	}
 	else {
-		$XSLT::Parser->open_project($xmlfile, $stylefile, "FILE", "FILE");
+#		warn "Parsing file '$xmlfile'\n";
+		$parser->transform_document($xmlfile, "FILE");
 	}
 
-	$XSLT::Parser->process_project();
-	
 	if (my $dom = $r->pnotes('dom_tree')) {
 		$dom->dispose;
+		delete $r->pnotes()->{'dom_tree'};
 	}
-
-	$r->pnotes('dom_tree', $XSLT::result);
+	
+	$r->pnotes('dom_tree', $parser->result_tree());
+	
+	# hack to not dispose our results tree
+	delete $parser->{result};
+	
+	$parser->dispose();
 
 	return OK;
 }

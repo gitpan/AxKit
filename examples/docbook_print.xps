@@ -1,0 +1,24 @@
+<!--#include file="docbook_tags.xps"-->
+<html>
+<head>
+	<title><%= findvalue('/article/artheader/title/text()') %></title>
+</head>
+<body bgcolor="white">
+
+<%
+# display title/TOC page
+print apply_templates('/article/artheader/*');
+%>
+
+<hr>
+
+<%
+# display particular page
+foreach my $section (findnodes("/article/sect1")) {
+	# should only be 1
+	print apply_templates($section);
+}
+%>
+
+</body>
+</html>

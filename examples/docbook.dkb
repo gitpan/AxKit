@@ -1,0 +1,68 @@
+<?xml version="1.0"?>
+<?xml-stylesheet href="/docbook_screen.xps" 
+				type="application/x-xpathscript" 
+				media="screen"
+				title="default" ?>
+<?xml-stylesheet href="/docbook_screen_fancy.xps" 
+				type="application/x-xpathscript" 
+				media="screen"
+				title="fancy"
+				alternate="yes" ?>
+<?xml-stylesheet href="/docbook_print.xps" 
+				type="application/x-xpathscript" 
+				media="screen"
+				title="print"
+				alternate="yes" ?>
+<?xml-stylesheet href="/docbook_handheld.xps" 
+				type="application/x-xpathscript" 
+				media="handheld"
+				title="default"?>
+<article>
+<artheader>
+	<title>A complete DocBook XPathScript Example</title>
+	
+	<author>
+		<firstname>Matt</firstname>
+		<surname>Sergeant</surname>
+		<affiliation>
+			<address><email>matt@sergeant.org</email></address>
+		</affiliation>
+	</author>
+	
+	<copyright>
+		<year>2000</year>
+		<holder role="mailto:matt@sergeant.org">Fastnet Software Ltd</holder>
+	</copyright>
+
+<!--	
+	<pubdate role="rcs">$Date$</pubdate>
+	
+	<releaseinfo>$Id$</releaseinfo>
+-->
+
+	<abstract>
+		<para>A complete example of a docbook stylesheet using the
+			Apache XML Delivery Toolkit</para>
+	</abstract>
+</artheader>
+
+<sect1>
+<title>Introduction</title>
+<para>
+This aims to be a complete example of rendering DocBook documents
+using the <ulink url="http://xml.sergeant.org/axkit/">AxKit</ulink> and
+XPathScript. It offers several different styles to render the document
+in: Normal, Fancy and Printer. And also offers an alternative media to
+render the document for: handheld. How you select the different styles
+and media will be detailed later in this document.
+</para>
+<para>
+First a disclaimer: I'm a complete "newbie" to docbook. I also haven't
+tried rendering this document with the standard docbook tools, so I may
+have some elements wrong. If I do, you have my appologies. Hopefully you
+might be encouraged enough by this to fix the problems I've introduced
+and do it right, as it were.
+</para>
+</sect1>
+
+</article>

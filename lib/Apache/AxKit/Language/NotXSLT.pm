@@ -1,6 +1,6 @@
 package Apache::AxKit::Language::NotXSLT;
 
-# $Id: NotXSLT.pm,v 1.5 2000/05/10 21:21:24 matt Exp $
+# $Id: NotXSLT.pm,v 1.6 2000/05/19 15:47:13 matt Exp $
 
 use strict;
 use vars qw(@ISA $VERSION $PREFIX $cache);
@@ -24,9 +24,6 @@ sub handler {
 
 #	warn "In NotXSLT with $xmlfile and $stylesheet\n";
 
-	$r->content_type("text/html");
-	$r->content_encoding("utf-8");
-	
 	my $source_finder = XML::XPath->new;
 	
 	my $parser = XML::XPath::XMLParser->new;
@@ -353,6 +350,10 @@ XML::XPath(1).
 =cut
 
 # $Log: NotXSLT.pm,v $
+# Revision 1.6  2000/05/19 15:47:13  matt
+# Brown bag release of XSP
+# Removed content_type/encoding from other modules
+#
 # Revision 1.5  2000/05/10 21:21:24  matt
 # Support for cascading via xml_string
 #

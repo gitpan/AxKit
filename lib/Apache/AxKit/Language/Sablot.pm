@@ -1,4 +1,4 @@
-# $Id: Sablot.pm,v 1.3 2000/05/10 21:21:46 matt Exp $
+# $Id: Sablot.pm,v 1.6 2000/05/28 07:49:05 matt Exp $
 
 package Apache::AxKit::Language::Sablot;
 
@@ -15,10 +15,7 @@ sub handler {
 	my $class = shift;
 	my ($r, $xmlfile, $stylefile) = @_;
 
-	$r->content_type('text/html');
-	$r->content_encoding('utf-8');
-	
-	my ($xmlstring, $stylestring);
+	my ($xmlstring);
 	
 	if (my $dom = $r->pnotes('dom_tree')) {
 		$xmlstring = $dom->toString;
@@ -27,36 +24,28 @@ sub handler {
 		$xmlstring = $r->notes('xml_string');
 	}
 	
-	my $stylefh = Apache->gensym();
-	if (open($stylefh, $stylefile)) {
-		flock($stylefh, 1);
-		
-		local $/;
-		$stylestring = <$stylefh>;
-		close $stylefh;
+	my $results = '--';
+	my $retcode;
+
+	if ($xmlstring) {
+		$retcode = SablotProcess("file://$stylefile", "arg:/b", "arg:/c",
+				undef, ["b", $xmlstring], $results);
 	}
 	else {
+		$retcode = SablotProcess("file://$stylefile", "file://$xmlfile", "arg:/c",
+				undef, [], $results);
+	}
+	
+	if ($retcode) {
+		warn "Sablotron failed to process XML file '$xmlfile'\n";
 		return DECLINED;
 	}
 	
-	if (!$xmlstring) {
-		my $xmlfh = Apache->gensym();
-		
-		if (open($xmlfh, $xmlfile)) {
-			flock($xmlfh, 1);
-			
-			local $/;
-			$xmlstring = <$xmlfh>;
-			close $xmlfh;
-		}
-		else {
-			return DECLINED;
-		}
+	if (my $dom = $r->pnotes('dom_tree')) {
+		$dom->dispose;
+		delete $r->pnotes()->{'dom_tree'};
 	}
 	
-	my $results;
-	SablotProcessStrings($stylestring, $xmlstring, $results);
-		
 	print $results;
 	
 	return OK;

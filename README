@@ -1,13 +1,12 @@
 Introduction
 
-The Apache XML Delivery Toolkit (AxKit) is a suite of tools for the
-Apache httpd server running mod_perl, that give developers extremely
-flexible options for delivering XML to all kinds of browsers, from
-handheld systems, Braille readers, and ordinary browsers. All this can
-be achieved using nothing but W3C standards, although the plugin
-architecture provides the hooks for developers to write their own
-stylesheet systems, should they so desire. Two non-W3C stylesheet
-systems are included as examples. 
+AxKit is a suite of tools for the Apache httpd server running mod_perl,
+that give developers extremely flexible options for delivering XML to
+all kinds of browsers, from handheld systems, Braille readers, and
+ordinary browsers. All this can be achieved using nothing but W3C
+standards, although the plugin architecture provides the hooks for
+developers to write their own stylesheet systems, should they so
+desire. Two non-W3C stylesheet systems are included as examples. 
 
 The toolkit provides full intelligent caching, which ensures that if
 any parameters in the display of the XML file change, the cache is

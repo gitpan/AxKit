@@ -1,16 +1,20 @@
-# $Id: XPathScript.pm,v 1.8 2000/05/10 21:20:46 matt Exp $
+# $Id: XPathScript.pm,v 1.13 2000/05/28 07:49:05 matt Exp $
 
 package Apache::AxKit::Language::XPathScript;
 
 use strict;
 use vars qw(@ISA $VERSION $cache);
 
+use Apache;
 use Apache::File;
 use Apache::Constants;
 use XML::XPath 0.50;
 use XML::XPath::XMLParser;
 use XML::XPath::Node;
 use Apache::AxKit::Language;
+use File::Basename;
+use Cwd;
+use Storable;
 
 @ISA = 'Apache::AxKit::Language';
 
@@ -32,17 +36,22 @@ sub handler {
 		use XML::XPath::Builder;
 		my $builder = XML::XPath::Builder->new();
 		$source_tree = $dom->to_sax( Handler => $builder );
+		$dom->dispose;
+		delete $r->pnotes()->{'dom_tree'};
 	}
 	elsif (my $xml = $r->notes('xml_string')) {
 #		warn "Parsing from string : $xml\n";
 		$source_tree = $parser->parse($xml);
 	}
 	else {
-		if (exists($cache->{$xmlfile}) 
+		my $storfile = $r->notes('cachefile').".xpathstor";
+		if (exists($cache->{$xmlfile})
 				&& ($cache->{$xmlfile}{mtime} <= $mtime)) {
-			$source_tree = $cache->{$xmlfile}{tree};
+			eval {
+				$source_tree = Storable::retrieve($storfile);
+			};
 		}
-
+		
 		if (!$source_tree) {
 			eval {
 				$source_tree = $parser->parsefile($xmlfile);
@@ -51,10 +60,8 @@ sub handler {
 				warn "Parse of '$xmlfile' failed: $@";
 				return DECLINED;
 			}
-			$cache->{$xmlfile} = { 
-				mtime => $mtime,
-				tree => $source_tree,
-				};
+			Storable::nstore($source_tree, $storfile);
+			$cache->{$xmlfile}{mtime} = $mtime;
 		}
 	}
 	
@@ -64,17 +71,24 @@ sub handler {
 	
 	my $package = get_package_name($stylesheet);
 	
+	my $cwd = cwd;
+		
+	chdir(dirname($stylesheet));
+	
 #	warn "Checking ", $cache->{$stylesheet}{mtime}, " against $mtime\n";
 	if (exists($cache->{$stylesheet})
-			&& ($cache->{$stylesheet}{mtime} <= $mtime)) {
+			&& ($cache->{$stylesheet}{mtime} <= $mtime)
+			&& grep { -M $_ > $mtime } @{$cache->{$stylesheet}{includes}}) {
 		# cached... just exec.
-#		warn $cache->{$stylesheet}{mtime}, " > $mtime\n";
+#		warn "Using stylesheet cache\n";
 	}
 	else {
 		# recompile stylesheet.
 		compile($package, $stylesheet);
 		$cache->{$stylesheet}{mtime} = $mtime;
 	}
+	
+	chdir($cwd);
 	
 	my $old_status = $r->status;
 	
@@ -101,44 +115,73 @@ sub handler {
 	return $r->status($old_status);
 }
 
-sub compile {
-	my ($package, $filename) = @_;
+sub extract {
+	my ($filename) = @_;
 	
 	my $contents;
 	
-	my $fh = Apache::File->new($filename) or die $!;
-	{
+	my $fh = Apache->gensym();
+	if (open($fh, $filename)) {
 		local $/;
 		$contents = <$fh>;
 	}
+	else {
+		warn "Cannot open '$filename': $!";
+		return '';
+	}
+	
+	$cache->{$filename}{includes} = [];
 	
 	my $script;
 	
 	my $line = 1;
 	
-	while ($contents =~ /\G(.*?)(<%=?)(.*?)%>/gcs) {
-		my ($text, $type, $perl) = ($1, $2, $3);
+	while ($contents =~ /\G(.*?)(<!--\#include|<%=?)/gcs) {
+		my ($text, $type) = ($1, $2);
 		$line += $text =~ tr/\n//;
 		$text =~ s/\|/\\\|/g;
 		$script .= "print q|$text|;";
 		$script .= "\n#line $line $filename\n";
 		if ($type eq '<%=') {
-			if ($perl =~ /;\s*/) {
-				die "XPathScript error at line $line. <%= ... %> must not end with a semi-colon\n";
-			}
+			$contents =~ /\G(.*?)%>/gcs || die "No terminating '%>' after line $line ($filename)";
+			my $perl = $1;
 			$script .= "print( $perl );\n";
 			$line += $perl =~ tr/\n//;
 		}
+		elsif ($type eq '<!--#include') {
+			my %params;
+			while ($contents =~ /\G(\s+(\w+)\s*=\s*(["'])([^\3]*?)\3|\s*-->)/gcs) {
+				last if $1 eq '-->';
+				$params{$2} = $4;
+			}
+			
+			if (!$params{file}) {
+				die "No matching file attribute in #include at line $line ($filename)";
+			}
+			
+			$script .= include_file($params{file}, $filename);
+		}
 		else {
+			$contents =~ /\G(.*?)%>/gcs || die "No terminating '%>' after line $line ($filename)";
+			my $perl = $1;
 			$script .= $perl;
 			$line += $perl =~ tr/\n//;
 		}
 	}
 	
-	$contents =~ /\G(.*)/gcs;
-	my ($text) = ($1);
-	$text =~ s/\|/\\\|/g;
-	$script .= "print q|$text|;";
+	if ($contents =~ /\G(.*)/gcs) {
+		my ($text) = ($1);
+		$text =~ s/\|/\\\|/g;
+		$script .= "print q|$text|;";
+	}
+	
+	return $script;
+}
+
+sub compile {
+	my ($package, $filename) = @_;
+	
+	my $script = extract($filename);
 	
 	my $eval = join('',
 			'package ',
@@ -161,6 +204,51 @@ sub compile {
 	if ($@) {
 		die $@;
 	}
+}
+
+sub include_file {
+	my ($filename, $stylesheet) = @_;
+	
+	# return if already included
+	return '' if grep {$_ eq $filename} @{$cache->{$stylesheet}{includes}};
+	
+	push @{$cache->{$stylesheet}{includes}}, $filename;
+	
+	return extract($filename);
+}
+
+sub get_mtime {
+	my $class = shift;
+	my ($filename) = @_;
+#	warn "get_mtime\n";
+	my $mtime = -M $filename;
+	if (!exists($cache->{$filename})) {
+		# compile stylesheet.
+		my $cwd = cwd;
+		
+		chdir(dirname($filename));
+			compile(get_package_name($filename), $filename);
+		chdir($cwd);
+	
+		$cache->{$filename}{mtime} = $mtime;
+	}
+
+	my $cwd = cwd;
+	chdir(dirname($filename));
+	for my $include (@{$cache->{$filename}{includes}}) {
+#		warn "Checking include '$include' timestamp\n";
+		next unless -e $include;
+#		warn "Exists...\n";
+		my $inc_mtime = -M _;
+		if ($inc_mtime < $mtime) {
+#			warn "'$include' is newer ( $inc_mtime < $mtime )\n";
+			$mtime = $inc_mtime;
+		}
+	}
+	chdir($cwd);
+	
+#	warn "returning $mtime\n";
+	return $mtime;
 }
 
 sub get_package_name {
@@ -192,6 +280,7 @@ sub get_package_name {
 				'findvalues',
 				'findnodes_as_string',
 				'apply_templates',
+				'matches',
 			);
 
 	sub findnodes {
@@ -209,6 +298,10 @@ sub get_package_name {
 
 	sub findnodes_as_string {
 		$Apache::AxKit::Language::XPathScript::xp->findnodes_as_string(@_);
+	}
+	
+	sub matches {
+		$Apache::AxKit::Language::XPathScript::xp->matches(@_);
 	}
 	
 	sub apply_templates {
@@ -237,10 +330,6 @@ sub get_package_name {
 		my $translations = $Apache::AxKit::Language::XPathScript::trans;
 		
 		if ($node->getNodeType != ELEMENT_NODE) {
-			if ($node->getNodeType == TEXT_NODE && 
-					$node->getValue =~ /^\s*$/) {
-				return ' '; # strip whitespace nodes by default
-			}
 			return $node->toString;
 		}
 		
@@ -345,6 +434,8 @@ the xml file up as the document for XPath expressions to be used.
 
 The syntax follows the basic ASP stuff. <% introduces perl code, and %> closes
 that section of perl code. <%= ... %> can be used to output a perl expression.
+The ASP syntax <!--#include file="filename"--> can be used to include other
+files.
 
 The interesting stuff comes when you start to use XPath. The following methods
 are available for your use:
@@ -391,7 +482,8 @@ possibilities:
 	}
 	%>
 
-That prints all nodes found by the path.
+That prints all nodes found by the path, recursively applying any templates
+in $t.
 
 	<%
 	print findvalue('xpath/here', $context);

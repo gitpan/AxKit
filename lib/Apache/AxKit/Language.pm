@@ -1,4 +1,4 @@
-# $Id: Language.pm,v 1.2 2000/05/06 11:11:52 matt Exp $
+# $Id: Language.pm,v 1.3 2000/05/19 15:46:44 matt Exp $
 
 package Apache::AxKit::Language;
 
@@ -18,6 +18,8 @@ sub get_mtime {
 #	warn "get_mtime called on $stylefile\n";
 	return -M $stylefile;
 }
+
+sub stylesheet_exists { 1; }
 
 1;
 __END__

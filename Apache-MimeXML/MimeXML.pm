@@ -1,4 +1,4 @@
-# $Id: MimeXML.pm,v 1.2 2000/05/10 21:23:41 matt Exp $
+# $Id: MimeXML.pm,v 1.3 2000/05/13 14:54:16 matt Exp $
 
 package Apache::MimeXML;
 
@@ -6,7 +6,7 @@ use strict;
 use Apache::Constants qw(:common);
 use Apache::File;
 
-$Apache::MimeXML::VERSION = '0.07';
+$Apache::MimeXML::VERSION = '0.08';
 
 my $feff = chr(0xFE) . chr(0xFF);
 my $fffe = chr(0xFF) . chr(0xFE);
@@ -70,7 +70,6 @@ sub handler {
 				sub { 
 					my $r = shift;
 					$r->content_type("$type; charset=$encoding");
-					$r->content_encoding($encoding);
 					return OK;
 				});
 	}

@@ -1,4 +1,4 @@
-# $Id: AxKit.pm,v 1.5 2000/05/10 21:23:01 matt Exp $
+# $Id: AxKit.pm,v 1.12 2000/05/28 07:48:26 matt Exp $
 
 package AxKit;
 
@@ -7,7 +7,7 @@ use Apache::ModuleConfig ();
 use Apache::AxKit::StyleFinder;
 use Apache::AxKit::XMLFinder;
 
-$VERSION = "0.60";
+$VERSION = "0.67";
 
 if ($ENV{MOD_PERL}) {
 	no strict;
@@ -57,7 +57,7 @@ __END__
 
 =head1 NAME
 
-AxKit - The Apache XML Delivery Toolkit
+AxKit - an XML Delivery Toolkit for Apache
 
 =head1 DESCRIPTION
 

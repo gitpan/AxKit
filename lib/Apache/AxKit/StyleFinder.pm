@@ -1,4 +1,4 @@
-# $Id: StyleFinder.pm,v 1.8 2000/05/10 21:18:52 matt Exp $
+# $Id: StyleFinder.pm,v 1.13 2000/05/28 07:48:50 matt Exp $
 
 package Apache::AxKit::StyleFinder;
 
@@ -47,6 +47,8 @@ sub handler {
 	}
 	
 	return DECLINED unless $xmlfile; # just to be safe.
+	
+	chdir(dirname($xmlfile));
 	
 	my $cfg = Apache::AxKit::ConfigReader->new($r);
 	my %style_mapping = %{ $cfg->StyleMap };
@@ -117,27 +119,6 @@ sub handler {
 		}
 
 		foreach my $style (@$styles) {
-#			warn "Looking up $style->{href} (from $xmlfile)\n";
-			if ($style->{href}) {
-				if ($style->{href} =~ /^(http|https|ftp):\/\//i) {
-					warn "Only relative URI's supported in <?xml-stylesheet?> at this time\n";
-					return DECLINED;
-				}
-
-				my $stylefile = $r->lookup_uri($style->{href})->filename;
-	#			warn "Matches up to $stylefile\n";
-
-				unless (-e $stylefile) {
-					warn "Stylesheet '$stylefile' for '$xmlfile' does not exist\n";
-					return DECLINED;
-				}
-
-				$style->{stylefile} = $stylefile;
-			}
-			
-			# Now we have all the conditions we need, we just have to load the
-			# module and see if it has the right method.
-
 			my $mapto;
 			unless ($mapto = $style_mapping{ $style->{type} }) {
 				warn "No implementation mapping available for type '$style->{type}'\n";
@@ -160,11 +141,33 @@ sub handler {
 				}
 			}
 
+#			warn "Looking up $style->{href} (from $xmlfile)\n";
+			no strict 'refs';
+			if ($mapto->stylesheet_exists() && $style->{href}) {
+				if ($style->{href} =~ /^(http|https|ftp):\/\//i) {
+					warn "Only relative URI's supported in <?xml-stylesheet?> at this time\n";
+					return DECLINED;
+				}
+
+				my $stylefile = $r->lookup_uri($style->{href})->filename;
+	#			warn "Matches up to $stylefile\n";
+
+				unless (-e $stylefile) {
+					warn "Stylesheet '$stylefile' for '$xmlfile' does not exist\n";
+					return DECLINED;
+				}
+
+				$style->{stylefile} = $stylefile;
+			}
+			elsif (!$mapto->stylesheet_exists()) {
+				delete $style->{href};
+			}
 		}
 		
 		$Apache::AxKit::StyleFinder{$big_hash} = {
 					styles => $styles,
 					mtime => $mtime,
+					external_entities => $ext_ents,
 				};
 	}
 	
@@ -216,8 +219,12 @@ sub handler {
 			
 			# do external entities now!
 			if (!$recreate) {
+#				warn "External entities\n";
 				foreach my $ext (@$ext_ents) {
+					local $^W;
+#					warn "Looking up external entity: $ext\n";
 					my $entfile = $r->lookup_uri($ext)->filename;
+#					warn "Got: $entfile\n";
 					if ($entfile && (-M $entfile <= $mtime_cache)) {
 #						warn "extent cache\n";
 						$recreate++;
@@ -227,7 +234,10 @@ sub handler {
 		}
 	}
 	
-	if (!$recreate) {
+	# defaults
+	$r->content_type('text/html; charset=utf-8');
+	
+	if (!$recreate && !$r->notes('nocache')) {
 #		warn "returning cached copy\n";
 		$r->filename("$cachedir/$big_hash");
 		my $fh = Apache->gensym();
@@ -236,13 +246,7 @@ sub handler {
 			my $type = <$fh>;
 			close $fh;
 			chomp $type;
-			my ($t, $e) = $type =~ m/^(.*?);\s*(.*)$/;
-			$r->content_type($t);
-			$r->content_encoding($e);
-		}
-		else {
-			$r->content_type('text/html');
-			$r->content_encoding('utf-8');
+			$r->content_type($type);
 		}
 		return DECLINED;
 	}
@@ -268,7 +272,7 @@ sub handler {
 
 			my $method = "handler";
 			if (defined &{"$mapto\::$method"}) {
-#					warn "Calling $mapto\n";
+#				warn "Calling $mapto\n";
 				my $retval = $mapto->$method($r, $xmlfile, $stylefile);
 				if ($retval == DECLINED) {
 					return DECLINED;
@@ -288,14 +292,13 @@ sub handler {
 	OUTPUT:
 	
 	if (my $dom = $r->pnotes('dom_tree')) {
+		$r->notes('resetstring', 1);
 		my $output = $dom->toString;
 		$dom->dispose;
 		$r->print($output);
 	}
 	
 	if (!$r->notes('nocache')) {
-		$r->filename($r->notes('cachefile'));
-
 #		warn "Opening cachefile for writing\n";
 		my $fh = Apache->gensym();
 		if (sysopen($fh, $r->notes('cachefile')."new", O_RDWR|O_CREAT)) {
@@ -310,24 +313,13 @@ sub handler {
 			die "Couldn't open file: $!\n";
 		}
 
-		$fh = Apache->gensym();
-		if (sysopen($fh, "$cachedir/$big_hash\.type", O_RDONLY)) {
-			flock($fh, 1); # lock for reading
-			my $type = <$fh>;
-			close $fh;
-			chomp $type;
-			my ($t, $e) = $type =~ m/^(.*?);\s*(.*)$/;
-			$r->content_type($t);
-			$r->content_encoding($e);
-		}
-		else {
-			$r->content_type('text/html');
-			$r->content_encoding('utf-8');
-		}
-		
-		$r->notes('nocache', 1);
-		$r->send_http_header;
-		$r->print($r->notes('xml_string'));
+#		warn "sending cachefile\n";
+		$r->filename($r->notes('cachefile'));
+		return DECLINED;
+
+# 		$r->notes('nocache', 1);
+# 		$r->send_http_header;
+# 		$r->print($r->notes('xml_string'));
 	}
 	
 	return OK;
@@ -402,13 +394,13 @@ sub parse_pi {
 					&& (!exists $style->{title})
 				)
 			{
-				# This is the persistant style - always make it first.
+				# This is a persistant style - always make it first.
 				if ($mediamatch) {
-					unshift @{$e->{XMLStyle_style}}, $style;
+					push @{$e->{XMLStyle_style_persistant}}, $style;
 				}
 				elsif ($style->{media} eq 'screen') {
 					# store away in case we need the screen matches
-					unshift @{$e->{XMLStyle_style_screen}}, $style;
+					push @{$e->{XMLStyle_style_screen_persistant}}, $style;
 				}
 			}
 			elsif (lc($style->{title}) eq lc($e->{XMLStyle_preferred})) 
@@ -431,10 +423,10 @@ sub parse_pi {
 			{
 				if ($mediamatch) {
 					# This is the persistant style
-					unshift @{ $e->{XMLStyle_style} }, $style;
+					push @{ $e->{XMLStyle_style_persistant} }, $style;
 				}
 				elsif ($style->{media} eq 'screen') {
-					push @{$e->{XMLStyle_style_screen}}, $style;
+					push @{$e->{XMLStyle_style_screen_persistant}}, $style;
 				}
 			}
 			elsif (
@@ -521,138 +513,136 @@ sub parse_pi {
 
 sub parse_start {
 	my $e = shift;
+	
 	if (!$e->{XMLStyle_cascade}) {
 		if ($e->{XMLStyle_style_nc}) {
 			push @{$e->{XMLStyle_style}}, $e->{XMLStyle_style_nc};
 		}
 	}
-	if (!@{$e->{XMLStyle_style}} && @{$e->{XMLStyle_style_screen}}) {
-#		warn "Matching style for media ", $e->{XMLStyle_media}, " not found. Using screen media stylesheets instead\n";
-		push @{$e->{XMLStyle_style}}, @{$e->{XMLStyle_style_screen}};
+	else {
+		if (!@{$e->{XMLStyle_style}} && !$e->{XMLStyle_style_persistant}) {
+			if ($e->{XMLStyle_style_screen_persistant}) {
+				push @{$e->{XMLStyle_style}}, @{$e->{XMLStyle_style_screen_persistant}};
+			}
+			if (@{$e->{XMLStyle_style_screen}}) {
+		#		warn "Matching style for media ", $e->{XMLStyle_media}, " not found. Using screen media stylesheets instead\n";
+				push @{$e->{XMLStyle_style}}, @{$e->{XMLStyle_style_screen}};
+			}
+		}
+		elsif ($e->{XMLStyle_style_persistant}) {
+			unshift @{$e->{XMLStyle_style}}, @{$e->{XMLStyle_style_persistant}};
+		}
 	}
+	
 	die "OK";
 }
 
 sub parse_entity_decl {
 	my $e = shift;
 	my ($name, $val, $sysid, $pubid, $ndata) = @_;
+#	warn "external entity: '$sysid'\n";
 	if (!defined $val) {
 		# external entity - save so the cache gets done properly!
 		push @{$e->{XMLStyle_ext_ents}}, $sysid;
 	}
 }
 
-{
-	# Overridden Apache package.
-	
-	package Apache::AxKit::StyleFinder::Apache;
-	use vars qw/@ISA/;
-	use Apache;
-	use Fcntl qw(:DEFAULT);
-	@ISA = 'Apache';
-	
-	sub content_type {
-		my $self = shift;
-		my ($type) = @_;
-		
-		if ($type) {
-#			warn "Writing content type '$type'\n";
-			my $fh = Apache->gensym();
-			if (sysopen($fh, $self->notes('cachefile').'.type', O_RDWR|O_CREAT)) {
-				flock($fh, 2); # lock for writing
-				seek($fh, 0, 0);
-				truncate($fh, 0);
-				print $fh $type;
-				my $encoding;
-				if ($encoding = $self->content_encoding()) {
-					print $fh "; ", $encoding;
-				}
-				close $fh;
-			}
-		}
-		
-		$self->SUPER::content_type(@_);
-	}
-	
-	sub content_encoding {
-		my $self = shift;
-		
-		my ($encoding) = @_;
-		
-		if ($encoding) {
-#			warn "Writing content encoding '$encoding'\n";
-			my $fh = Apache->gensym();
-			if (sysopen($fh, $self->notes('cachefile').'.type', O_RDWR|O_CREAT)) {
-				flock($fh, 2); # lock for writing
-				seek($fh, 0, 0);
-				truncate($fh, 0);
-				print $fh $self->content_type();
-				print $fh "; ", $encoding;
-				close $fh;
-			}
-		}
-		
-		$self->SUPER::content_encoding(@_);
-	}
-	
-	sub print {
-		my $self = shift;
-		
-		if (!$self->notes('nocache')) {
+#########################################################################
+# Apache Request Object subclass
+#########################################################################
 
-			if ($self->notes('resetstring')) {
-				$self->notes('xml_string', '');
-				$self->notes('resetstring', 0);
-			}
-			
-			$self->notes('xml_string', join('', $self->notes('xml_string'), @_));
-		}
-		else {
-			$self->SUPER::print(@_);
-		}
-	}
-	
-	sub PRINT {
-		goto &print;
-	}
-	
-	sub no_cache {
-		my $self = shift;
-		my ($set) = @_;
-		
-		$self->SUPER::no_cache(@_);
-		
-		if ($set) {
-#			warn "caching being turned off!\n";
-			$self->notes('nocache', 1);
-			# send what's been sent already
-			my $fh = Apache->gensym();
-			if (sysopen($fh, $self->notes('cachefile') . ".type", O_RDONLY)) {
-				flock($fh, 1); # lock for reading
-				my $type = <$fh>;
-				close $fh;
-				chomp $type;
-				my ($t, $e) = $type =~ m/^(.*?);\s*(.*)$/;
-				$self->content_type($t);
-				$self->content_encoding($e);
-			}
-			else {
-				$self->content_type('text/html');
-				$self->content_encoding('utf-8');
-			}
-			
-			$fh = Apache->gensym();
-			if (sysopen($fh, $self->notes('cachefile'), O_RDONLY)) {
-				flock($fh, 1);
-				while (<$fh>) {
-					$self->SUPER::print($_);
-				}
-				close $fh;
-			}
-			
-			unlink($self->notes('cachefile'));
+{
+# Overridden Apache package.
+
+package Apache::AxKit::StyleFinder::Apache;
+use vars qw/@ISA/;
+use Apache;
+use Fcntl qw(:DEFAULT);
+@ISA = 'Apache';
+
+sub TIEHANDLE {
+	my($class, $r) = @_;
+	$r ||= Apache->request;
+}
+
+sub content_type {
+	my $self = shift;
+	my ($type) = @_;
+
+	if ($type) {
+#		warn "Writing content type '$type'\n";
+		my $fh = Apache->gensym();
+		if (sysopen($fh, $self->notes('cachefile').'.type', O_RDWR|O_CREAT)) {
+			flock($fh, 2); # lock for writing
+			seek($fh, 0, 0);
+			truncate($fh, 0);
+			print $fh $type;
+			close $fh;
 		}
 	}
+
+	$self->SUPER::content_type(@_);
+}
+
+sub print {
+	my $self = shift;
+
+	if (!$self->notes('nocache')) {
+
+		if ($self->notes('resetstring')) {
+			$self->notes('xml_string', '');
+			$self->notes('resetstring', 0);
+		}
+
+		$self->notes()->{'xml_string'} .= join('', @_);
+	}
+	else {
+		$self->send_http_header unless $self->notes('headers_sent');
+		$self->SUPER::print(@_);
+	}
+}
+
+*PRINT = \&print;
+
+sub no_cache {
+	my $self = shift;
+	my ($set) = @_;
+
+	$self->SUPER::no_cache(@_);
+
+	if ($set) {
+#		warn "caching being turned off!\n";
+		$self->notes('nocache', 1);
+		# send what's been sent already
+		my $fh = Apache->gensym();
+		if (sysopen($fh, $self->notes('cachefile'), O_RDONLY)) {
+			flock($fh, 1);
+			$self->send_http_header;
+			while (<$fh>) {
+				$self->SUPER::print($_);
+			}
+			close $fh;
+		}
+
+		# might fail due to not existing so ignore return value
+		unlink($self->notes('cachefile'));
+	}
+}
+
+sub send_http_header {
+	my $self = shift;
+	my ($content_type) = @_;
+
+	return if $self->notes('headers_sent');
+
+	if ($content_type) {
+		$self->content_type($content_type);
+	}
+
+	$self->notes('headers_sent', 1);
+
+	$self->SUPER::send_http_header;
+}
 }
 
 1;

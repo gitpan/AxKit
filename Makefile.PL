@@ -53,6 +53,19 @@ my @directives = (
 
 unless ($config{NO_DIRECTIVES} == 1) {
 	command_table(\@directives);
+	require mod_perl;
+	if ($mod_perl::VERSION < 1.25) {
+		open (FILE, ">>AxKit.xs") || die "Can't append to AxKit.xs: $!";
+		print FILE 'void
+END()
+
+    CODE:
+    if (find_linked_module("AxKit")) {
+        remove_module(&XS_AxKit);
+    }
+';
+		close(FILE);
+	}
 }
 else {
 	rename("AxKit.pm", "AxKit.pm.old") || die "Can't fixup AxKit.pm: $!";
@@ -81,6 +94,7 @@ WriteMakefile(
 				'XML::Parser' => 2.27,
 				'Digest::MD5' => 2.09,
 				'mod_perl' => 1.17,
+				'Storable' => 0.6,
 			},
 		'clean' => { 'FILES' => '*.xs*' },
 );

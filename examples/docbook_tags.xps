@@ -1,0 +1,150 @@
+<%
+
+# support ulink URL's
+$t->{'ulink'}{testcode} = sub { 
+		my $node = shift;
+		my $t = shift;
+		$t->{pre} = "<a href=\"" .
+						findvalue('./@url', $node) . "\">";
+		$t->{post} = '</a>';
+		return 1;
+	};
+
+$t->{'title'}{testcode} = sub { 
+		my $node = shift;
+		my $t = shift;
+		if (findvalue('parent::blockquote', $node)) {
+			$t->{pre} = "<b>";
+			$t->{post} = "</b><br>\n";
+		}
+		elsif (findvalue('parent::artheader', $node)) {
+			$t->{pre} = "<h1>";
+			$t->{post} = "</h1>";
+		}
+		else {
+			my $parent = findvalue('name(..)', $node);
+			my ($level) = $parent =~ m/sect(\d+)$/;
+			$t->{pre} = "<h$level>";
+			$t->{post} = "</h$level>";
+		}
+		
+		return 1;
+	};
+
+$t->{'attribution'}{pre} = "<i>";
+$t->{'attribution'}{post} = "</i><br>\n";
+
+$t->{'para'}{pre} = '<p>';
+$t->{'para'}{post} = '</p>';
+
+$t->{'author'}{pre} = '<p>';
+
+$t->{'firstname'}{pre} = '';
+$t->{'surname'}{pre} = ' ';
+$t->{'surname'}{post} = "<p>\n";
+
+$t->{'email'}{testcode} = sub {
+		my $node = shift;
+		$t->{'email'}{pre} = "<a href=\"" . findvalue('./text()', $node) . "\">";
+		$t->{'email'}{post} = "</a>";
+		return 1;
+		};
+
+$t->{'copyright'}{pre} = "Copyright \xC2\xA9 ";
+$t->{'trademark'}{post} = "<super>TM</super>";
+$t->{'holder'}{testcode} = sub {
+		my $node = shift;
+		$t->{'holder'}{pre} = "<a href=\"" . findvalue('./@role', $node) . "\">";
+		$t->{'holder'}{post} = "</a>";
+		return 1;
+		};
+
+$t->{'abstract'}{pre} = "<p>";
+
+$t->{'sect1'}{post} = "<hr>";
+
+#$XML::XPath::Debug = 1;
+$t->{'sect1'}{testcode} = sub {
+		my ($node, $t) = @_;
+		if (my $id = findvalue('./@id', $node)) {
+			$t->{pre} = "<a name=\"$id\"></a>";
+		}
+		return 1;
+	};
+
+# lists
+
+$t->{'itemizedlist'}{pre} = '<ul>';
+$t->{'itemizedlist'}{post} = '</ul>';
+
+$t->{'orderedlist'}{pre} = '<ol>';
+$t->{'orderedlist'}{post} = '</ol>';
+
+$t->{'listitem'}{pre} = '<li>';
+$t->{'listitem'}{post} = '</li>';
+
+$t->{'procedure'}{pre} = '<ol>';
+$t->{'procedure'}{post} = '</ol>';
+
+$t->{'step'}{pre} = '<li>';
+$t->{'step'}{post} = '</li>';
+
+# examples, listings, etc.
+
+$t->{'programlisting'}{pre} = '<table width="100%"><tr><td bgcolor="#DDDDDD"><pre>';
+$t->{'programlisting'}{post} = '</pre></td></tr></table>';
+
+# need to support <prompt> and other tags within screen...
+$t->{'screen'} = $t->{'programlisting'};
+
+$t->{'userinput'}{pre} = '<b>';
+$t->{'userinput'}{post} = '</b>';
+
+$t->{'replaceable'}{pre} = '<i>';
+$t->{'replaceable'}{post} = '</i>';
+
+$t->{'emphasis'}{pre} = '<i>';
+$t->{'emphasis'}{post} = '</i>';
+
+$t->{'application'}{pre} = '<b>';
+$t->{'application'}{post} = '</b>';
+
+$t->{'manvolnum'}{pre} = '(';
+$t->{'manvolnum'}{post} = ')';
+
+$t->{'option'}{pre} = '<tt>';
+$t->{'option'}{post} = '</tt>';
+
+$t->{'filename'} = $t->{'option'};
+$t->{'literal'} = $t->{'option'};
+
+# references
+$t->{'anchor'}{testcode} = sub {
+		my ($node, $t) = @_;
+		$t->{pre} = '<a name="#';
+		$t->{pre} .= findvalue('@id', $node);
+		$t->{pre} .= '">';
+		$t->{post} = '</a>';
+		return 1;
+	};
+	
+$t->{'xref'}{testcode} = sub {
+		my ($node, $t) = @_;
+		$t->{pre} = '<a href="#';
+		my $id = findvalue('@linkend', $node);
+		$t->{pre} .= $id . '">';
+		$t->{pre} .= findvalue("id('$id')/title/text()");
+		$t->{post} = '</a>';
+		return -1;
+	};
+
+$t->{'link'}{testcode} = sub {
+		my ($node, $t) = @_;
+		$t->{pre} = '<a href="#';
+		$t->{pre} .= findvalue('@linkend', $node);
+		$t->{pre} .= '">';
+		$t->{post} = '</a>';
+		return 1;
+	};
+
+%>
