@@ -3,5 +3,5 @@ use ExtUtils::MakeMaker;
 # the contents of the Makefile that is written.
 WriteMakefile(
     'NAME'	=> 'AxKit',
-    'VERSION_FROM' => 'lib/Apache/AxKit.pm', # finds $VERSION
+    'VERSION_FROM' => 'lib/AxKit.pm', # finds $VERSION
 );

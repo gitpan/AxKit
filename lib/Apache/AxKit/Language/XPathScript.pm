@@ -1,4 +1,4 @@
-# $Id: XPathScript.pm,v 1.2 2000/05/02 10:32:05 matt Exp $
+# $Id: XPathScript.pm,v 1.3 2000/05/02 12:24:00 matt Exp $
 
 package Apache::AxKit::Language::XPathScript;
 
@@ -22,25 +22,33 @@ sub handler {
 	
 	my $source_tree;
 	
-	if (exists($cache->{$xmlfile}) 
-			&& ($cache->{$xmlfile}{mtime} <= $mtime)) {
-		$source_tree = $cache->{$xmlfile}{tree};
+	if ($r->pnotes('dom_tree')) {
+		my $dom = $r->pnotes('dom_tree');
+		use XML::XPath::Builder;
+		my $builder = XML::XPath::Builder->new();
+		$source_tree = $dom->to_sax( Handler => $builder );
 	}
-	
-	$parser ||= XML::XPath::XMLParser->new();
-	
-	if (!$source_tree) {
-		eval {
-			$source_tree = $parser->parsefile($xmlfile);
-		};
-		if ($@) {
-			warn "Parse of '$xmlfile' failed: $@";
-			return DECLINED;
+	else {
+		if (exists($cache->{$xmlfile}) 
+				&& ($cache->{$xmlfile}{mtime} <= $mtime)) {
+			$source_tree = $cache->{$xmlfile}{tree};
 		}
-		$cache->{$xmlfile} = { 
-			mtime => $mtime,
-			tree => $source_tree,
+
+		$parser ||= XML::XPath::XMLParser->new();
+
+		if (!$source_tree) {
+			eval {
+				$source_tree = $parser->parsefile($xmlfile);
 			};
+			if ($@) {
+				warn "Parse of '$xmlfile' failed: $@";
+				return DECLINED;
+			}
+			$cache->{$xmlfile} = { 
+				mtime => $mtime,
+				tree => $source_tree,
+				};
+		}
 	}
 	
 	$xp->set_context($source_tree);
