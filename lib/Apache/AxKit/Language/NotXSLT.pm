@@ -1,6 +1,6 @@
 package Apache::AxKit::Language::NotXSLT;
 
-# $Id: NotXSLT.pm,v 1.1.1.1 2000/05/01 16:12:36 matt Exp $
+# $Id: NotXSLT.pm,v 1.2 2000/05/02 10:32:05 matt Exp $
 
 use strict;
 use vars qw($VERSION $PREFIX $cache $parser);
@@ -356,4 +356,7 @@ XML::XPath(1).
 
 =cut
 
-# $Log$
+# $Log: NotXSLT.pm,v $
+# Revision 1.2  2000/05/02 10:32:05  matt
+# Rename to AxKit
+#

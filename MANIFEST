@@ -19,5 +19,6 @@ lib/Apache/AxKit/Language/XPathScript.pm
 lib/Apache/AxKit/Language/XSLT.pm
 lib/Apache/AxKit/XMLFinder.pm
 lib/Apache/AxKit/StyleFinder.pm
+lib/Apache/AxKit.pm
 MANIFEST
 Makefile.PL
