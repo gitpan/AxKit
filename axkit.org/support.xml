@@ -41,10 +41,10 @@
       <subsection>
         <title>IRC</title>
         <para>
-        The AxKit IRC channel is available on the <ulink
-        url="http://www.openprojects.net/">OpenProjects Network</ulink>.
-        The easiest way to access it is to point your IRC software at 
-        irc.openprojects.net:6667. The channel name is #axkit.
+            The AxKit IRC channel is available on the Rhizomatic IRC
+            servers at irc.rhizomatic.net:6667. The channel name is
+            #axkit. We're a friendly bunch there, but don't worry if
+            you see us shouting <ulink url="http://berjon.com/dahut.txt">DAHUUUUT!!!</ulink> at eachother from time to time.
         </para>
       </subsection>
 		</section>

@@ -836,8 +836,11 @@ The following XPath functions are imported for your use:
 	<listitem><literal>findnodes_as_string($path, [$context])</literal></listitem>
 	<listitem><literal>apply_templates( $path, [$context])</literal></listitem>
 	<listitem><literal>apply_templates( @nodes )</literal></listitem>
+	<listitem><literal>import_template( $uri )</literal></listitem>
 </itemizedlist>
-These methods are documented more completely in the XML::XPath manual
+</para>
+<para>
+The first three methods are documented more completely in the XML::XPath manual
 pages.
 </para>
 <para>
@@ -846,6 +849,33 @@ hash reference for elements names. For example, when encountering a
 <literal>&lt;foo></literal> element via apply_templates, XPathScript
 will try to find a transformation hash in the key
 <literal>$t->{'foo'}</literal>.
+</para>
+<para>
+Import template can be used to pull in an external XPathScript template
+file.  <literal>$uri</literal> should be a path to the stylesheet to be
+included.  The function returns an anonymous subroutine that when
+executed will run the stylesheet.  The anonymous subroutine takes two
+arguments, which makes it ideal to plug into a
+<literal>testcode</literal> entry, for example:
+<informalexample>
+<programlisting>
+$t->{BODY}{testcode} = import_template("/xps/bodystyle.xps");
+</programlisting>
+</informalexample>
+Inside the imported stylesheet, you will be referencing the same
+<literal>$t</literal> as the parent stylesheet.  You can get at the
+usual <literal>testcode</literal> version of <literal>$t</literal> by
+using <literal>$real_local_t</literal>.
+</para>
+<para>
+If you want to include a stylesheet anyway (not as part of a testcode
+setup), just write it as normal, and include a line like this in the
+parent stylesheet:
+<informalexample>
+<programlisting>
+import_template("/xps/bodystyle.xps")->();
+</programlisting>
+</informalexample>
 </para>
 <para>
 The value in <literal>$t->{'foo'}</literal> above is a hash reference

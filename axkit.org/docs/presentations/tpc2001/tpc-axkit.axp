@@ -1,0 +1,1364 @@
+<?xml version="1.0"?>
+<slideshow>
+
+  <title>AxKit</title>
+  <metadata>
+     <speaker>Matt Sergeant</speaker>
+     <email>matt@axkit.com</email>
+     <organisation>AxKit.com Ltd</organisation>
+     <link>http://axkit.com/</link>
+     <logo scale="0.4">ax_logo.png</logo>
+     <background>redbg.png</background>
+  </metadata>
+  
+  <slide>
+    <title>Introduction</title>
+    <point level="1">Perl's XML Capabilities</point>
+    <point level="1">AxKit intro</point>
+    <point level="1">AxKit static sites</point>
+    <point level="1">AxKit dynamic sites (XSP)</point>
+    <point level="1">Advanced AxKit</point>
+  </slide>
+  
+  <slideset>
+     <title>XML with Perl Introduction</title>
+     
+     <slide>
+        <title>Basis : XML::Parser</title>
+        <point level="1">XS wrapper around expat</point>
+        <point level="1">expat - James Clark</point>
+        <point level="1">XML::Parser - originally by Larry Wall</point>
+        <point level="2">Now maintained by Clark Cooper</point>
+        <point level="1">Allows different "styles" of parsing</point>
+        <point level="1">Default style is callback/event based stream parsing</point>
+        <point level="1">Also implements a "push" parser</point>
+     </slide>
+     
+     <slide>
+        <title>XML::Parser usage</title>
+        <point level="1">SAX-like API</point>
+        <point level="1">register callback handler methods</point>
+        <point level="2">start tag</point>
+        <point level="2">end tag</point>
+        <point level="2">characters</point>
+        <point level="2">comments</point>
+        <point level="2">processing instructions</point>
+        <point level="2">... and more</point>
+        <point level="1">Non validating XML parser</point>
+        <point level="1">dies (throws an exception) on bad XML</point>
+     </slide>
+     
+     <slide>
+        <title>XML::Parser code</title>
+        <source_code><![CDATA[
+my $p = XML::Parser->new(
+    Handlers => { 
+        Start => \&start_tag, 
+        End => \&end_tag,
+        # add more handlers here
+        });
+
+$p->parsefile("foo.xml");
+
+exit(0);
+
+sub start_tag {
+  my ($expat, $tag, %attribs) = @_;
+  print "Start tag: $tag\n";
+}
+
+sub end_tag {
+  my ($expat, $tag) = @_;
+  print "End tag: $tag\n";
+}
+        ]]></source_code>
+     </slide>
+     
+     <slide>
+     <title>XML::Parser - maintaining state</title>
+     <source_code><![CDATA[
+my $ctxt = MyParser->new();
+
+my $p = XML::Parser->new(
+  Handlers => {
+    Start => sub { $ctxt->parse_start(@_) },
+    End => sub { $ctxt->parse_end(@_) }
+    });
+
+$p->parse("<some><xml>here</xml></some>");
+
+package MyParser;
+
+sub new {
+   return bless {}, shift;
+}
+sub parse_start {
+    my ($self, $expat, $tag, %attribs) = @_;
+    $self->{some_state} = "Open $tag";
+}
+sub parse_end {
+    my ($self, $expat, $tag) = @_;
+    print "Last state: $self->{some_state}\n";
+}
+     ]]></source_code>
+     </slide>
+     
+     <slide>
+     <title>PYX</title>
+     <point level="1">Turns XML into a stream of text events</point>
+     <point level="1">Based on SGML ESIS streams</point>
+     <point level="2">)start</point>
+     <point level="2">(end</point>
+     <point level="2">Aattribute=value</point>
+     <point level="2">-text</point>
+     <point level="2">?processing instruction</point>
+     <point level="1">Comments are dropped</point>
+     </slide>
+     
+     <slide>
+     <title>PYX example</title>
+     <source_code>
+$ pyx presentation.xml | more
+(slideshow
+-\n
+-  
+(title
+-Developing XML Applications with Perl and AxKit
+)title
+-\n
+-  
+(metadata
+-\n
+-     
+(speaker
+-Matt Sergeant
+)speaker
+-\n
+-     
+(email
+-matt@axkit.com
+)email
+...
+     </source_code>
+     </slide>
+     
+     <slide>
+     <title>PYX usage</title>
+     <point level="1">pyx xmlfile | something | pyxw</point>
+     <point level="1">pyx generates PYX streams</point>
+     <point level="1">pyxw generates XML from PYX</point>
+     <point level="1">pyxhtml parses HTML to PYX</point>
+     </slide>
+     
+     <slide>
+     <title>HTML Tidy, or html2xml</title>
+     <point level="1">Java utility by Dave Ragget of the W3C</point>
+     <point level="1">Tidy converts HTML to XHTML</point>
+     <point level="1">PYX can do the same:</point>
+     <point level="2">pyxhtml file.html | pyxw > file.xhtml</point>
+     <point level="1">pyxhtml uses HTML::TreeBuilder</point>
+     </slide>
+     
+     <slide>
+     <title>XPath intro</title>
+     <point level="1">W3C Standard for locating nodes within an XML document</point>
+     <point level="1">A subset of XPath is used for "matching" nodes in XSLT</point>
+     <point level="1">Looks like directory paths: /path/to/node</point>
+     <point level="1">But that's an abbreviated syntax...</point>
+     <point level="2">/child::path/child::to/child::node</point>
+     <point level="1">Full grammar containing expressions, calculations, functions, etc</point>
+     </slide>
+     
+     <slide>
+     <title>XPath Examples</title>
+     <point level="1">Find title of XHTML document</point>
+     <source_code>/html/head/title</source_code>
+     <point level="1">Find all hrefs in &lt;a> tags</point>
+     <source_code>/html/body/descendant::a[@href]/@href</source_code>
+     </slide>
+     
+     <slide>
+     <title>XML::XPath</title>
+     <point level="1">Full implementation of W3C XPath on a DOM-like API</point>
+     <point level="1">Easy to use:</point>
+     <source_code><![CDATA[
+my $xp = XML::XPath->new(filename => "foo.xml");
+print $xp->findvalue("/html/head/title");
+     ]]></source_code>
+     <point level="1">Can also process HTML:</point>
+     <source_code><![CDATA[
+my $xp = XML::XPath->new(
+   filename => "pyxhtml foo.html | pyxw |");
+     ]]></source_code>
+     </slide>
+     
+     <slide>
+     <title>XML::XPath continued</title>
+     <point level="1">Every node has methods findvalue(), findnodes() and find()</point>
+     <source_code><![CDATA[
+my $xp = XML::XPath->new(filename => "foo.xml");
+foreach my $link ($xp->findnodes('/html/body/a[@href]')) {
+    print "Link: ", $link->findvalue('@href'), "\n";
+    # or :
+    # print "Link: ", $link->getAttribute('href'), "\n";
+}
+     ]]></source_code>
+     <point level="1">Not 100% DOM compatible, but close</point>
+     </slide>
+     
+     <slide>
+     <title>XML::XPath Implementation</title>
+     <point level="1">XML::Parser and SAX parsers build an in-memory tree</point>
+     <point level="1">Hand-built parser for XPath syntax (rather than YACC based parser)</point>
+     <point level="1">Garbage Collection yet still has circular references (and works on Perl 5.005)</point>
+     <image>pointers.png</image>
+     </slide>
+     
+     <slide>
+     <title>XML to XML Conversions</title>
+     <point level="1">Use XSLT (or XPathScript, see later)</point>
+     <point level="1">Either use the command line (e.g. xsltproc from libxslt)</point>
+     <point level="1">... or call from Perl:</point>
+     <source_code><![CDATA[
+use XML::LibXSLT;
+use XML::LibXML;
+my $parser = XML::LibXML->new();
+my $xslt = XML::LibXSLT->new();
+
+my $source_dom = $parser->parsefile('foo.xml');
+my $style_dom = $parser->parsefile('bar.xsl');
+
+my $stylesheet = $xslt->parse_stylesheet($style_dom);
+
+my $results = $stylesheet->transform($source_dom);
+print $stylesheet->output_string($results);
+     ]]></source_code>
+     </slide>
+     
+     <slide>
+     <title>SAX Filters</title>
+     <point level="1">SAX events passed between SAX handlers</point>
+     <point level="1">e.g. tags to lower case:</point>
+     <source_code><![CDATA[
+my $ya = XML::Handler::YAWriter->new( AsFile => '-' );
+my $lc = XML::Filter::ToLower->new( Handler => $ya );
+my $parser = XML::Parser::PerlSAX->new( Handler => $lc );
+
+package XML::Filter::ToLower;
+@ISA = ('XML::Filter::Base');
+sub start_element {
+  my ($self, $element) = @_;
+  $element->{Name} = lc($element->{Name});
+  $self->{Handler}->start_element($element);
+}
+sub end_element {
+  my ($self, $element) = @_;
+  $element->{Name} = lc($element->{Name});
+  $self->{Handler}->end_element($element);
+}
+     ]]></source_code>
+     </slide>
+     
+     <slide>
+     <title>SAX Filters (cont)</title>
+     <point>Almost any level of complexity possible</point>
+     <point>Chain as many filters together as you like</point>
+     <point>Fast way of processing XML</point>
+     <point level="2">We don't have to build a tree in memory</point>
+     <point>Possible to output to HTML using XML::Handler::HTMLWriter</point>
+     </slide>
+     
+  </slideset>
+  
+  <slideset>
+  <title>AxKit Introduction</title>
+  
+     <slide>
+     <title>AxKit Introduction</title>
+     <point level="1">XML Publishing Framework</point>
+     <point level="1">XML Application Server</point>
+     <point level="1">Designed for Content Diversification</point>
+     <point level="2">Same content, delivered differently</point>
+     <point level="2">HTML, WAP, PDF, SOAP, etc</point>
+     <point level="1">Built in C, Perl, and mod_perl/Apache</point>
+     <point level="1">Plugin Architecture, allows operation to be changed easily</point>
+     </slide>
+     
+     <slide>
+     <title>How does it work?</title>
+     <point level="1">Apache handle</point>
+     <point level="1">Embedded perl interpreter via mod_perl</point>
+     <point level="1">Apache Config directives</point>
+     <point level="1">Transformation Pipeline</point>
+     <point level="1">Language Modules implement stylesheets and other engines</point>
+     <point level="1">XSP for Dynamic Content</point>
+     <point level="1">Caching</point>
+     <point level="1">Apache::Filter Support</point>
+     </slide>
+     
+     <slide>
+     <title>mod_perl</title>
+     <point level="1">mod_perl used to implement most of AxKit</point>
+     <point level="1">... though more code being ported to C all the time</point>
+     <point level="1">Gives us bytecode compiled Perl</point>
+     <point level="1">Makes development faster</point>
+     </slide>
+     
+     <slide>
+     <title>Configuration Directives</title>
+     <point level="1">Config directives written in the C code</point>
+     <point level="1">Implemented on top of Apache</point>
+     <point level="1">Fits in with httpd.conf and .htaccess files</point>
+     <point level="1">28 Config directives in total</point>
+     <point level="1">Setup the pipeline, debugging options, and various other flags</point>
+     </slide>
+     
+     <slide>
+     <title>Config Directives examples</title>
+     <source_code><![CDATA[
+AxDebugLevel 5
+AxCacheDir /tmp/axkit_cache
+
+<Location /apps/calendar>
+
+ AxAddProcessor application/x-xsp .
+
+ <AxMediaType handheld>
+  AxAddProcessor text/xsl /styles/cal2wml.xsl
+ </AxMediaType>
+ <AxMediaType screen>
+  AxAddProcessor text/xsl /styles/cal2html.xsl
+ </AxMediaType>
+
+</Location>
+     ]]></source_code>
+     </slide>
+     
+     <slide>
+     <title>Transformation Pipeline</title>
+     <point level="1">AxKit is a pipeline engine</point>
+     <point level="1">Output of one stage goes to input of the next</point>
+     <point level="1">Allows us to build up our application in stages</point>
+     <point level="1">Pipeline passed as one of:</point>
+     <point level="2">String</point>
+     <point level="2">DOM Tree</point>
+     <point level="2">SAX events</point>
+     </slide>
+     
+     <slide>
+     <title>Language Modules</title>
+     <point level="1">Every stage in the pipeline implemented by a language module</point>
+     <point level="1">Language modules can either use a stylesheet for transformation or not</point>
+     <point level="2">Examples of modules not using a stylesheet are "XSL:FO to PDF", XSP, and the module which produces this slideshow</point>
+     <point level="1">Different implementations of same language possible, e.g. XSLT</point>
+     <point level="2">XML::LibXSLT</point>
+     <point level="2">XML::Sablotron</point>
+     <point level="2">XML::XSLT</point>
+     <point level="2">XML::Xalan</point>
+     <point level="2">XML::Transformiix</point>
+     </slide>
+     
+     <slide>
+     <title>Languages modules available</title>
+     <point level="1">XSLT</point>
+     <point level="1">XPathScript</point>
+     <point level="1">XSP</point>
+     <point level="1">AxPoint (this slideshow)</point>
+     <point level="1">XMLNews::HTMLTemplate</point>
+     <point level="1">Template Toolkit w/XPath plugin</point>
+     </slide>
+     
+     <slide>
+     <title>Caching</title>
+     <point level="1">XML Transformation can be slow, caching vital to making a fast XML Publishing Engine</point>
+     <point level="1">Cache uses the filesystem, not memory or DBM files</point>
+     <point level="1">Cache results of transformation pipeline, where appropriate</point>
+     <point level="1">Cache results of dynamic processing by implementing has_changed() method</point>
+     <point level="1">Using filesystem allows Apache to deliver the cache directly:</point>
+     <source_code>Apache->request->filename = &lt;cache-file>;
+return DECLINED;
+</source_code>
+     </slide>
+     
+     <slide>
+     <title>Cache (cont.)</title>
+     <point level="1">Fastest possible implementation of a cache</point>
+     <point level="1">Default storage place is .xmlstyle_cache directory in same directory as XML file</point>
+     <point level="1">Overridable using AxCacheDir directive</point>
+     <point level="1">Files named as MD5 hash of XML filename, media type, style name and optionally run-time parameters that may affect the cache</point>
+     <point level="1">Does use large amounts of space, so can be turned off</point>
+     </slide>
+     
+     <slide>
+     <title>Non Cache-able content</title>
+     <point level="1">POST requests usually not cacheable</point>
+     <point level="1">XSP pages usually not cacheable</point>
+     <point level="1">Can turn off the cache in Perl code:</point>
+     <source_code>$r->no_cache(1);</source_code>
+     <point level="1">Cache can be modified using plugins, so cache can be based on phase of the moon</point>
+     </slide>
+     
+     <slide>
+     <title>Apache::Filter Support</title>
+     <point level="1">Alternate plugin "Provider" module</point>
+     <point level="1">AxKit can get XML from previous mod_perl handler</point>
+     <point level="1">Works with Apache::ASP, HTML::Mason, etc</point>
+     </slide>
+     
+     <slide>
+     <title>Apache::Filter example</title>
+     <point level="1">ASP Script</point>
+     <source_code><![CDATA[
+<?xml version="1.0"?>
+<?xml-stylesheet href="/foo.xsl" type="text/xsl"?>
+<page>
+<head><title>Hello World</title></head>
+<body>
+<section>
+<title>Test Page</title>
+<para>
+Hello World
+</para>
+<para>
+The time is now: <%= localtime %>
+</para>
+</body>
+</page>
+     ]]></source_code>
+     </slide>
+     
+     <slide>
+     <title>Apache::Filter example (stylesheet)</title>
+     <source_code><![CDATA[
+<xsl:stylesheet version="1.0"
+xmlns:xsl="http://www.w3.org/1999/XSL/Transform">
+
+<xsl:template match="/">
+<html>
+<head><title><xsl:value-of select="/page/head/title"/> </title></head>
+<body>
+<xsl:apply-templates/>
+</body>
+</html>
+</xsl:template>
+
+<xsl:template match="section">
+<h1><xsl:value-of select="title"/></h1>
+<xsl:apply-templates select="para"/>
+</xsl:template>
+
+<xsl:template match="para">
+<p><xsl:apply-templates/></p>
+</xsl:template>
+
+</xsl:stylesheet>
+     ]]></source_code>
+     </slide>
+     
+     <slide>
+     <title>Apache::Filter example (results)</title>
+     <source_code><![CDATA[
+<html>
+<head><title>Hello World</title></head>
+<body>
+<h1>Test Page</h1>
+<p>
+Hello World
+</p>
+<p>
+The time is now: Tue May  8 07:41:33 2001
+</p>
+</body>
+</html>
+     ]]></source_code>
+     </slide>
+     
+     <slide>
+     <title>Gzipped Output</title>
+     <point level="1">Many HTTP/1.1 browsers will accept gzip encoded results (modulo bugs)</point>
+     <point level="1">AxKit can check Accept-Encoding header for this capability</point>
+     <point level="1">Will then gzip content before delivery</point>
+     <point level="1">Cache stores regular and gzipped copy</point>
+     <point level="1">Reduces used bandwidth by up to 85%</point>
+     </slide>
+     
+     <slide>
+     <title>Developer's Perspective</title>
+     <point level="1">Two ways to tell AxKit how to process XML</point>
+     <point level="2">Processing Instructions in the XML</point>
+     <source_code><![CDATA[
+<?xml-stylesheet href="/styles/foo.xsl" type="text/xsl"?>
+     ]]></source_code>
+     <point level="2">Configuration Directives in httpd.conf</point>
+     <source_code><![CDATA[
+AxAddProcessor text/xsl /styles/foo.xsl
+     ]]></source_code>
+     <point level="1">PIs act as override mechanism</point>
+     <point level="1">Also PIs are sometimes appropriate, e.g. for XSP files</point>
+     </slide>
+     
+     <slide>
+     <title>Processing Instructions</title>
+     <point level="1">Follows the W3C xml-stylesheet REC</point>
+     <point level="1">Works almost identically to HTML's LINK element</point>
+     <point level="1">Processing instruction is just &lt;?target data?>, so attributes are called "psuedo attributes"</point>
+     <point level="1">Allowed attributes:</point>
+     <point level="2">href - the location of the stylesheet</point>
+     <point level="2">type - the mime type of the stylesheet</point>
+     <point level="2">alternate - yes or no, specifies alternate styling</point>
+     <point level="2">media - media type this stylesheet applies to</point>
+     <point level="2">title - group this stylesheet belongs to</point>
+     <point level="1">Only href and type are required</point>
+     </slide>
+     
+     <slide>
+     <title>Config Directives</title>
+     <point level="1">More complex and more powerful than PIs</point>
+     <source_code><![CDATA[
+AxAddProcessor text/xsl /styles/foo.xsl
+AxAddRootProcessor text/xsl /styles/article.xsl article
+AxAddDocTypeProcessor text/xsl /styles/docbook.xsl \
+        "-//OASIS//DTD DocBook XML V4.1.2//EN"
+AxAddDTDProcessor text/xsl /styles/bar.xsl /dtds/bar.dtd
+AxAddURIProcessor text/xsl /styles/book.xsl \
+        "book.*\.xml$"
+     ]]></source_code>
+     <point level="1">Fully documented in perldoc AxKit</point>
+     </slide>
+     
+     <slide>
+     <title>AxKit vs Cocoon</title>
+     <point level="1">Cocoon is a Servlet implementing some of the same functionality</point>
+     <point level="1">AxKit is tied to Apache</point>
+     <point level="1">Cocoon 2 [alpha] adds features like AxKit config directives</point>
+     <point level="1">Both implement XSP, and collaborate on the spec</point>
+     <point level="1">Both open source</point>
+     <point level="1">Perl and C vs Java</point>
+     <point level="1">Use what fits your environment</point>
+     </slide>
+     
+  </slideset>
+  
+  <slideset>
+     <title>AxKit for Static Content</title>
+     
+     <slide>
+     <title>XML Publishing</title>
+     <point level="1">Using XML for the source of all our web site's content</point>
+     <point level="1">Semantically rich original data</point>
+     <point level="1">Delivery to different media types</point>
+     <point level="2">Example - slides</point>
+     <point level="3">Deliver to HTML</point>
+     <point level="3">Or PDF</point>
+     <point level="3">Or plain text</point>
+     <point level="2">AxKit can detect via plugins, which version the user wants</point>
+     </slide>
+     
+     <slide>
+     <title>XML Based Content</title>
+     <point level="1">DocBook</point>
+     <point level="1">XHTML</point>
+     <point level="1">TEI XML</point>
+     <point level="1">RSS</point>
+     <point level="1">MyML - invent your own!</point>
+     <point level="1">Or use Provider interface...</point>
+     <point level="2">OpenOffice</point>
+     <point level="2">MS Word (via libwv)</point>
+     <point level="2">Content Management System</point>
+     <point level="1">Or use other mod_perl modules (Mason, ASP, etc) to generate XML</point>
+     </slide>
+     
+     <slide>
+     <title>The Value of Semantics</title>
+     <point level="1">HTML has low semantic value</point>
+     <point level="1">Example point - farming the web</point>
+     <point level="1">XML provides the ability to add value to our content</point>
+     <point level="1">But we still need to deliver it as HTML</point>
+     <point level="1">AxKit can give you the best of both worlds</point>
+     </slide>
+     
+     <slide>
+     <title>Alternative Media</title>
+     <point level="1">The web is no longer just web browsers on PCs</point>
+     <point level="1">TV is becoming huge, Phone/Handheld is already huge</point>
+     <point level="1">But the cost of entry into different media types is still high</point>
+     <point level="1">Using XML for our content reduces that cost of entry</point>
+     <point level="2">And it will reduce your long term costs</point>
+     </slide>
+     
+     <slide>
+     <title>Media vs Styles</title>
+     <point level="1">Same concept, different reasons</point>
+     <point level="1">Use different styles for the same media device</point>
+     <point level="1">e.g. No graphics HTML version, printable version,
+     PDF version. All delivered to browsers on PCs</point>
+     <point level="1">Some applications in personalisation</point>
+     </slide>
+     
+     <slide>
+     <title>The Key - Stylesheets</title>
+     <point level="1">Stylesheets translate XML on the fly to different formats</point>
+     <point level="1">Different stylesheets used for different media types</point>
+     <point level="1">... and for different styles of the same media type</point>
+     <point level="1">Generally, content is cached for increased performance</point>
+     </slide>
+     
+     <slide>
+     <title>What is the benefit to you?</title>
+     <point level="1">Web Developers benefit because of separation of concerns</point>
+     <point level="1">Content</point>
+     <point level="1">Presentation</point>
+     <point level="1">Logic</point>
+     <point level="1">Site Management</point>
+     </slide>
+     
+     <slide>
+     <title>Development Scalability</title>
+     <point level="1">Long term site management is a mess without separation of concerns</point>
+     <point level="1">Templates vs print print print</point>
+     <point level="2">But we can do better</point>
+     <point level="1">Different devices throws a spanner in the works</point>
+     <point level="1">Ideal is for content creators to focus on content, developers to focus on logic, designers to focus on presentation, and webmasters to focus on site management</point>
+     <point level="1">Unfortunately this is still idealistic, but much better than print print print</point>
+     </slide>
+     
+     <slide>
+     <title>Content Authoring</title>
+     <point level="1">XML Editors</point>
+     <point level="1">WYSIWYM Editors (What You See Is What You Mean)</point>
+     <point level="1">foo2xml can also be used (e.g. pod2xml)</point>
+     <point level="1">Mostly commercial offerings: Adept, XMeTaL, XMLSpy</point>
+     <point level="1">Open source options: OpenOffice, Emacs+psgml, jedit</point>
+     <point level="1">Some re-training may be required</point>
+     </slide>
+     
+     <slide>
+     <title>Presentation Layer</title>
+     <point level="1">Currently the hardest part of converting from static HTML sites</point>
+     <point level="1">Some commercial tools available for writing XSLT stylesheets</point>
+     <point level="1">Sometimes templates generated using HTML tools (e.g. Frontpage) possible</point>
+     <point level="1">Often best way is to get a design, then have a stylesheet guru convert that</point>
+     </slide>
+     
+     <slide>
+     <title>Business Logic</title>
+     <point level="1">AxKit uses taglib concept</point>
+     <point level="1">Logic wrapped in XML tags</point>
+     <source_code>&lt;order_fluglebar quantity="1"/></source_code>
+     <point level="1">Designers can drop these tags into their XML</point>
+     <point level="1">Logic tags output XML, not HTML</point>
+     <point level="1">Thus logic can be used for any output media/style</point>
+     <point level="1">See next section (Dynamic Content)</point>
+     </slide>
+     
+     <slide>
+     <title>Site Management</title>
+     <point level="1">AxKit uses Apache config directives in httpd.conf/.htaccess</point>
+     <point level="1">Allows you to use your web master skills</point>
+     <point level="1">Also allows flexible configuration based on &lt;Location>, &lt;Files>, and &lt;Directory> directives</point>
+     </slide>
+     
+     <slide>
+     <title>XSLT Overview</title>
+     <point level="1">Reformation of transformation part of DSSSL into XML (from Scheme)</point>
+     <point level="1">Functional language (no side effects)</point>
+     <point level="1">Rules based ("apply this template when we see this element")</point>
+     <point level="1">Implemented in AxKit via:</point>
+     <point level="2">XML::LibXSLT (very fast compliant processor from Red Hat Labs</point>
+     <point level="2">XML::Sablotron (lightweight processor from Ginger Alliance</point>
+     <point level="2">Others: XML::Xalan, XML::XSLT, XML::Transformiix</point>
+     </slide>
+     
+     <slide>
+     <title>XPathScript Overview</title>
+     <point level="1">Combination of:</point>
+     <point level="2">Perl</point>
+     <point level="2">ASP &lt;% %> delimiters</point>
+     <point level="2">XML::XPath for locating nodes in the source XML</point>
+     <point level="2">Declarative (Rules based) processing</point>
+     <point level="1">Not a functional language</point>
+     <point level="1">Side effects allowed</point>
+     <point level="1">Full access to Apache API</point>
+     </slide>
+     
+     <slide>
+     <title>XPathScript example (xml)</title>
+     <source_code><![CDATA[
+<employees>
+ <employee>
+  <name>
+   <firstname>Roger</firstname>
+   <lastname>Rabbit</lastname>
+  </name>
+  <department>Humour</department>
+ </employee>
+ <employee>
+  <name>
+   <firstname>Jessica</firstname>
+   <lastname>Rabbit</lastname>
+  </name>
+  <department>Modelling</department>
+ </employee>
+</employees>
+     ]]></source_code>
+     </slide>
+     
+     <slide>
+     <title>XPathScript example (stylesheet)</title>
+     <source_code><![CDATA[
+<html>
+<head><title>Employee List</title></head>
+<body>
+<h1>Employees at Acme Corp.</h1>
+
+<% foreach my $employee (findnodes('/employees/employee')) { %>
+
+<b><%= $employee->findvalue("name/lastname") %>,
+<%= $employee->findvalue("name/firstname") %></b>
+works in the <%= $employee->findvalue('department') %>
+department.
+
+<hr>
+
+<% } %>
+
+</body>
+</html>
+     ]]></source_code>
+     </slide>
+     
+     <slide>
+     <title>XPathScript example (results)</title>
+     <source_code><![CDATA[
+<html>
+<head><title>Employee List</title></head>
+<body>
+<h1>Employees at Acme Corp.</h1>
+
+<b>Rabbit, Roger</b> works in the Humour department
+<hr>
+<b>Rabbit, Jessica</b> works in the Modelling department
+<hr>
+</body>
+</html> 
+     ]]></source_code>
+     </slide>
+     
+     <slide>
+     <title>XPathScript - Processing Documents</title>
+     <point level="1">Transforming Data is very different to transforming Documents</point>
+     <point level="1">Documents have mixed content</point>
+     <point level="1">Needs rules based processing</point>
+     <point level="1">XPathScript implements a feature rich declarative processing system</point>
+     </slide>
+     
+     <slide>
+     <title>XPathScript - Declarative Templates</title>
+     <point level="1">The $t hash reference</point>
+     <source_code><![CDATA[
+$t->{'para'}{pre} = '<p>';
+$t->{'para'}{post} = '</p>';
+     ]]></source_code>
+     <point level="1">Matches element names (unlike XSLT)</point>
+     <point level="1">XPathScript applies the rules as it traverses the document tree</point>
+     </slide>
+     
+     <slide>
+     <title>XPathScript - $t subkeys</title>
+     <point level="1">Sub-keys of $t specify what to do</point>
+     <point level="1">Keys who's value is something to add to the ouput:</point>
+     <point level="2">pre</point>
+     <point level="2">post</point>
+     <point level="2">prechildren</point>
+     <point level="2">postchildren</point>
+     <point level="2">prechild</point>
+     <point level="2">postchild</point>
+     <point level="1">Other keys:</point>
+     <point level="2">showtag</point>
+     <point level="2">testcode</point>
+     </slide>
+     
+     <slide>
+     <title>XPathScript - testcode</title>
+     <point level="1">testcode value is a code ref</point>
+     <point level="1">Executed every time an element with that name is visited</point>
+     <point level="1">Gives access to XML::XPath API on that node, and a local copy of $t</point>
+     <source_code><![CDATA[
+$t->{'a'}{testcode} = sub {
+  my ($node, $t2) = @_;
+  if ($node->findvalue('@name')) {
+    # process as anchor
+  }
+  else {
+    # process as link
+  }
+  return DO_SELF_AND_KIDS;
+};
+     ]]></source_code>
+     </slide>
+     
+     <slide>
+     <title>XPathScript tech details</title>
+     <point level="1">Script is compiled into Perl code</point>
+     <point level="1">Compiled once on first hit. Only re-compiled if changed</point>
+     <point level="1">Imports some functions: apply_templates(), findnodes(), findvalue()</point>
+     <point level="1">Fast enough for most real-time transformation needs (e.g. for dynamic content</point>
+     </slide>
+     
+     <slide>
+     <title>Complete Example</title>
+     <point level="1">Take23.org - mod_perl news and resources</point>
+     <point level="1">Uses RSS 1.0 for all headlines and syndication</point>
+     <point level="1">Static Content, but looks dynamic</point>
+     <point level="1">Accepts content for articles in:</point>
+     <point level="2">XHTML</point>
+     <point level="2">DocBook</point>
+     <point level="2">POD (via pod2xml)</point>
+     <point level="2">OpenOffice 614 XML</point>
+     </slide>
+     
+     <slide>
+     <title>Take23 - how it works</title>
+     <point level="1">httpd.conf contains AxAddRootProcessor directives</point>
+     <point level="1">Stylesheets written in XPathScript</point>
+     <point level="1">Stylesheets componentized to maximize reuse</point>
+     <point level="1">Uses OpenOffice provider module from AxKit.com to read OpenOffice files as XML</point>
+     <point level="1">News items created using AxKit::NewsMaker, a lightweight RSS/News content management system</point>
+     <point level="1">Cached content delivered at static HTML speeds</point>
+     </slide>
+          
+  </slideset>
+  
+  <slideset>
+     <title>AxKit for Dynamic Content</title>
+     
+     <slide>
+     <title>XSP is the Key</title>
+     <point level="1">XSP is an XML language invented by the Cocoon Project at Apache</point>
+     <point level="1">XSP is implementation language agnostic</point>
+     <point level="2">Cocoon implements using Java</point>
+     <point level="2">AxKit implements using Perl</point>
+     <point level="1">XSP allows you to embed code in XML</point>
+     <point level="1">XSP is a page-based language like PHP and ASP</point>
+     <point level="1">... but XSP is better because you generate XML, maintaining separation of concerns</point>
+     </slide>
+     
+     <slide>
+     <title>XSP Example</title>
+     <source_code><![CDATA[
+<xsp:page xmlns:xsp="http://www.apache.org/1999/XSP/Core"
+  language="Perl">
+<time>
+ <xsp:expr>localtime(time)</xsp:expr>
+</time>
+</xsp:page>
+     ]]></source_code>
+     <point level="1">Which generates:</point>
+     <source_code><![CDATA[
+<time>
+  Tue May  8 10:20:03 2001
+</time>
+     ]]></source_code>
+     <point level="1">Note: we then transform to HTML in the next part of the pipeline</point>
+     </slide>
+     
+     <slide>
+     <title>XSP Lowdown</title>
+     <point level="1">XSP implements 11 core tags</point>
+     <point level="2">page</point>
+     <point level="2">structure</point>
+     <point level="2">import</point>
+     <point level="2">content</point>
+     <point level="2">logic</point>
+     <point level="2">element</point>
+     <point level="2">attribute</point>
+     <point level="2">pi</point>
+     <point level="2">comment</point>
+     <point level="2">text</point>
+     <point level="2">expr</point>
+     <point level="1">(plus a couple of other minor/supporting tags)</point>
+     </slide>
+     
+     <slide>
+     <title>XSP and Namespaces</title>
+     <point level="1">XML Namespaces are key to how XSP works</point>
+     <source_code>
+&lt;prefix:tag xmlns:prefix="URI">
+     </source_code>
+     <point level="1">Each namespace can either implement custom functionality</point>
+     <point level="1">... or just be part of the output</point>
+     <point level="1">We call the namespaces "Tag Libraries", or taglibs for short</point>
+     </slide>
+     
+     <slide>
+     <title>More XSP Examples</title>
+     <source_code><![CDATA[
+<xsp:page xmlns:xsp="http://www.apache.org/1999/XSP/Core"
+  language="Perl">
+<xsp:structure>
+  <xsp:import>Time::Piece</xsp:import>
+</xsp:structure>
+
+<xsp:logic>
+  sub afternoon {
+    return localtime->hour > 12;
+  }
+</xsp:logic>
+
+<page>
+<xsp:logic>
+if (afternoon()) {
+<xsp:content>
+Good <em>Afternoon!!!</em>
+</xsp:content>
+}
+else {
+<xsp:content>
+Good <em>Morning!!!</em>
+</xsp:content>
+}
+</xsp:logic>
+</page>
+</xsp:page>
+     ]]></source_code>
+     </slide>
+     
+     <slide>
+     <title>XSP Implementation</title>
+     <point level="1">SAX Parser, callbacks generate Perl code</point>
+     <point level="1">Perl compiled into a unique class</point>
+     <point level="1">handler() method wraps non-XSP top level tags (&lt;page> tag in previous example)</point>
+     <point level="1">xsp:logic outside of top level tags can generate local functions</point>
+     <point level="2">mod_perl developers will know how handy this is to avoid closure problems</point>
+     <point level="1">Parser code implements "namespace dispatch"</point>
+     <point level="1">taglib implementations register with the core XSP parser engine's namespace dispatch system</point>
+     </slide>
+     
+     <slide>
+     <title>XSP Taglibs</title>
+     <point level="1">Taglibs implement custom functionality</point>
+     <point level="1">Usually this is business logic</point>
+     <point level="1">Some low level taglibs exist on CPAN:</point>
+     <point level="2">Param</point>
+     <point level="2">Utils</point>
+     <point level="2">Cookie</point>
+     <point level="2">ParamAttrib</point>
+     <point level="2">SendMail</point>
+     <point level="2">Exceptions</point>
+     <point level="2">ESQL</point>
+     </slide>
+     
+     <slide>
+     <title>Implementing Taglibs</title>
+     <point level="1">3 ways to implement taglibs (in decreasing levels of difficulty)</point>
+     <point level="1">1. Write a Stylesheet</point>
+     <point level="2">this transforms the taglib tags into core XSP tags</point>
+     <point level="1">2. Write a SAX parser</point>
+     <point level="2">here the parser has to write perl code</point>
+     <point level="1">3. Use the AxKit TaglibHelper module</point>
+     <point level="2">here you just write a Perl module, naming the functions after the tags you want to implement</point>
+     <point level="1">Most of the taglibs on CPAN use method 2 at the moment, simply because of when TaglibHelper appeared</point>
+     </slide>
+     
+     <slide>
+     <title>Param Taglib</title>
+     <source_code><![CDATA[
+<xsp:page
+ xmlns:xsp="http://apache.org/xsp/core/v1"
+ xmlns:param="http://axkit.org/NS/xsp/param/v1"
+ language="Perl"
+>
+<page>
+ <xsp:logic>
+  if (<param:name/>) {
+  <xsp:content>
+   Your name is: <param:name/>
+  </xsp:content>
+  }
+  else {
+  <xsp:content>
+   <form>
+   Enter your name: <input type="text" name="name" />
+   <input type="submit"/>
+   </form>
+  </xsp:content>
+  }
+ </xsp:logic>
+</page>
+</xsp:page>
+     ]]></source_code>
+     </slide>
+     
+     <slide>
+     <title>Things to note...</title>
+     <point level="1">Freely mixed Perl and XML</point>
+     <point level="2">No &lt;% ... %> to introduce one or the other</point>
+     <point level="2">An XSP page is pure XML</point>
+     <point level="1">That has consequences:</point>
+     <source_code><![CDATA[
+<xsp:logic>
+my $page = <param:page/>
+if ($page < 3) { # INVALID CODE. < not allowed in XML
+  ...
+}
+</xsp:logic>
+     ]]></source_code>
+     <point level="1">Could iritate some people</point>
+     <point level="1">Easy to fix this case. Use 3 > $page</point>
+     </slide>
+     
+     <slide>
+     <title>Cookie Taglib</title>
+     <source_code><![CDATA[
+<xsp:page
+ xmlns:xsp="http://apache.org/xsp/core/v1"
+ xmlns:cookie="http://axkit.org/NS/xsp/cookie/v1"
+ language="Perl"
+>
+<page>
+ <xsp:logic>
+ my $value;
+ if ($value = <cookie:fetch name="count"/>) {
+  $value++;
+ }
+ else {
+  $value = 1;
+ }
+ </xsp:logic>
+
+ <cookie:create name="count">
+  <cookie:value><xsp:expr>$value</xsp:expr></cookie:value>
+ </cookie:create>
+
+ <p>Cookie value: <xsp:expr>$value</xsp:expr></p>
+</page>
+</xsp:page>
+     ]]></source_code>
+     </slide>
+     
+     <slide>
+     <title>More things to note</title>
+     <point level="1">XSP extends Perl's notion of DWIM (Do What I Mean)</point>
+     <point level="1">Note how the cookie:value is taken from a Perl expression</point>
+     <point level="1">It could equally have been hard coded. Witness these three versions:</point>
+     <source_code><![CDATA[
+<cookie:value>3</cookie:value>
+<cookie:value><xsp:expr>2 + 1</xsp:expr></cookie:value>
+<cookie:value><param:cookie_value/></cookie:value>
+     ]]></source_code>
+     <point level="1">All produce valid code</point>
+     </slide>
+     
+     <slide>
+     <title>SendMail Taglib</title>
+     <source_code><![CDATA[
+<xsp:page (namespace stuff removed for space issues)>
+<page>
+ <xsp:logic>
+  if (!<param:email/>) {
+   <p>You forgot to supply an email address!</p>
+  }
+  else {
+   if (<param:subopt/> eq "sub") {
+    $to = "axkit-users-subscribe@axkit.org";
+   }
+   elsif (<param:subopt/> eq "unsub") {
+    $to = "axkit-users-unsubscribe@axkit.org";
+   }
+   <mail:send-mail>
+    <mail:from><param:user_email/></mail:from>
+    <mail:to><xsp:expr>$to</xsp:expr></mail:to>
+    <mail:body>Subscribe or Unsubscribe <param:user_email/></mail:body>
+   </mail:send-mail>
+   <p>(un)subscription request sent</p>
+  }
+ </xsp:logic>
+</page>
+</xsp:page>
+     ]]></source_code>
+     </slide>
+     
+     <slide>
+     <title>Exceptions Taglib</title>
+     <point level="1">Previous slides lacking error handling</point>
+     <point level="1">All AxKit taglibs throw exceptions on error</point>
+     <point level="1">Need Exception taglib to catch them</point>
+     <source_code><![CDATA[
+<except:try>
+ ... # code that throws exceptions
+ <except:catch>
+  <error>An Error Occured: <except:message/></error>
+ </except:catch>
+</except:try>
+     ]]></source_code>
+     </slide>
+     
+     <slide>
+     <title>ESQL Taglib</title>
+     <point level="1">The mother of all taglibs</point>
+     <point level="1">Executes SQL against DBI connections</point>
+     <point level="1">Add Apache::DBI in the mix for cached connections</point>
+     <point level="1">Options for SQL with or without results</point>
+     <point level="1">Columns can be retrieved all at once, or one at a time</point>
+     <point level="1">Allows emulation of nested queries (e.g. for MySQL)</point>
+     </slide>
+     
+     <slide>
+     <title>ESQL Example</title>
+     <source_code><![CDATA[
+<xsp:page
+  language="Perl"
+  xmlns:xsp="http://apache.org/xsp/core/v1"
+  xmlns:esql="http://apache.org/xsp/SQL/v2"
+  xmlns:except="http://axkit.org/NS/xsp/exception/v1"
+  xmlns:param="http://axkit.org/NS/xsp/param/v1"
+  indent-result="no"
+>
+<addresses>
+ <esql:connection>
+  <!-- connection parameters (normally use entities for these) -->
+  <esql:driver>Pg</esql:driver>
+  <esql:dburl>dbname=phonebook</esql:dburl>
+  <esql:username>postgres</esql:username>
+  <esql:password></esql:password>
+
+  <except:try>
+
+  <esql:execute-query>
+     ]]></source_code>
+     </slide>
+     
+     <slide>
+     <title>ESQL Example (cont)</title>
+     <source_code><![CDATA[
+   <xsp:logic>
+   if (<param:address_id/>) {
+    <esql:query>
+     SELECT * FROM address WHERE id =
+     <esql:parameter><param:address_id/></esql:parameter>
+    </esql:query>
+   }
+   else {
+    <esql:query>
+     SELECT * FROM address
+    </esql:query>
+   }
+   </xsp:logic>
+
+   <esql:results>
+    <esql:row-results>
+    <address>
+     <esql:get-columns/>
+    </address>
+    </esql:row-results>
+   </esql:results>
+  </esql:execute-query>
+     ]]></source_code>
+     </slide>
+     
+     <slide>
+     <title>ESQL Example (cont)</title>
+     <source_code><![CDATA[
+
+  <except:catch>
+   Error Occured: <except:message/>
+  </except:catch>
+
+ </except:try>
+
+ </esql:connection>
+</addresses>
+</xsp:page>
+     ]]></source_code>
+     </slide>
+     
+     <slide>
+     <title>ESQL Example (results)</title>
+     <source_code><![CDATA[
+<addresses>
+ <address>
+  <id>2</id>
+  <last_name>Sergeant</last_name>
+  <first_name>Matt</first_name>
+  <title>Mr</title>
+  <company>AxKit.com Ltd</company>
+  <email>matt@axkit.com</email>
+  <classification_id>1</classification_id>
+ </address>
+</addresses>
+     ]]></source_code>
+     </slide>
+     
+     <slide>
+     <title>PerForm</title>
+     <point>Easy Form handling</point>
+     <point>Should allow for same form to be presented to WML or other formats. But HTML is the priority</point>
+     <point>Callback based</point>
+     <point>Supports validation, loading, start/end form</point>
+     <point>Generates XML abstract form, not HTML or XHTML form</point>
+     <point>Example XSLT supplied for transforming to HTML</point>
+     </slide>
+     
+     <slide>
+     <title>PerForm (example)</title>
+     <source_code><![CDATA[
+<xsp:page>
+<xsp:logic>
+...
+</xsl:logic>
+<html>
+
+<head><title>Index</title></head>
+<body>
+  <f:form name="view">
+  <h2>View Items</h2>
+  <f:single-select name="types"/>
+  <f:submit name="go" value="Go!"/>
+  </f:form>
+</body>
+</html>
+</xsp:page>
+     ]]></source_code>
+     <point>Callbacks implemented in top-level &lt;xsp:logic> section</point>
+     </slide>
+     
+     <slide>
+     <title>PerForm (example cont)</title>
+     <point>Callbacks:</point>
+     <source_code><![CDATA[
+sub load_types {
+  my ($ctxt, $selected) = @_;
+  
+  my $db = AxKit::RHNews::DB->instance();
+  my @types = $db->get_asset_types();
+  return $selected, "All Types" => "0", map { $_->[1] => $_->[1] } @types;
+}
+
+use Apache::Util ();
+
+sub submit_go {
+  my ($ctxt) = @_;
+  return "view_asset.xsp?type=" . Apache::Util::escape_uri($ctxt->{Form}{types});
+}
+     ]]></source_code>
+     </slide>
+     
+     <slide>
+     <title>Building your XSP Based App</title>
+     <point level="1">Hide logic in taglibs</point>
+     <point level="1">Or hide logic in Perl modules called from &lt;xsp:logic> and &lt;xsp:expr> sections</point>
+     <point level="1">Generate XML, not HTML</point>
+     <point level="1">Process to HTML in a further pipeline transformation</point>
+     </slide>
+     
+  </slideset>
+  
+  <slideset>
+  <title>Advanced AxKit</title>
+  
+  <slide>
+  <title>Alternate Providers</title>
+  <point>Builtins: File, Filter, Scalar</point>
+  <point>Others: e.g. OpenOffice</point>
+  <point>API:</point>
+  <point level="2">init( %params )</point>
+  <point level="2">key() = string</point>
+  <point level="2">exists() = ?</point>
+  <point level="2">process() = ?</point>
+  <point level="2">decline(%args)</point>
+  <point level="2">mtime() = int</point>
+  <point level="2">get_fh() = FH</point>
+  <point level="2">get_strref() = strref</point>
+  <point level="2">has_changed($mtime) = ?</point>
+  <point level="2">get_ext_ent_handler() = subref</point>
+  <point level="2">get_styles($media, $style)</point>
+  </slide>
+  
+  <slide>
+  <title>Example: Ever expiring file</title>
+  <source_code><![CDATA[
+package Apache::AxKit::Provider::ExpireFile;
+use Apache::AxKit::Provider::File;
+@ISA = ('Apache::AxKit::Provider::File');
+
+sub has_changed {
+  my ($self, $mtime) = @_;
+  return 1;
+}
+
+1;
+  ]]></source_code>
+  <point>httpd.conf</point>
+  <source_code><![CDATA[
+AxProvider Apache::AxKit::Provider::ExpireFile
+  ]]></source_code>
+  </slide>
+  
+  <slide>
+  <title>Alternate ConfigReaders</title>
+  <point level="2">new($r)</point>
+  <point level="2">StyleMap() = hashref</point>
+  <point level="2">CacheDir() = string</point>
+  <point level="2">ProviderClass() = string</point>
+  <point level="2">PreferredStyle() = string</point>
+  <point level="2">PreferredMedia() = string</point>
+  <point level="2">CacheModule() = string</point>
+  <point level="2">DebugLevel() = int</point>
+  <point level="2">StackTrace() = ?</point>
+  <point level="2">LogDeclines() = ?</point>
+  <point level="2">OutputCharset() = string</point>
+  <point level="2">ErrorStyles() = complex</point>
+  <point level="2">GzipOutput() = ?</point>
+  <point level="2">DoGzip() = ?</point>
+  <point level="2">GetMatchingProcessors() = complex</point>
+  <point level="2">XSPTaglibs() = list</point>
+  </slide>
+  
+  <slide>
+  <title>Alternate Cache Module</title>
+  <point>Possibly store cache in a database</point>
+  <point>API:</point>
+  <point level="2">new($r, $xmlfile, @parts)</point>
+  <point level="2">write($string)</point>
+  <point level="2">read() = string</point>
+  <point level="2">get_fh() = FH</point>
+  <point level="2">deliver()</point>
+  <point level="2">reset()</point>
+  <point level="2">has_changed($mtime) = ?</point>
+  <point level="2">mtime()</point>
+  <point level="2">exists() = ?</point>
+  <point level="2">key() = string</point>
+  <point level="2">no_cache($on)</point>
+  </slide>
+  
+  </slideset>
+  
+  <slide>
+  <title>AxKit Future Plans</title>
+  <point level="1">Content Management System, for easier site building and maintainence</point>
+  <point level="1">Apache 2.0 Port</point>
+  <point level="1">More SAX work, more C work</point>
+  <point level="1">Allow JSP taglibs to work</point>
+  </slide>
+  
+  <slide>
+  <title>Conclusions</title>
+  <point level="1">Perl and XML are a powerful combination</point>
+  <point level="1">XPath and XSLT add to the mix...</point>
+  <point level="1">AxKit can reduce your long term costs</point>
+  <point level="2">In site re-design</point>
+  <point level="2">and in content re-purposing</point>
+  <point level="1">Open Source equal to commercial alternatives</point>
+  </slide>
+  
+  <slide>
+  <title>Resources and contact</title>
+  <point level="1">AxKit: http://axkit.org/</point>
+  <point level="1">CPAN: http://search.cpan.org</point>
+  <point level="1">libxml and libxslt: http://www.xmlsoft.org</point>
+  <point level="1">Sablotron: http://www.gingerall.com</point>
+  <point level="1">XPath and XSLT Tutorials: http://zvon.org</point>
+  </slide>
+  
+</slideshow>
+

@@ -1,4 +1,4 @@
-# $Id: File.pm,v 1.28 2001/05/12 10:09:48 matt Exp $
+# $Id: File.pm,v 1.31 2001/11/15 12:17:01 matt Exp $
 
 package Apache::AxKit::Provider::File;
 use strict;
@@ -18,43 +18,85 @@ use Fcntl qw(O_RDONLY LOCK_SH);
 sub init {
     my $self = shift;
     my (%p) = @_;
-
+    
+    my $stats_done;
     if ($p{key}) {
         $self->{file} = $p{key};
-        return;
-    }
-    
-    if ($p{uri} and $p{uri} =~ s|^file:(//)?||) {
-        $p{file} = delete $p{uri};
-    }
-    
-    if ($p{uri}) {
-        my $r = $p{rel} ? $p{rel}->apache_request() : $self->apache_request();
-        
-        AxKit::Debug(8, "File Provider looking up" . ($p{rel} ? " relative" : "") . " uri $p{uri}");
-
-        $self->{apache} = $r->lookup_uri($p{uri});
-        my $status = $self->{apache}->status();
-        if ($status != HTTP_OK) {
-            throw Apache::AxKit::Exception::Error(-text => "Subrequest failed with status: " . $status);
-        }
-        $self->{file} = $self->{apache}->filename();
-        
-        AxKit::Debug(8, "File Provider set filename to $self->{file}");
-    }
-    elsif ($p{file}) {
-        my $r = $p{rel} ? $p{rel}->apache_request() : $self->apache_request();
-        
-        AxKit::Debug(8, "File Provider looking up file $p{file}");
-
-        $self->{apache} = $r->lookup_uri($p{file});
-        $self->{file} = $self->{apache}->filename();
-        
-        AxKit::Debug(8, "File Provider set filename to $self->{file}");
     }
     else {
-        $self->{file} = $self->{apache}->filename();
+        
+        if ($p{uri} and $p{uri} =~ s|^file:(//)?||) {
+            $p{file} = delete $p{uri};
+        }
+        
+        if ($p{uri}) {
+            my $r = $p{rel} ? $p{rel}->apache_request() : $self->apache_request();
+            
+            AxKit::Debug(8, "[uri] File Provider looking up" . ($p{rel} ? " relative" : "") . " uri $p{uri}");
+    
+            $self->{apache} = $r->lookup_uri($p{uri});
+            my $status = $self->{apache}->status();
+            if ($status != HTTP_OK) {
+                throw Apache::AxKit::Exception::Error(-text => "Subrequest failed with status: " . $status);
+            }
+            $self->{file} = $self->{apache}->filename();
+            
+            AxKit::Debug(8, "[uri] File Provider set filename to $self->{file}");
+        }
+        elsif ($p{file}) {
+            if ($p{rel} && $p{file} !~ /^\//) {
+                my $file = $p{rel}->apache_request->filename();
+                my $dir = File::Basename::dirname($file);
+                require File::Spec;
+                $self->{file} = File::Spec->rel2abs($p{file}, $dir);
+                AxKit::Debug(8, "[file] File Provider set filename to $self->{file}");
+            }
+            else {
+                $self->{file} = $p{file};
+            }
+        }
+        else {
+            $self->{file} = $self->{apache}->filename();
+            my @stats = stat($self->{apache}->finfo());
+            $self->{mtime} = $stats[9];
+            if (-e _) {
+                if (-r _ ) {
+                    $self->{file_exists} = 1;
+                }
+
+                if (-d _) {
+                    $self->{is_dir} = 1;
+                }
+                else {
+                    $self->{is_dir} = 0;
+                }
+            }
+            $stats_done++;
+        }
     }
+    
+    if (!$stats_done) {
+        my @stats = stat($self->{file});
+        $self->{mtime} = $stats[9];
+        if (-e _) {
+            if (-r _ ) {
+                $self->{file_exists} = 1;
+            }
+
+            if (-d _) {
+                $self->{is_dir} = 1;
+            }
+            else {
+                $self->{is_dir} = 0;
+            }
+        }
+    }
+}
+
+sub _is_dir {
+    my $self = shift;
+    return $self->{is_dir} if exists $self->{is_dir};
+    return -d $self->{file};
 }
 
 sub key {
@@ -84,15 +126,13 @@ sub process {
     my $xmlfile = $self->{file};
     
     unless ($self->exists()) {
-        throw Apache::AxKit::Exception::Declined(
-                reason => "file '$xmlfile' does not exist or is not readable"
-                );
+        AxKit::Debug(5, "file '$xmlfile' does not exist or is not readable");
+        return 0;
     }
     
-    if (-d $xmlfile) {
-        throw Apache::AxKit::Exception::Declined(
-                reason => "'$xmlfile' is a directory"
-                );
+    if ($self->_is_dir) {
+        AxKit::Debug(5, "'$xmlfile' is a directory");
+        return 0;
     }
     
     local $^W;
@@ -101,13 +141,12 @@ sub process {
         $self->{apache}->pnotes('xml_string') ||
         Apache::MimeXML::check_for_xml(eval {$self->get_fh} || ${ $self->get_strref } )
         ) {
-            chdir(dirname($xmlfile));
+            # chdir(dirname($xmlfile));
             return 1;
     }
     
-    throw Apache::AxKit::Exception::Declined(
-            reason => "'$xmlfile' not recognised as XML"
-            );
+    AxKit::Debug(5, "'$xmlfile' not recognised as XML");
+    return 0;
 }
 
 sub mtime {
@@ -122,10 +161,9 @@ sub get_fh {
         throw Apache::AxKit::Exception::IO(-text => "File '$self->{file}' does not exist or is not readable");
     }
     my $filename = $self->{file};
-    chdir(dirname($filename));
+    # chdir(dirname($filename));
     my $fh = Apache->gensym();
     if (sysopen($fh, $filename, O_RDONLY)) {
-        flock($fh, LOCK_SH);
         # seek($fh, 0, 0);
         return $fh;
     }

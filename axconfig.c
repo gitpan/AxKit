@@ -1,4 +1,4 @@
-/* $Id: axconfig.c,v 1.6 2001/06/05 09:28:45 matt Exp $ */
+/* $Id: axconfig.c,v 1.15 2001/12/14 13:59:44 matt Exp $ */
 
 #ifndef WIN32
 #include <modules/perl/mod_perl.h>
@@ -18,12 +18,51 @@ static void ax_preload_module(char **name)
     else if(!PERL_AUTOPRELOAD) return;
     if(!PERL_RUNNING()) return;
 
-    if(!perl_module_is_loaded(*name)) {
-        perl_require_module(*name, NULL);
-    }
+    maybe_load_module(*name);
 }
 #endif
 
+extern SV *error_str;
+
+static SV *module2file(char *name)
+{
+    SV *sv = newSVpv(name,0);
+    char *s;
+    for (s = SvPVX(sv); *s; s++) {
+        if (*s == ':' && s[1] == ':') {
+            *s = '/';
+            Move(s+2, s+1, strlen(s+2)+1, char);
+            --SvCUR(sv);
+        }
+    }
+    sv_catpvn(sv, ".pm", 3);
+    return sv;
+}
+
+static I32 module_is_loaded(SV *key)
+{
+    I32 retval = FALSE;
+    if((key && hv_exists_ent(GvHV(incgv), key, FALSE)))
+        retval = TRUE;
+    return retval;
+}
+
+void
+maybe_load_module(char * name)
+{
+    STRLEN len;
+    SV * sv_file = module2file(name);
+    char * ch_file = SvPV(sv_file, len);
+    
+    if(!module_is_loaded(sv_file)) {
+        perl_require_pv(ch_file);
+        if (SvTRUE(ERRSV)) {
+            SvREFCNT_dec(sv_file);
+            croak("AxKit::load_module failed: %s", SvPV(ERRSV, len));
+        }
+    }
+    SvREFCNT_dec(sv_file);
+}
 
 void
 ax_cleanup_av(void * av_v)
@@ -52,7 +91,11 @@ new_axkit_dir_config (pool *p)
     new->log_declines = -1;
     new->stack_trace = -1;
     new->no_cache = -1;
+    new->debug_level = -1;
+    new->dependency_checks = -1;
     new->reset_processors = 0;
+    new->reset_output_transformers = 0;
+    new->reset_plugins = 0;
     
     new->cache_dir = 0;
     new->config_reader_module = 0;
@@ -62,7 +105,6 @@ new_axkit_dir_config (pool *p)
     new->default_media = 0;
     new->cache_module = 0;
     new->output_charset = 0;
-    new->debug_level = 0;
     
     /* complex types */
     new->type_map = NULL;
@@ -72,6 +114,8 @@ new_axkit_dir_config (pool *p)
     new->current_styles = NULL;
     new->current_medias = NULL;
     new->error_stylesheet = NULL;
+    new->output_transformers = NULL;
+    new->current_plugins = NULL;
     
 /*
     warn("[AxKit] created new dir_config:\n"
@@ -96,6 +140,7 @@ new_axkit_dir_config (pool *p)
         "new.current_styles: %d\n"
         "new.current_medias: %d\n"
         "new.error_stylesheet: %d\n"
+        "new.output_transformers: %d\n"
         ,
         new,
         new->translate_output,
@@ -117,7 +162,8 @@ new_axkit_dir_config (pool *p)
         new->xsp_taglibs,
         new->current_styles,
         new->current_medias,
-        new->error_stylesheet
+        new->error_stylesheet,
+        new->output_transformers
         );
 */
     
@@ -145,6 +191,9 @@ create_axkit_dir_config (pool *p, char *dummy)
     new->xsp_taglibs = newHV();
     ap_register_cleanup(p, (void*)new->xsp_taglibs, ax_cleanup_hv, ap_null_cleanup);
     
+    new->output_transformers = newAV();
+    ap_register_cleanup(p, (void*)new->output_transformers, ax_cleanup_av, ap_null_cleanup);
+    
     new->current_styles = newAV();
     av_push(new->current_styles, newSVpv("#default", 0));
     ap_register_cleanup(p, (void*)new->current_styles, ax_cleanup_av, ap_null_cleanup);
@@ -155,6 +204,9 @@ create_axkit_dir_config (pool *p, char *dummy)
     
     new->error_stylesheet = newAV();
     ap_register_cleanup(p, (void*)new->error_stylesheet, ax_cleanup_av, ap_null_cleanup);
+
+    new->current_plugins = newAV();
+    ap_register_cleanup(p, (void*)new->current_plugins, ax_cleanup_av, ap_null_cleanup);
     
     /* warn("create dir config: %d\n", new); */
     
@@ -238,6 +290,7 @@ merge_axkit_dir_config (pool *p, void *parent_dirv, void *subdirv)
         "parent_dir.current_styles: %d\n"
         "parent_dir.current_medias: %d\n"
         "parent_dir.error_stylesheet: %d\n"
+        "parent_dir.output_transformers: %d\n"
         ,
         parent_dir,
         parent_dir->translate_output,
@@ -259,7 +312,8 @@ merge_axkit_dir_config (pool *p, void *parent_dirv, void *subdirv)
         parent_dir->xsp_taglibs,
         parent_dir->current_styles,
         parent_dir->current_medias,
-        parent_dir->error_stylesheet
+        parent_dir->error_stylesheet,
+        parent_dir->output_transformers
         );
     
     warn("[AxKit] created new dir_config:\n"
@@ -284,6 +338,7 @@ merge_axkit_dir_config (pool *p, void *parent_dirv, void *subdirv)
         "subdir.current_styles: %d\n"
         "subdir.current_medias: %d\n"
         "subdir.error_stylesheet: %d\n"
+        "subdir.output_transformers: %d\n"
         ,
         subdir,
         subdir->translate_output,
@@ -305,7 +360,8 @@ merge_axkit_dir_config (pool *p, void *parent_dirv, void *subdirv)
         subdir->xsp_taglibs,
         subdir->current_styles,
         subdir->current_medias,
-        subdir->error_stylesheet
+        subdir->error_stylesheet,
+        subdir->output_transformers
         );
 */
 
@@ -366,12 +422,9 @@ merge_axkit_dir_config (pool *p, void *parent_dirv, void *subdirv)
         new->output_charset = ap_pstrdup(p, parent_dir->output_charset);
     }
     
-    if (subdir->debug_level) {
-        new->debug_level = ap_pstrdup(p, subdir->debug_level);
-    }
-    else if (parent_dir->debug_level) {
-        new->debug_level = ap_pstrdup(p, parent_dir->debug_level);
-    }
+    new->debug_level =
+        subdir->debug_level != -1 ? subdir->debug_level :
+                                    parent_dir->debug_level;
     
     new->translate_output =
         subdir->translate_output != -1 ? subdir->translate_output :
@@ -392,6 +445,10 @@ merge_axkit_dir_config (pool *p, void *parent_dirv, void *subdirv)
     new->no_cache =
         subdir->no_cache != -1 ? subdir->no_cache :
                                      parent_dir->no_cache;
+    
+    new->dependency_checks =
+        subdir->dependency_checks != -1 ? subdir->dependency_checks :
+                                     parent_dir->dependency_checks;
     
     
     /* complex types */
@@ -592,6 +649,70 @@ merge_axkit_dir_config (pool *p, void *parent_dirv, void *subdirv)
         ap_register_cleanup(p, (void*)new->processors, ax_cleanup_hv, ap_null_cleanup);
     }
     
+    {
+        /* cfg->output_transformers */
+        new->output_transformers = newAV();
+        
+        if(!subdir->reset_output_transformers) {
+            I32 key = 0;
+            for(key = 0; key <= av_len(parent_dir->output_transformers); key++) {
+                SV ** val = av_fetch(parent_dir->output_transformers, key, 0);
+                if (val != NULL) {
+                    char * cval;
+                    STRLEN len;
+                    cval = ap_pstrdup(p, SvPV(*val, len));
+                    av_push(new->output_transformers, newSVpvn(cval, strlen(cval)));
+                }
+            }
+        }
+        if (av_len(subdir->output_transformers) >= 0) {
+            I32 key = 0;
+            for(key = 0; key <= av_len(subdir->output_transformers); key++) {
+                SV ** val = av_fetch(subdir->output_transformers, key, 0);
+                if (val != NULL) {
+                    char * cval;
+                    STRLEN len;
+                    cval = ap_pstrdup(p, SvPV(*val, len));
+                    av_push(new->output_transformers, newSVpvn(cval, strlen(cval)));
+                }
+            }
+        }
+        
+        ap_register_cleanup(p, (void*)new->output_transformers, ax_cleanup_av, ap_null_cleanup);
+    }
+    
+    {
+        /* cfg->current_plugins */
+        new->current_plugins = newAV();
+        
+        if(!subdir->reset_plugins) {
+            I32 key = 0;
+            for(key = 0; key <= av_len(parent_dir->current_plugins); key++) {
+                SV ** val = av_fetch(parent_dir->current_plugins, key, 0);
+                if (val != NULL) {
+                    char * cval;
+                    STRLEN len;
+                    cval = ap_pstrdup(p, SvPV(*val, len));
+                    av_push(new->current_plugins, newSVpvn(cval, strlen(cval)));
+                }
+            }
+        }
+        if (av_len(subdir->current_plugins) >= 0) {
+            I32 key = 0;
+            for(key = 0; key <= av_len(subdir->current_plugins); key++) {
+                SV ** val = av_fetch(subdir->current_plugins, key, 0);
+                if (val != NULL) {
+                    char * cval;
+                    STRLEN len;
+                    cval = ap_pstrdup(p, SvPV(*val, len));
+                    av_push(new->current_plugins, newSVpvn(cval, strlen(cval)));
+                }
+            }
+        }
+        
+        ap_register_cleanup(p, (void*)new->current_plugins, ax_cleanup_av, ap_null_cleanup);
+    }
+    
     new->current_styles = newAV();
     av_push(new->current_styles, newSVpv("#default", 0));
     ap_register_cleanup(p, (void*)new->current_styles, ax_cleanup_av, ap_null_cleanup);
@@ -607,14 +728,18 @@ merge_axkit_dir_config (pool *p, void *parent_dirv, void *subdirv)
         "dynamic: %d\n"
         "taglibs: %d\n"
         "c_styles: %d\n"
-        "c_medias: %d\n",
+        "c_medias: %d\n"
+        "out_trans: %d\n"
+        ,
         new,
         new->type_map,
         new->processors,
         new->dynamic_processors,
         new->xsp_taglibs,
         new->current_styles,
-        new->current_medias);
+        new->current_medias,
+        new->output_transformers
+        );
 */
     
     return new;
@@ -824,6 +949,37 @@ ax_add_xsp_taglib (cmd_parms *cmd, axkit_dir_config *ax, char *module)
     return NULL;
 }
 
+CHAR_P
+ax_add_output_transformer (cmd_parms *cmd, axkit_dir_config *ax, char *module)
+{
+    SV * mod_sv = newSVpv(module, 0);
+    av_push(ax->output_transformers, mod_sv);
+    
+    return NULL;
+}
+
+CHAR_P
+ax_reset_output_transformers (cmd_parms *cmd, axkit_dir_config *ax)
+{
+    ax->reset_output_transformers++;
+    return NULL;
+}
+
+CHAR_P
+ax_add_plugin (cmd_parms *cmd, axkit_dir_config *ax, char *module)
+{
+    ax_preload_module(&module);
+    av_push(ax->current_plugins, newSVpv(module, 0));
+    return NULL;
+}
+
+CHAR_P
+ax_reset_plugins (cmd_parms *cmd, axkit_dir_config *ax)
+{
+    ax->reset_plugins++;
+    return NULL;
+}
+
 static CHAR_P
 ax_set_module_slot (cmd_parms *cmd, char *struct_ptr, char *arg)
 {
@@ -838,39 +994,10 @@ ax_set_module_slot (cmd_parms *cmd, char *struct_ptr, char *arg)
     return NULL;
 }
 
-CHAR_P
-ax_axkit_onoff (cmd_parms *cmd, axkit_dir_config *ax, int flag)
+static CHAR_P
+ax_set_debug_level (cmd_parms *cmd, axkit_dir_config *ax, char *arg)
 {
-    void * oldconf;
-    const char * errmsg;
-    SV *sva;
-    SV *ignore;
-    
-    if (flag) {
-#ifndef WIN32
-        errmsg = (const char *)ap_handle_command(cmd, cmd->server->lookup_defaults, "SetHandler perl-script");
-        if (errmsg) {
-            return errmsg;
-        }
-#endif
-
-        sva = newSVpv("AxKit", 0);
-        ignore = newSVpv("ignore", 0);
-
-        mod_perl_push_handlers(ignore, "PerlHandler", sva, Nullav);
-        
-        SvREFCNT_dec(sva);
-        SvREFCNT_dec(ignore);
-    }
-    else {
-#ifndef WIN32
-        errmsg = (const char *)ap_handle_command(cmd, cmd->server->lookup_defaults, "SetHandler default-handler");
-        if (errmsg) {
-            return errmsg;
-        }
-#endif
-    }
-    
+    ax->debug_level = atoi(arg);
     return NULL;
 }
 
@@ -885,11 +1012,36 @@ void axkit_module_init(server_rec *s, pool *p)
     ap_add_version_component(serverstringc);
 }
 
+static int axkit_handler(request_rec *r)
+{
+    int retval;
+    SV * handler_sv = newSVpv("AxKit::fast_handler", 0);
+    
+    SV * cfg = perl_get_sv("AxKit::Cfg", FALSE);
+    SV * cache = perl_get_sv("AxKit::Cache", FALSE);
+    SV * hs = perl_get_sv("AxKit::HeadersSent", FALSE);
+    SV * debuglevel = perl_get_sv("AxKit::DebugLevel", FALSE);
+    SV * errorlevel = perl_get_sv("Error::Debug", FALSE);
+    
+    ENTER;
+    
+    save_item(cfg);
+    save_item(cache);
+    save_item(hs);
+    save_item(debuglevel);
+    save_item(errorlevel);
+    
+    retval = perl_call_handler(handler_sv, (request_rec *)r, Nullav);
+
+    LEAVE;
+    
+    SvREFCNT_dec(handler_sv);
+    
+    return retval;
+}
+
 static command_rec axkit_mod_cmds[] = {
-    { "AxKit", ax_axkit_onoff,
-      NULL, OR_ALL, FLAG,
-      "On or Off, turns AxKit processing On or Off" },
-      
+
     { "AxAddProcessor", ax_add_processor,
       (void*)"NORMAL", OR_ALL, TAKE2,
       "a mime type and a stylesheet to use" },
@@ -972,14 +1124,21 @@ static command_rec axkit_mod_cmds[] = {
       OR_ALL, TAKE1,
       "a default media to use other than screen" },
 
+    { "AxAddOutputTransformer", ax_add_output_transformer,
+      NULL, OR_ALL, TAKE1, 
+      "An output transformer function, qualified with package name." },
+
+    { "AxResetOutputTransformers", ax_reset_output_transformers,
+      NULL, OR_ALL, NO_ARGS, 
+      "Reset list of output transformers." },
+
     { "AxCacheModule", ax_set_module_slot,
       (void *)XtOffsetOf(axkit_dir_config, cache_module),
       OR_ALL, TAKE1,
       "alternative cache module" },
 
-    { "AxDebugLevel", ap_set_string_slot,
-      (void *)XtOffsetOf(axkit_dir_config, debug_level),
-      OR_ALL, TAKE1,
+    { "AxDebugLevel", ax_set_debug_level,
+      NULL, OR_ALL, TAKE1,
       "debug level (0 == none, higher numbers == more debugging)" },
 
     { "AxTranslateOutput", ap_set_flag_slot,
@@ -1019,8 +1178,27 @@ static command_rec axkit_mod_cmds[] = {
     { "AxAddXSPTaglib", ax_add_xsp_taglib,
       NULL, OR_ALL, TAKE1,
       "module that provides a taglib functionality" },
+    
+    { "AxDependencyChecks", ap_set_flag_slot,
+      (void *)XtOffsetOf(axkit_dir_config, dependency_checks),
+      OR_ALL, FLAG,
+    "On [default] or Off to disable dependency checking" },
+
+    { "AxAddPlugin", ax_add_plugin,
+        NULL, OR_ALL, TAKE1,
+        "module that implements a plugin" },
+
+    { "AxResetPlugins", ax_reset_plugins,
+        NULL, OR_ALL, NO_ARGS,
+        "reset the list of plugins" },
 
     { NULL }
+};
+
+static const handler_rec axkit_handlers[] =
+{
+    {"axkit", axkit_handler},
+    {NULL}
 };
 
 module MODULE_VAR_EXPORT XS_AxKit = {
@@ -1031,7 +1209,7 @@ module MODULE_VAR_EXPORT XS_AxKit = {
     NULL,                         /* server config creator */
     NULL,                         /* server config merger */
     axkit_mod_cmds,               /* command table */
-    NULL,                         /* [7] list of handlers */
+    axkit_handlers,               /* [7] list of handlers */
     NULL,                         /* [2] filename-to-URI translation */
     NULL,                         /* [5] check/validate user_id */
     NULL,                         /* [6] check user_id is valid *here* */
@@ -1085,7 +1263,7 @@ ax_get_config (axkit_dir_config * cfg)
     }
     if (cfg->debug_level) {
         hv_store(retval, "DebugLevel",
-                10, (newSVpv(cfg->debug_level, 0)), 0);
+                10, (newSViv(cfg->debug_level)), 0);
     }
     if (cfg->translate_output != -1) {
         hv_store(retval, "TranslateOutput",
@@ -1108,6 +1286,17 @@ ax_get_config (axkit_dir_config * cfg)
                 7, (newSViv(cfg->no_cache)), 0);
     }
     
+    if (cfg->dependency_checks != -1) {
+        hv_store(retval, "DependencyChecks",
+                16, (newSViv(cfg->dependency_checks)), 0);
+    }
+    else {
+        hv_store(retval, "DependencyChecks",
+                16, (newSViv(1)), 0);
+    }
+    
+    hv_store(retval, "OutputTransformers",
+            18, newRV_inc((SV*)cfg->output_transformers), 0);
     hv_store(retval, "ErrorStylesheet",
             15, newRV_inc((SV*)cfg->error_stylesheet), 0);
     hv_store(retval, "StyleMap",
@@ -1118,6 +1307,8 @@ ax_get_config (axkit_dir_config * cfg)
             17, newRV_inc((SV*)cfg->dynamic_processors), 0);
     hv_store(retval, "XSPTaglibs",
             10, newRV_inc((SV*)cfg->xsp_taglibs), 0);
+    hv_store(retval, "Plugins",
+            7, newRV_inc((SV*)cfg->current_plugins), 0);
     
     return retval;
 }
@@ -1129,10 +1320,6 @@ void remove_module_cleanup(void * ignore)
     }
     /* make sure BOOT section is re-run on restarts */
     (void)hv_delete(GvHV(incgv), "AxKit.pm", 8, G_DISCARD);
-    if (dowarn) {
-        /* avoid subroutine redefined warnings */
-        perl_clear_symtab(gv_stashpv("AxKit", FALSE));
-    }
 }
 
 /* Diff for styles being relative to .htaccess:

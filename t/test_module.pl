@@ -1,8 +1,9 @@
 sub test_module {
     my ($module, @prereqs) = @_;
     foreach my $prereq (@prereqs) {
-        if (!load_module($prereq)) {
-            skip("Skip($prereq prerequisite module not available)", 1);
+        my ($ok, $reason) = load_module($prereq);
+        if (!$ok) {
+            skip("Skip($prereq prerequisite module not available : $reason)", 1);
             return;
         }
     }

@@ -1,4 +1,4 @@
-/* $Id: axconfig.h,v 1.5 2001/06/05 09:28:45 matt Exp $ */
+/* $Id: axconfig.h,v 1.11 2001/11/20 16:27:02 matt Exp $ */
 
 #ifdef WIN32
 #define _INC_DIRENT
@@ -21,6 +21,14 @@
 #else
 #include <httpd.h>
 #include <http_config.h>
+ /* SUNPRO C does not know something about __attribute__ */
+ #ifdef __SUNPRO_C
+  #include <http_core.h>
+  #include <http_main.h>
+  #include <http_protocol.h>
+  #include <http_request.h>
+  #include <http_log.h>
+ #endif
 #endif
 
 typedef struct {
@@ -33,13 +41,16 @@ typedef struct {
     char * default_media;
     char * cache_module;
     char * output_charset;
-    char * debug_level;
+    int    debug_level;
     int    translate_output;
     int    gzip_output; 
     int    reset_processors;
     int    log_declines;
     int    stack_trace;
     int    no_cache;
+    int    dependency_checks;
+    int    reset_output_transformers;
+    int    reset_plugins;
     
     /* complex types */
     HV *   type_map;            /* mime type => module mapping */
@@ -49,12 +60,16 @@ typedef struct {
     AV *   current_styles;
     AV *   current_medias;
     AV *   error_stylesheet;
+    AV *   output_transformers;
+    AV *   current_plugins;
     
 } axkit_dir_config;
 
-module MODULE_VAR_EXPORT XS_AxKit;
+extern module MODULE_VAR_EXPORT XS_AxKit;
 
 void remove_module_cleanup(void * ignore);
 
 HV * ax_get_config (axkit_dir_config * cfg);
+
+void maybe_load_module (char * name);
 

@@ -1,4 +1,4 @@
-# $Id: ConfigReader.pm,v 1.33 2001/05/29 10:20:14 matt Exp $
+# $Id: ConfigReader.pm,v 1.37 2001/11/20 16:27:06 matt Exp $
 
 package Apache::AxKit::ConfigReader;
 
@@ -12,20 +12,19 @@ sub new {
     
     my $cfg = AxKit::get_config($r) || {};
     
-#     use Apache::Peek 'Dump';
-#     Dump($cfg);
+#    use Apache::Peek 'Dump';
+#    Dump($cfg);
 #     use Data::Dumper;
 #     $Data::Dumper::Indent = 1;
 #     warn("Cfg: ", Data::Dumper->Dump([$cfg], ['cfg']));
+
+    my $self = bless { apache => $r, cfg => $cfg, output_charset_ok => 0 }, $class;
     
     if (my $alternate = $cfg->{ConfigReader} || $r->dir_config('AxConfigReader')) {
-        $class = $alternate;
-        AxKit::load_module($class);
+        AxKit::reconsecrate($self, $alternate);
     }
     
-#     AxKit::Debug(7, "ConfigReader->new count: ".++$COUNT);
-    
-    return bless { apache => $r, cfg => $cfg, output_charset_ok => 0 }, $class;
+    return $self;
 }
 
 # sub DESTROY {
@@ -66,6 +65,11 @@ sub ProviderClass {
     }
     
     return 'Apache::AxKit::Provider::File';
+}
+
+sub DependencyChecks {
+    my $self = shift;
+    return $self->{cfg}{DependencyChecks};
 }
 
 sub StyleProviderClass {
@@ -121,6 +125,11 @@ sub DebugLevel {
     return $self->{cfg}{DebugLevel} || 
             $self->{apache}->dir_config('AxDebugLevel') || 
             0;
+}
+
+sub DebugTime {
+    my $self = shift;
+    return $self->{apache}->dir_config('AxDebugTime') || 0;
 }
 
 sub StackTrace {
@@ -357,6 +366,36 @@ sub XSPTaglibs {
     @others = split(/\s+/, $self->{apache}->dir_config('AxAddXSPTaglibs'));
     
     return @others;
+}
+
+sub OutputTransformers {
+    my $self = shift;
+
+    my @filters;
+
+    if( my $o_t = $self->{cfg}{OutputTransformers} ) {
+        @filters = @$o_t;
+    }
+    else {
+        @filters = split(/\s+/, 
+                $self->{apache}->dir_config('AxOutputTransformers'));    
+    }
+
+    return @filters;
+}
+
+sub Plugins {
+    my $self = shift;
+    my @plugs;
+
+    if (my $plugins = $self->{cfg}{Plugins}) {
+        @plugs = @$plugins;
+    }
+    else {
+        @plugs = split(/\s+/,
+                $self->{apache}->dir_config('AxPlugins'));
+    }
+    return @plugs;
 }
 
 1;

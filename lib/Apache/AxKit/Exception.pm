@@ -1,4 +1,4 @@
-# $Id: Exception.pm,v 1.17 2001/05/30 16:22:37 matt Exp $
+# $Id: Exception.pm,v 1.18 2001/06/07 17:02:12 matt Exp $
 
 package Apache::AxKit::Exception;
 use Error;
@@ -53,5 +53,9 @@ package Apache::AxKit::Exception::Retval;
 
 package Apache::AxKit::Exception::IO;
 @ISA = ('Apache::AxKit::Exception');
+
+# a hack to fix broken Error.pm 0.13 (fixed in 0.14)
+package Error;
+use overload bool => sub { 1 };
 
 1;

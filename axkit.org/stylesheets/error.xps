@@ -1,0 +1,17 @@
+<html>
+	<head><title>AxKit Error</title></head>
+<body>
+	<h1>AxKit Error</h1>
+	<tt>
+	<%= findvalue('/error/msg/text()') %>
+	</tt>
+	<hr>
+	<pre>
+	<% foreach my $node (findnodes('/error/stack_trace/bt')) { %>
+	<%= $node->findvalue('file') . ' :: ' . $node->findvalue('line') %>
+	<br>
+	<% } %>
+        </pre>
+</body>
+</html>
+

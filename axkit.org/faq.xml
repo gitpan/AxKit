@@ -137,9 +137,14 @@ ppm install
 			</subsection>
       
 			<subsection>
-				<title>Should I ever run with scissors?</title>
+				<title>AxKit on Debian</title>
 				<para>
-				No. You should never, ever run with scissors.
+AxKit has "problems" detecting iconv (and probably libxml2) on Debian. We're
+not sure what is causing this yet, so in order to get around these problems
+you will need to edit the Makefile.PL files (in the root directory, and
+in lib/Apache/AxKit/) to comment out the checks for these libraries and just
+enforce their usage regardless. Sorry for the inconvenience - we're working
+on it, and would be interested in patches.
 				</para>
 			</subsection>
 		</section>

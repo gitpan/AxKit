@@ -1,4 +1,4 @@
-# $Id: AxKit.pm,v 1.105 2001/06/05 15:10:41 matt Exp $
+# $Id: AxKit.pm,v 1.129 2001/12/31 19:56:20 matt Exp $
 
 package AxKit;
 use strict;
@@ -16,11 +16,12 @@ use Apache::AxKit::Provider;
 use Apache::AxKit::Provider::File;
 use Apache::AxKit::Provider::Scalar;
 use Apache::AxKit::CharsetConv;
+use File::Basename ();
 
 Apache::AxKit::CharsetConv::raise_error(1);
 
 BEGIN {
-    $VERSION = "1.4";
+    $VERSION = "1.5";
     if ($ENV{MOD_PERL}) {
         $AxKit::ServerString = "AxKit/$VERSION";
         @AxKit::ISA = qw(DynaLoader);
@@ -32,7 +33,7 @@ BEGIN {
 # AxKit Utility Functions
 ###############################################################
 
-sub Debug {
+sub _Debug {
     my $level = shift;
     if ($level <= $AxKit::DebugLevel) {
         my @debug = @_;
@@ -41,9 +42,9 @@ sub Debug {
         $log->warn("[AxKit] : " . join('', @debug));
 
 # Log Time Taken
-#         use vars qw/$T0/;
-#         use Time::HiRes qw(tv_interval gettimeofday);
-#         $log->info("[Time] : " . tv_interval($T0));
+        if ($AxKit::Cfg->DebugTime) {
+            $log->warn( "[Time] : " . int(1000 * Time::HiRes::tv_interval($AxKit::T0)) . "ms" );
+        }
 
 # Log Memory Usage
 #         my $fh = Apache->gensym();
@@ -67,7 +68,7 @@ sub Debug {
     }
 }
 
-sub reconsecrate {
+sub _reconsecrate {
     my ($object, $class) = @_;
 
     load_module($class);
@@ -90,7 +91,16 @@ sub get_output_transformer {
             return map { $map->convert( $_ ) } ($outputfunc->(@_));
         };
     }
-
+    
+    foreach my $AxOutputTransformer ( $AxKit::Cfg->OutputTransformers() ) {
+        $actually_transform = 1;
+        my $outputfunc = $func;
+        no strict 'refs';
+        $func = sub {
+            map { &{$AxOutputTransformer}( $_ ) } ($outputfunc->(@_));
+        };
+    }
+    
     # to add a new output_transformer here:
     #   enter new scope (maybe with if())
     #   copy $func to a new lexical (my) variable
@@ -119,6 +129,40 @@ sub get_depends {
 #     warn "AxKit hash -- : $self->{Type}\n";
 # }
 
+#######################################################
+# fast_handler is called from C when AddHandler is used
+#######################################################
+
+sub fast_handler {
+    my $r = shift;
+    
+    local $SIG{__DIE__} = sub { AxKit::prep_exception(@_)->throw };
+    
+    $AxKit::Cfg = Apache::AxKit::ConfigReader->new($r);
+
+#    if ($AxKit::Cfg->DebugTime) {
+#        require Time::HiRes;
+#        $AxKit::T0 = [Time::HiRes::gettimeofday()] if $AxKit::Cfg->DebugTime;
+#    }
+
+    $Error::Debug = 1 if (($AxKit::Cfg->DebugLevel() > 3) || $AxKit::Cfg->StackTrace);
+
+    AxKit::Debug(1, "handler called for " . $r->uri);
+
+    my $plugin_ret = AxKit::run_plugins($r);
+    if ($plugin_ret != OK) {
+        AxKit::Debug(2, "Plugin returned non-OK value");
+        return $plugin_ret;
+    }
+
+    my $provider = Apache::AxKit::Provider->new($r);
+
+    return $provider->decline(reason => "passthru set")
+            if $r->notes('axkit_passthru');
+
+    return main_handler($r, $provider);
+}
+
 #########################################
 # main mod_perl handler routine
 #########################################
@@ -126,8 +170,6 @@ sub get_depends {
 sub handler {
     my $r = shift;
 
-#$T0 = [gettimeofday]; # uncomment this and the code in Debug() if you want time outputs
-    
 #     ##############################
 #     ## COMMENT OUT FOR RELEASE!!!
 #     ##############################
@@ -142,42 +184,62 @@ sub handler {
     local $AxKit::Cfg;
     local $AxKit::Cache;
     local $AxKit::HeadersSent;
+    local $AxKit::DebugLevel;
+    local $Error::Debug;
 
+    $AxKit::Cfg = Apache::AxKit::ConfigReader->new($r);
+
+    if ($AxKit::Cfg->DebugTime) {
+        require Time::HiRes;
+        $AxKit::T0 = [Time::HiRes::gettimeofday()] if $AxKit::Cfg->DebugTime;
+    }
+
+    $AxKit::DebugLevel = $AxKit::Cfg->DebugLevel();
+    $Error::Debug = 1 if (($AxKit::DebugLevel > 3) || $AxKit::Cfg->StackTrace);
+
+    AxKit::Debug(1, "handler called for " . $r->uri);
+
+    my $plugin_ret = AxKit::run_plugins($r);
+    if ($plugin_ret != OK) {
+        AxKit::Debug(2, "Plugin returned non-OK value");
+        return $plugin_ret;
+    }
+
+    my $provider = Apache::AxKit::Provider->new($r);
+
+    return $provider->decline(reason => "passthru set")
+            if $r->notes('axkit_passthru');
+
+    # Do we process this URL?
+    AxKit::Debug(2, "checking if we process this resource");
+    if (!$provider->process()) {
+        return $provider->decline();
+    }
+    
+    return main_handler($r, $provider);
+}
+
+sub main_handler {
+    my ($r, $provider) = @_;
+    
     my $retcode = eval {
-        $AxKit::Cfg = Apache::AxKit::ConfigReader->new($r);
+        # $r->header_out('X-AxKit-Version', $VERSION);
         
-        local $AxKit::DebugLevel = $AxKit::Cfg->DebugLevel();
-        local $Error::Debug = 1 if (($AxKit::DebugLevel > 3) || $AxKit::Cfg->StackTrace);
-
-        my $provider = Apache::AxKit::Provider->new($r);
-
-        AxKit::Debug(1, "handler called for " . $r->uri);
-
-        $provider->decline(reason => "passthru set")
-                if $r->notes('axkit_passthru');
-
-        # Do we process this URL?
-        AxKit::Debug(2, "checking if we process this resource");
-        if (!$provider->process()) {
-            $provider->decline(reason => 'Provider declined');
-        }
-
-        $r->header_out('X-AxKit-Version', $VERSION);
+        chdir(File::Basename::dirname($r->filename));
         
-        $AxKit::OrigType = $r->content_type();
-        $r->content_type('changeme');
+        $AxKit::OrigType = $r->content_type('changeme');
         
         # get preferred stylesheet and media type
         my ($preferred, $media) = get_style_and_media();
         AxKit::Debug(2, "media: $media, preferred style: $preferred");
-
+        
         # get cache object
-        my $cache = Apache::AxKit::Cache->new($r, $r->filename() . ($ENV{PATH_INFO} || ''), $preferred, $media, $r->notes('axkit_cache_extra'), 'gzip');
-
+        my $cache = Apache::AxKit::Cache->new($r, $r->filename() . '.gzip' . ($ENV{PATH_INFO} || ''), $preferred, $media, $r->notes('axkit_cache_extra'));
+        
         my $recreate; # regenerate from source (not cached)
-
+        
         my $styles = get_styles($media, $preferred, $cache, $provider);
-
+        
         {
             local $^W;
             if ($preferred && ($styles->[0]{title} ne $preferred)) {
@@ -185,7 +247,7 @@ sub handler {
                 # Make sure we default the cache file, otherwise
                 # we setup a potential DoS
                 AxKit::Debug(3, "resetting cache with no preferred style ($preferred ne $styles->[0]{title})");
-                $cache = Apache::AxKit::Cache->new($r, $r->filename() . $ENV{PATH_INFO}, '', $media, $r->notes('axkit_cache_extra'), 'gzip');
+                $cache = Apache::AxKit::Cache->new($r, $r->filename() . '.gzip' . $ENV{PATH_INFO}, '', $media, $r->notes('axkit_cache_extra'));
             }
         }
         
@@ -196,7 +258,7 @@ sub handler {
             $recreate++;
         }
         
-        if (!$recreate) {
+        if (!$recreate && $AxKit::Cfg->DependencyChecks()) {
             $recreate = check_dependencies($r, $provider, $cache);
         }
 
@@ -208,7 +270,7 @@ sub handler {
 
         if (!$recreate) {
             AxKit::Debug(1, "delivering cached copy - all conditions met");
-            $cache->deliver();
+            return $cache->deliver();
             AxKit::Debug(1, "UNREACHABLE CODE!!!");
         }
 
@@ -235,17 +297,22 @@ sub handler {
 
         reset_depends();
 
+        {
+            # copy styles because we blat the copy
+            my @copy = @$styles;
+            $AxKit::_CurrentStylesheet = \@copy;
+        } 
         # Main grunt of the work done here...
-        process_request($r, $provider, $styles);
+        process_request($r, $provider, $AxKit::_CurrentStylesheet);
 
         save_dependencies($r, $cache);
         
-        if (my $dom = $r->pnotes('dom_tree')) {
-            AxKit::Debug(4, "got a dom_tree back - outputting that to the cache");
-            $r->notes('resetstring', 1);
-            my $output = $dom->toString;
-            $r->print($output);
-        }
+#        if (my $dom = $r->pnotes('dom_tree')) {
+#            AxKit::Debug(4, "got a dom_tree back - outputting that to the cache");
+#            $r->notes('resetstring', 1);
+#            my $output = $dom->toString;
+#            $r->print($output);
+#        }
 
         # restore $r
         if (ref($r) eq 'AxKit::Apache') {
@@ -254,13 +321,13 @@ sub handler {
         }
 
         deliver_to_browser($r);
-
-        return OK;
     };
     my $E = $@;
     unless ($E) {
         return $retcode;
     }
+    
+    AxKit::Debug(5, "Caught an exception");
     
     # restore $r if it hasn't been restored already
     if (ref($r) eq 'AxKit::Apache') {
@@ -269,7 +336,7 @@ sub handler {
     }
     
     if ($E->isa('Apache::AxKit::Exception::OK')) {
-        return OK;
+        return deliver_to_browser($r); # should return OK
     }
     elsif ($E->isa('Apache::AxKit::Exception::Retval')) {
         my $code = $E->{return_code};
@@ -279,7 +346,15 @@ sub handler {
     $r->content_type($AxKit::OrigType)
                 if $r->content_type() eq 'changeme'; # restore content-type
     
-    if ($E->isa('Apache::AxKit::Exception::Error')) {
+    if ($E->isa('Apache::AxKit::Exception::Declined')) {
+        if ($AxKit::Cfg && $AxKit::Cfg->LogDeclines()) {
+            $r->log->warn("[AxKit] [DECLINED] $E->{reason}")
+                    if $E->{reason};
+        }
+        AxKit::Debug(4, "[DECLINED] From: $E->{-file} : $E->{-line}");
+        return DECLINED;
+    }
+    elsif ($E->isa('Apache::AxKit::Exception::Error')) {
         $r->log->error("[AxKit] [Error] $E->{-text}");
         $r->log->error("[AxKit] From: $E->{-file} : $E->{-line}");
 
@@ -294,14 +369,6 @@ sub handler {
 
         return SERVER_ERROR;
 
-    }
-    elsif ($E->isa('Apache::AxKit::Exception::Declined')) {
-        if ($AxKit::Cfg && $AxKit::Cfg->LogDeclines()) {
-            $r->log->warn("[AxKit] [DECLINED] $E->{reason}")
-                    if $E->{reason};
-        }
-        AxKit::Debug(4, "[DECLINED] From: $E->{-file} : $E->{-line}");
-        return DECLINED;
     }
     elsif ($E->isa('Error::Simple') || $E->isa('Apache::AxKit::Exception')) {
         $r->log->error("[AxKit] [UnCaught] $E");
@@ -326,6 +393,12 @@ sub handler {
 
 sub process_error {
     my ($r, $E, $error_styles) = @_;
+    
+    bless $r, 'AxKit::Apache';
+    tie *STDOUT, 'AxKit::Apache', $r;
+
+    $r->dir_config->set(AxNoCache => 1);
+    $AxKit::Cache = Apache::AxKit::Cache->new($r, 'error', '', '', '');
     
     $r->content_type("text/html; charset=UTF-8"); # set a default for errors
     
@@ -353,26 +426,71 @@ sub process_error {
 
     $r->pnotes('xml_string', $error);
 
-    AxKit::Apache::send_http_header($r);
-
     eval {
         process_request($r, $provider, $error_styles);
+        if (ref($r) eq 'AxKit::Apache') {
+            bless $r, 'Apache';
+            tie *STDOUT, 'Apache', $r;
+        }
+        deliver_to_browser($r);
     };
     if ($@) {
         $r->log->error("[AxKit] [FATAL] Error occured while processing Error XML: $@");
         return SERVER_ERROR;
     }
+    
     return OK;
+}
+
+sub insert_next_stylesheet {
+    my ($type, $href) = @_;
+    my $mapping = $AxKit::Cfg->StyleMap;
+    my $module = $mapping->{$type};
+    if (!$module) {
+        throw Apache::AxKit::Exception::Declined(
+            reason => "No implementation mapping available for type '$type'"
+            );
+    }
+    unshift @$AxKit::_CurrentStylesheets, 
+            {
+                type => $type,
+                href => $href,
+                module => $module,
+            };
+}
+
+sub insert_last_stylesheet {
+    my ($type, $href) = @_;
+    my $mapping = $AxKit::Cfg->StyleMap;
+    my $module = $mapping->{$type};
+    if (!$module) {
+        throw Apache::AxKit::Exception::Declined(
+            reason => "No implementation mapping available for type '$type'"
+            );
+    }
+    push @$AxKit::_CurrentStylesheets, 
+            {
+                type => $type,
+                href => $href,
+                module => $module,
+            };
+}
+
+sub reset_stylesheets {
+    @$AxKit::_CurrentStylesheets = ();
 }
 
 sub process_request {
     my ($r, $provider, $styles) = @_;
-
+    
+    my $num_styles = 0;
     for my $style (@$styles) {
         AxKit::Debug(4, "styles: ", $style->{module}, "(", $style->{href}, ")");
+        $num_styles++;
     }
 
-    for my $style (@$styles) {
+    while (@$styles) {
+        my $style = shift @$styles;
         my $styleprovider = Apache::AxKit::Provider->new(
                 $r,
                 uri => $style->{href},
@@ -395,7 +513,12 @@ sub process_request {
                         -text => "stylesheet '$style->{href}' could not be found or is not readable"
                         );
             }
-            my $retval = $mapto->$method($r, $provider, $styleprovider);
+            my $retval = $mapto->$method(
+                    $r, 
+                    $provider, 
+                    $styleprovider, 
+                    !@$styles, # any more left?
+                    );
         }
         else {
             throw Apache::AxKit::Exception::Error(
@@ -416,9 +539,9 @@ sub get_style_and_media {
 
     $style ||= '#default';
 
-    if ($media !~ /^(screen|tty|tv|projection|handheld|print|braille|aural)$/) {
-        $media = 'screen';
-    }
+#    if ($media !~ /^(screen|tty|tv|projection|handheld|print|braille|aural)$/) {
+#        $media = 'screen';
+#    }
 
     return ($style, $media);
 }
@@ -442,7 +565,7 @@ sub get_styles {
     else {
         AxKit::Debug(3, "styles not cached - calling \$provider->get_styles()");
         my $styles = $provider->get_styles($media, $style);
-
+        
         $AxKit::Stash{$key} = {
             styles => $styles,
             mtime => $provider->mtime(),
@@ -450,43 +573,6 @@ sub get_styles {
         
         return $styles;
     }
-}
-
-sub check_resource_mtimes {
-    my ($xml_provider, $styles, $mtime) = @_;
-
-    my $r = AxKit::Apache->request;
-    
-    AxKit::Debug(3, "checking xml mtime vs cache mtime");
-    if ($xml_provider->mtime() <= $mtime) {
-        AxKit::Debug(3, "xml newer than cache");
-        return 1;
-    }
-
-    AxKit::Debug(3, "checking stylesheet mtimes vs cache mtime");
-    for my $style (@$styles) {
-        next unless $style->{href};
-        next unless $style->{module}->stylesheet_exists();
-#                my $req = get_subrequest($r, $style->{href});
-        my $provider = Apache::AxKit::Provider->new(
-                $r,
-                uri => $style->{href},
-                );
-
-        if (!$provider->exists()) {
-            throw Apache::AxKit::Exception::Declined(
-                    reason => "Stylesheet '$style->{href}' does not exist or is not readable"
-                    );
-        }
-#                warn "checking $style->{module} mtime against cache: $mtime_cache\n";
-        if ($style->{module}->get_mtime($provider) <= $mtime)
-        {
-            AxKit::Debug(3, "stylesheet '$style->{href}' newer than cache");
-            return 1; # recreate
-        }
-    }
-
-    return 0;
 }
 
 sub check_dependencies {
@@ -578,10 +664,12 @@ sub deliver_to_browser {
                 $r->print( $r->pnotes('xml_string') );
             }
         }
+        
+        return OK;
     }
     else {
         AxKit::Debug(4, "writing xml string to cache and delivering to browser");
-        eval {
+        my $retval = eval {
             $AxKit::Cache->write($r->pnotes('xml_string'));
             $AxKit::Cache->deliver();
         };
@@ -594,6 +682,9 @@ sub deliver_to_browser {
             else {
                 throw $E;
             }
+        }
+        else {
+            return $retval;
         }
     }
 }
@@ -610,6 +701,38 @@ sub prep_exception {
     else {
         return;
     }
+}
+
+sub run_plugins {
+    my ($r) = @_;
+    
+    my $method = "handler";
+    
+    foreach my $plugin ($AxKit::Cfg->Plugins) {
+        AxKit::Debug(2, "Running plugin: $plugin");
+        AxKit::load_module($plugin);
+        if (my $subref = $plugin->can($method)) {
+            my $retval = $subref->($r);
+            if ($retval == DONE) {
+                return OK;
+            }
+            elsif ($retval == SERVER_ERROR) {
+                throw Apache::AxKit::Exception::Error(
+                        -text => "Plugin '$plugin' returned SERVER_ERROR",
+                        );
+            }
+            elsif ($retval != OK) {
+                return $retval;
+            }
+        }
+        else {
+            throw Apache::AxKit::Exception::Error(
+                    -text => "Plugin '$plugin' has no $method method",
+                    );
+        }
+    }
+
+    return OK;
 }
 
 my %escapes = (
@@ -744,8 +867,7 @@ Then in any Apache configuration section (Files, Location, Directory,
 .htaccess):
 
     # Install AxKit main parts
-    SetHandler perl-script
-    PerlHandler AxKit
+    SetHandler AxKit
 
     # Setup style type mappings
     AxAddStyleMap text/xsl Apache::AxKit::Language::Sablot
@@ -832,6 +954,27 @@ the DECLINE occured is logged, but not necessarily the reason.
 
     AxLogDeclines On
 
+=head2 AxAddPlugin
+
+Setting this to a module, will load that module and execute the
+handler method of the module before any AxKit processing is done.
+
+This allows you to setup things like sessions, do authentication,
+or other actions that require no XML output, before the actual
+XML processing stage of AxKit.
+
+    AxAddPlugin MyAuthHandler
+    
+There is also a companion option, B<AxResetPlugins>, because
+plugin lists persist and get merged into directories, so if you
+want to start completely fresh, use the following:
+
+    AxResetPlugins
+    AxAddPlugin MyFreshPlugin
+
+Note: as with other options that take a module, prefixing with
+a "+" sign will pre-load the module at compile time.
+
 =head2 AxGzipOutput
 
 This allows you to use the Compress::Zlib module to gzip output to browsers
@@ -863,7 +1006,36 @@ only enable if you also enable AxTranslateOutput.
 
     AxOutputCharset iso-8859-1
 
-=head2 AxErrorStylesheet
+=head2 AxAddOutputTransformer
+
+Output transformers are applied just before output is sent to the browser.
+This directive adds a transformer to the list of transformers to be applied
+to the output.
+
+    AxAddOutputTransformer  MyModule::Transformer
+
+The transformer is a subroutine that accepts a line to process and
+returns the transformed line.
+
+    package MyModule;
+    sub Transformer {
+      my $line = shift;
+      ...
+      return $line;
+    }
+
+An output transformer could be used to add dynamic output to a cached page
+(such as the date and time, or a customer name).
+
+=head2 AxResetOutputTransformers
+
+Reset the list of output transformers from the current directory level
+down.
+
+   # This directive takes no arguments
+   AxResetOutputTransformers
+
+ =head2 AxErrorStylesheet
 
 If an error occurs during processing that throws an exception, the
 exception handler will try and find an ErrorStylesheet to use to process

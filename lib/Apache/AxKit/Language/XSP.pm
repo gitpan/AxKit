@@ -1,4 +1,4 @@
-# $Id: XSP.pm,v 1.50 2001/06/04 13:27:31 matt Exp $
+# $Id: XSP.pm,v 1.59 2001/11/14 15:40:58 matt Exp $
 
 package Apache::AxKit::Language::XSP;
 
@@ -7,7 +7,6 @@ use Apache::AxKit::Language;
 use Apache::Request;
 use Apache::AxKit::Exception;
 use Apache::AxKit::Cache;
-use XML::Parser;
 
 use vars qw/@ISA/;
 
@@ -36,7 +35,7 @@ my $cache;
 
 sub handler {
     my $class = shift;
-    my ($r, $xml, undef) = @_;
+    my ($r, $xml, undef, $last_in_chain) = @_;
     
     _register_me_and_others();
     
@@ -124,7 +123,7 @@ sub handler {
     
     $r->no_cache(1);
     
-    my $xsp_cache = Apache::AxKit::Cache->new($r, $package);
+    my $xsp_cache = Apache::AxKit::Cache->new($r, $package, $package->cache_params($r, $cgi));
     
     if (!$package->has_changed($xsp_cache->mtime()) && 
                 !$xml->has_changed($xsp_cache->mtime())) {
@@ -133,15 +132,11 @@ sub handler {
         return;
     }
     
-    eval {
-#        local $^W;
-        $r->pnotes('dom_tree', $cv->($r, $cgi));
-    };
-    if ($@) {
-        die "XSP Script failed: $@";
-    }
-    
-    $xsp_cache->write( $r->pnotes('dom_tree')->toString );
+    my $dom = $cv->($r, $cgi);
+    $r->pnotes('dom_tree', $dom);
+    $r->print($dom->toString) if $last_in_chain;
+
+    $xsp_cache->write( $dom->toString );
 }
 
 sub register {
@@ -284,7 +279,7 @@ sub start_document {
                 "package $e->{XSP_Package}; \@$e->{XSP_Package}::ISA = ('Apache::AxKit::Language::XSP::Page');",
                 "#line 2 ".$e->{XSP_Line}."\n",
                 "use Apache;",
-                "use XML::XPath;",
+                "use XML::LibXML;",
                 );
     
     foreach my $ns (keys %Apache::AxKit::Language::XSP::tag_lib) {
@@ -454,7 +449,7 @@ sub comment {
             $e->{XSP_Script} .= $sub->($e, $comment);
         }
         elsif ($sub = $pkg->can("parse_comment")) {
-            $e->{XSP_Script} .= $sub->($e, $comment);
+            $e->{XSP_Script} .= $sub->($e, $comment->{Data});
         }
     }
 }
@@ -478,7 +473,7 @@ sub processing_instruction {
             $e->{XSP_Script} .= $sub->($e, $pi);
         }
         elsif ($sub = $pkg->can("parse_pi")) {
-            $e->{XSP_Script} .= $sub->($e, $pi);
+            $e->{XSP_Script} .= $sub->($e, $pi->{Target}, $pi->{Data});
         }
     }
 }
@@ -536,8 +531,8 @@ sub characters {
 
         return <<"EOT";
 {
-    my \$text = XML::XPath::Node::Text->new(q|$text|);
-    \$parent->appendChild(\$text, 1); 
+    my \$text = \$document->createTextNode(q|$text|);
+    \$parent->appendChild(\$text); 
 }
 EOT
     }
@@ -590,14 +585,14 @@ sub start_element {
     elsif ($tag eq 'element') {
         if (my $name = $attribs{name}) {
             $e->manage_text(0);
-            return '{ my $elem = XML::XPath::Node::Element->new(q(' . $name . '));' .
-                    '$parent->appendChild($elem, 1); $parent = $elem; }' . "\n";
+            return '{ my $elem = $document->createElement(q(' . $name . '));' .
+                    '$parent->appendChild($elem); $parent = $elem; }' . "\n";
         }
     }
     elsif ($tag eq 'attribute') {
         if (my $name = $attribs{name}) {
             $e->{attrib_seen_name} = 1;
-            return '{ my $attr = XML::XPath::Node::Attribute->new(q|' . $name . '|, ""';
+            return '$parent->setAttribute(q|' . $name . '|, ""';
         }
         $e->{attrib_seen_name} = 0;
     }
@@ -607,10 +602,10 @@ sub start_element {
     elsif ($tag eq 'pi') {
     }
     elsif ($tag eq 'comment') {
-        return '{ my $comment = XML::XPath::Node::Comment->new(""';
+        return '{ my $comment = $document->createComment(""';
     }
     elsif ($tag eq 'text') {
-        return '{ my $text = XML::XPath::Node::Text->new(""';
+        return '{ my $text = $document->createTextNode(""';
     }
     elsif ($tag eq 'expr') {
 #        warn "expr: -2 = {", $node->{Parent}->{NamespaceURI}, "}", $node->{Parent}->{Name}, "\n";
@@ -618,7 +613,7 @@ sub start_element {
             if (!$e->manage_text() || $node->{Parent}->{Name} =~ /^(.*:)?content$/) {
                 return <<'EOT';
 {
-    my $text = XML::XPath::Node::Text->new(do {
+    my $text = $document->createTextNode("".do {
 EOT
             }
             elsif ($node->{Parent}->{Name} =~ /^(.*:)?(logic|expr)$/) {
@@ -628,7 +623,7 @@ EOT
         else {
             return <<'EOT';
 {
-    my $text = XML::XPath::Node::Text->new(do {
+    my $text = $document->createTextNode("".do {
 EOT
         }
         
@@ -664,17 +659,17 @@ sub end_element {
         return '$parent = $parent->getParentNode;' . "\n";
     }
     elsif ($tag eq 'attribute') {
-        return '); $parent->appendAttribute($attr, 1); }' . "\n";
+        return ');' . "\n";
     }
     elsif ($tag eq 'name') {
         if ($node->{Parent}->{Name} =~ /^(.*:)?element$/) {
             $e->manage_text(0, 1);
-            return '; my $elem = XML::XPath::Node::Element->new($name);' .
-                    '$parent->appendChild($elem, 1); $parent = $elem; }' . "\n";
+            return '; my $elem = $document->createElement($name);' .
+                    '$parent->appendChild($elem); $parent = $elem; }' . "\n";
         }
         elsif ($node->{Parent}->{Name} =~ /^(.*:)?attribute$/) {
             $e->{attrib_seen_name} = 1;
-            return '; my $attr = XML::XPath::Node::Attribute->new($name, ""';
+            return '; my $attr = $document->createAttribute($name, ""';
         }
         else {
             die "xsp:name parent node: $node->{Parent}->{Name} not valid";
@@ -683,10 +678,10 @@ sub end_element {
     elsif ($tag eq 'pi') {
     }
     elsif ($tag eq 'comment') {
-        return '); $parent->appendChild($comment, 1); }' . "\n";
+        return '); $parent->appendChild($comment); }' . "\n";
     }
     elsif ($tag eq 'text') {
-        return '); $parent->appendChild($text, 1); }' . "\n";
+        return '); $parent->appendChild($text); }' . "\n";
     }
     elsif ($tag eq 'expr') {
 #        warn "expr: -2 = {", $node->{Parent}->{NamespaceURI}, "}", $node->{Parent}->{Name}, "\n";
@@ -694,7 +689,7 @@ sub end_element {
             if (!$e->manage_text() || $node->{Parent}->{Name} =~ /^(.*:)?content$/) {
                 return <<'EOT';
 }); # xsp tag
-    $parent->appendChild($text, 1); 
+    $parent->appendChild($text); 
 }
 EOT
             }
@@ -705,7 +700,7 @@ EOT
         else {
             return <<'EOT';
 }); # non xsp tag
-    $parent->appendChild($text, 1); 
+    $parent->appendChild($text); 
 }
 EOT
         }
@@ -726,34 +721,38 @@ package AxKit::XSP::DefaultHandler;
 sub start_element {
     my ($e, $node) = @_;
     
+    my $code;
     if (!$e->{XSP_User_Root}) {
         $e->{XSP_Script} .= join("\n",
                 'sub handler {',
                 'my ($r, $cgi) = @_;',
-                'my $document = XML::XPath::Node::Element->new();',
+                'my $document = XML::LibXML::Document->createDocument("1.0", "UTF-8");',
                 'my ($parent);',
-                '$parent = $document;',
                 "\n",
                 );
         $e->{XSP_User_Root} = 1;
+        $code = '{ my $elem = $document->createElement(q(' . $node->{Name} . '));' .
+#        $code = '{ my $elem = $document->createElementNS(q(' . ($node->{NamespaceURI} || "") . '), q(' . $node->{Name} . '));' .
+                '$document->setDocumentElement($elem); $parent = $elem; }' . "\n";
+    }
+    else {
+        $code = '{ my $elem = $document->createElement(q(' . $node->{Name} . '));' .
+                '$parent->appendChild($elem); $parent = $elem; }' . "\n";
     }
     
-    my $code = '{ my $elem = XML::XPath::Node::Element->new(q(' . $node->{Name} . '));' .
-                '$parent->appendChild($elem, 1); $parent = $elem; }' . "\n";
-    
     for my $attr (@{$node->{Attributes}}) {
-        $code .= '{ my $attr = XML::XPath::Node::Attribute->new(q(' . $attr->{Name} . '), q(' . $attr->{Value} . '));';
-        $code .= '$parent->appendAttribute($attr, 1); }' . "\n";
+        $code .= '$parent->setAttribute(q(' . $attr->{Name} . 
+                '), q(' . $attr->{Value} . 
+                '));' . "\n";
     }
 
     for my $ns (keys %{$e->{Current_NS}}) {
-        $code .= '{ my $ns = XML::XPath::Node::Namespace->new(q(' . $ns .'), q(' .
+        $code .= '$parent->setAttribute("xmlns:" . q(' . $ns .'), q(' .
                 $e->{Current_NS}{$ns} . '));';
-        $code .= '$parent->appendNamespace($ns); }' . "\n";
     }
     
     push @{ $e->{NS_Stack} },
-         { %{ $e->{Current_NS} } };
+            { %{ $e->{Current_NS} || {} } };
     
     $e->{Current_NS} = {};
     
@@ -781,8 +780,8 @@ sub characters {
     
     $text =~ s/\|/\\\|/g;
     
-    return '{ my $text = XML::XPath::Node::Text->new(q|' . $text . '|);' .
-            '$parent->appendChild($text, 1); }' . "\n";
+    return '{ my $text = $document->createTextNode(q|' . $text . '|);' .
+            '$parent->appendChild($text); }' . "\n";
 }
 
 sub comment {
@@ -796,15 +795,12 @@ sub processing_instruction {
 1;
 
 ######################################################
-## SAXParser - almost verbatim copy of Ken MacLeod's
-##             SAX2 stuff.
+## SAXParser
 ######################################################
 
 package AxKit::XSP::SAXParser;
 
-use vars qw/$xmlns_ns/;
-
-$xmlns_ns = "http://www.w3.org/2000/xmlns/";
+use XML::LibXML 1.30;
 
 sub new {
     my ($type, %self) = @_; 
@@ -814,128 +810,96 @@ sub new {
 sub parse {
     my ($self, $thing) = @_;
 
-    my $parser = XML::Parser->new( Handlers => {
-	Init => sub { $self->_handle_init(@_) },
-	Final => sub { $self->_handle_final(@_) },
-	Start => sub { $self->_handle_start(@_) },
-	End => sub { $self->_handle_end(@_) },
-	Char => sub { $self->_handle_char(@_) },
-	Comment => sub { $self->_handle_comment(@_) },
-	Proc => sub { $self->_handle_proc(@_) },
-    } );
+    my $doc;
+
+    my $parser = XML::LibXML->new();
+    $parser->expand_entities(1);
     
-    if ($self->{provider}) {
-        if (my $ext_ent_handler = $self->{provider}->get_ext_ent_handler()) {
-            $parser->setHandlers(ExternEnt => $ext_ent_handler);
+    if (ref($thing)) {
+        $doc = $parser->parse_fh($thing);
+    }
+    else {
+        $doc = $parser->parse_string($thing);
+    }
+    $doc->process_xinclude;
+    
+    my $document = { Parent => undef };
+    $self->{Handler}->start_document($document);
+    
+    my $root = $doc->getDocumentElement;
+    if ($root) {
+        process_node($self->{Handler}, $root);
+    }
+    
+    $self->{Handler}->end_document($document);
+}
+
+sub process_node {
+    my ($handler, $node) = @_;
+    
+    my $node_type = $node->getType();
+    if ($node_type == XML_COMMENT_NODE) {
+        $handler->comment( { Data => $node->getData } );
+    }
+    elsif ($node_type == XML_TEXT_NODE || $node_type == XML_CDATA_SECTION_NODE) {
+        # warn($node->getData . "\n");
+        $handler->characters( { Data => $node->getData } );
+    }
+    elsif ($node_type == XML_ELEMENT_NODE) {
+        # warn("<" . $node->getName . ">\n");
+        process_element($handler, $node);
+        # warn("</" . $node->getName . ">\n");
+    }
+    elsif ($node_type == XML_ENTITY_REF_NODE) {
+        foreach my $kid ($node->getChildnodes) {
+            # warn("child of entity ref: " . $kid->getType() . " called: " . $kid->getName . "\n");
+            process_node($handler, $kid);
         }
     }
-
-    $self->{InScopeNamespaceStack} = [ { '_Default' => undef,
-				         'xmlns' => $xmlns_ns } ];
-    $self->{NodeStack} = [ ];
-
-    return $parser->parse($thing);
-}
-
-sub _handle_init {
-    my ($self, $expat) = @_;
-
-    my $document = { Parent => undef };
-    push @{ $self->{NodeStack} }, $document;
-    $self->{Handler}->start_document( $document );
-}
-
-sub _handle_final {
-    my ($self, $expat) = @_;
-
-    my $document = pop @{ $self->{NodeStack} };
-    return $self->{Handler}->end_document( $document );
-}
-
-sub _handle_start {
-    my $self = shift; my $expat = shift; my $element_name = shift;
-
-    push @{ $self->{InScopeNamespaceStack} },
-         { %{ $self->{InScopeNamespaceStack}[-1] } };
-    $self->_scan_namespaces(@_);
-
-    my @attributes;
-    for (my $ii = 0; $ii < $#_; $ii += 2) {
-	my ($name, $value) = ($_[$ii], $_[$ii+1]);
-	my $namespace = $self->_namespace($name);
-	push @attributes, { Name => $name,
-                            Value => $value,
-                            NamespaceURI => $namespace };
+    elsif ($node_type == XML_DOCUMENT_NODE) {
+        # just get root element. Ignore other cruft.
+        foreach my $kid ($node->getChildnodes) {
+            if ($kid->getType() == XML_ELEMENT_NODE) {
+                process_element($handler, $kid);
+                last;
+            }
+        }
     }
-
-    my $namespace = $self->_namespace($element_name);
-    my $element = { Name => $element_name,
-                    NamespaceURI => $namespace,
-                    Attributes => [ @attributes ],
-                    Parent => $self->{NodeStack}[-1] };
-
-    push @{ $self->{NodeStack} }, $element;
-    $self->{Handler}->start_element( $element );
-}
-
-sub _handle_end {
-    my $self = shift;
-
-    pop @{ $self->{InScopeNamespaceStack} };
-    my $element = pop @{ $self->{NodeStack} };
-    my $results = $self->{Handler}->end_element( $element );
-    return $results;
-}
-
-sub _handle_char {
-    my ($self, $expat, $string) = @_;
-
-    my $characters = { Data => $string, Parent => $self->{NodeStack}[-1] };
-    $self->{Handler}->characters( $characters );
-}
-
-sub _handle_comment {
-    my ($self, $expat, $data) = @_;
-
-    my $comment = { Data => $data, Parent => $self->{NodeStack}[-1] };
-    $self->{Handler}->comment( $comment );
-}
-
-sub _handle_proc {
-    my ($self, $expat, $target, $data) = @_;
-
-    my $pi = {  Target => $target,
-                Data => $data,
-                Parent => $self->{NodeStack}[-1] };
-    $self->{Handler}->processing_instruction( $pi );
-}
-
-sub _scan_namespaces {
-    my ($self, %attributes) = @_;
-
-    while (my ($attr_name, $value) = each %attributes) {
-	if ($attr_name eq 'xmlns') {
-	    $self->{InScopeNamespaceStack}[-1]{'_Default'} = $value;
-	} elsif ($attr_name =~ /^xmlns:(.*)$/) {
-	    my $prefix = $1;
-	    $self->{InScopeNamespaceStack}[-1]{$prefix} = $value;
-	}
+    else {
+        warn("unknown node type: $node_type");
     }
 }
 
-sub _namespace {
-    my ($self, $name) = @_;
-
-    my ($prefix, $localname) = split(/:/, $name);
-    if (!defined($localname)) {
-	if ($prefix eq 'xmlns') {
-	    return undef;
-	} else {
-	    return $self->{InScopeNamespaceStack}[-1]{'_Default'};
-	}
-    } else {
-	return $self->{InScopeNamespaceStack}[-1]{$prefix};
+sub process_element {
+    my ($handler, $element) = @_;
+    
+    my @attr;
+    
+    foreach my $attr ($element->getAttributes) {
+        push @attr, {
+            Name => $attr->getName,
+            Value => $attr->getData,
+            NamespaceURI => $attr->getNamespaceURI,
+            Prefix => $attr->getPrefix,
+            LocalName => $attr->getLocalName,
+        };
     }
+    
+    my $node = {
+        Name => $element->getName,
+        Attributes => \@attr,
+        NamespaceURI => $element->getNamespaceURI,
+        Prefix => $element->getPrefix,
+        LocalName => $element->getLocalName,
+    };
+    
+    $handler->start_element($node);
+    
+    foreach my $child ($element->getChildnodes) {
+        process_node($handler, $child);
+    }
+    
+    $handler->end_element($node);
 }
 
 ############################################################
@@ -948,6 +912,12 @@ sub has_changed {
     my $class = shift;
     my $mtime = shift;
     return 1;
+}
+
+sub cache_params {
+    my $class = shift;
+    my ($r, $cgi) = @_;
+    return '';
 }
 
 1;

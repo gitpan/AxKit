@@ -1,4 +1,4 @@
-/* $Id: getstyles.c,v 1.8 2001/05/27 20:05:50 matt Exp $ */
+/* $Id: getstyles.c,v 1.15 2001/12/11 11:20:43 matt Exp $ */
 
 #ifdef HAVE_LIBXML2
 #include "getstyles.h"
@@ -72,18 +72,19 @@ static void errorHandler(
         ...)
 {
     va_list args;
-    char buffer[50000];
+    SV * sv;
     
-    buffer[0] = 0;
+    sv = NEWSV(0,0);
     
     va_start(args, msg);
-    vsprintf(&buffer[strlen(buffer)], msg, args);
+    sv_vsetpvfn(sv, msg, strlen(msg), &args, NULL, 0, NULL);
     va_end(args);
     
-    warn(buffer);
+    sv_catsv(error_str, sv);
+    SvREFCNT_dec(sv);
 }
 
-static xmlEntityPtr getEntity(void *user_data, const xmlChar *name) {
+xmlEntityPtr getAxEntity(void *user_data, const xmlChar *name) {
     xmlEntityPtr predef = xmlGetPredefinedEntity(name);
     
     if (predef != NULL) {
@@ -113,8 +114,8 @@ read_perl (SV * ioref, char * buffer, int len)
     PUSHMARK(SP);
     EXTEND(SP, 3);
     PUSHs(ioref);
-    PUSHs(tbuff);
-    PUSHs(tsize);
+    PUSHs(sv_2mortal(tbuff));
+    PUSHs(sv_2mortal(tsize));
     PUTBACK;
     
     cnt = perl_call_method("read", G_SCALAR);
@@ -135,6 +136,8 @@ read_perl (SV * ioref, char * buffer, int len)
     
     chars = SvPV(tbuff, read_length);
     strncpy(buffer, chars, read_length);
+    /* terminate by NUL in case chars > buffer */
+    buffer[len - 1] = 0;
     
     FREETMPS;
     LEAVE;
@@ -148,7 +151,7 @@ xmlSAXHandler axkitSAXHandlerStruct = {
     NULL,
     NULL,
     NULL,
-    getEntity,
+    getAxEntity,
     NULL,
     NULL,
     NULL,
@@ -164,10 +167,10 @@ xmlSAXHandler axkitSAXHandlerStruct = {
     NULL,
     processingInstructionHandler,
     NULL,
-    NULL,
-    NULL,
-    errorHandler,
-    getEntity,
+    errorHandler, /* warnings */
+    errorHandler, /* errors */
+    errorHandler, /* fatal errors */
+    getAxEntity,
     NULL,
     doctypeHandler
 };

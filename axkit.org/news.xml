@@ -22,51 +22,51 @@
       </image>
 
 <item>
-<title>OASIS announces RELAX, TREX to form RELAX NG</title>
-<link>http://www.xmlhack.com/read.php?item=1245</link>
-<description>OASIS announced the renaming of the TREX technical committee to RELAX NG, reflecting "their decision to integrate TREX and RELAX in order to collaborate on a unified lightweight specification for validating XML-based languages."</description>
+<title>XSLT, XPath, and XQuery drafts</title>
+<link>http://www.xmlhack.com/read.php?item=1493</link>
+<description>The W3C has given developers a huge pile of holiday reading, with first drafts of XSLT 2.0 and XPath 2.0, as well as a collection of revised query drafts.</description>
+<category>XSLT</category>
+<category>Databases</category>
+</item>
+<item>
+<title>Does XQuery fit all?</title>
+<link>http://www.xmlhack.com/read.php?item=1492</link>
+<description>While XQuery is usually considered an inappropriate tool for querying RDF collections or Topic Maps, Jonathan Robie demonstrated at XML 2001 that using XQuery functions over their normalized forms can be practical and not especially complex.</description>
+<category>Databases</category>
+<category>RDF</category>
+</item>
+<item>
+<title>XBeans in second release</title>
+<link>http://www.xmlhack.com/read.php?item=1491</link>
+<description>XBeans.org has issued a second release of XBeans, improving its JavaBean and DOM-based data flows with a GUI customizer tool for making translations between the vocabularies expected by various XBeans.</description>
+<category>Java</category>
+<category>XML</category>
+</item>
+<item>
+<title>Five challenges for XML</title>
+<link>http://www.xmlhack.com/read.php?item=1490</link>
+<description>James Clark, the first
+recipient of the IDEAlliance XML Cup Award and opening keynote speaker at XML
+2001, gave a lively description of the five challenges facing the XML community.</description>
+<category>Community</category>
+<category>Comment</category>
+</item>
+<item>
+<title>XML 2001: open and balanced</title>
+<link>http://www.xmlhack.com/read.php?item=1489</link>
+<description>XML 2001, opened by its new chair Lauren Wood, marked the arrival of XML schema languages and a new competition between the W3C and ISO for XML standardization.</description>
+<category>Community</category>
 <category>Schemas</category>
-<category>OASIS</category>
 </item>
 <item>
-<title>New drafts for URI processing on DNS</title>
-<link>http://www.xmlhack.com/read.php?item=1244</link>
-<description>The IETF released two new drafts of A DDDS Database Using The Domain Name System and Assignment Procedures for the URI Resolution using DNS.</description>
-<category>IETF</category>
-<category>Namespaces</category>
-</item>
-<item>
-<title>XHTML 1.1 reaches Recommendation</title>
-<link>http://www.xmlhack.com/read.php?item=1243</link>
-<description>The W3C has released XHTML 1.1 as a W3C Recommendation, as well as a new XHTML module, Ruby Annotation.</description>
-<category>XHTML</category>
+<title>XML 1.1 Working Draft Published</title>
+<link>http://www.xmlhack.com/read.php?item=1488</link>
+<description>The W3C have announced the first public version of a Working 
+Draft of XML 1.1. The new draft has been issued to 
+meet the 'Blueberry' requirements published earlier this 
+year to much community debate.</description>
+<category>XML</category>
 <category>W3C</category>
-</item>
-<item>
-<title>W3C workshop on XML key management</title>
-<link>http://www.xmlhack.com/read.php?item=1242</link>
-<description>The W3C is holding a workshop
-on XML key management in Redwood City, California, on 19 July 2001, to
-consider the requirements for simple key resolution and trust services for XML
-security applications.</description>
-<category>W3C</category>
-<category>E-Commerce</category>
-</item>
-<item>
-<title>SVG renderer for UML diagrams</title>
-<link>http://www.xmlhack.com/read.php?item=1241</link>
-<description>Christian Nentwich has created BOX, a tool that
-takes UML diagrams in XMI format and renders them in either SVG or Microsoft's
-VML format.</description>
-<category>SVG</category>
-<category>Tools</category>
-</item>
-<item>
-<title>New Perl XML modules</title>
-<link>http://www.xmlhack.com/read.php?item=1240</link>
-<description>Matt Sergeant has released several new Perl/XML modules: XML::LibXML,
-XML::Handler::HTMLWriter and XML::Filter::Base.</description>
-<category>Perl</category>
 </item>
 
 </channel>

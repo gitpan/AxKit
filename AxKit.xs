@@ -1,4 +1,4 @@
-/* $Id: AxKit.xs,v 1.38 2001/06/05 09:28:45 matt Exp $ */
+/* $Id: AxKit.xs,v 1.46 2001/10/22 20:23:48 matt Exp $ */
 
 #ifdef __cplusplus
 extern "C" {
@@ -16,6 +16,8 @@ extern "C" {
 }
 #endif
 
+SV * error_str = NULL;
+
 #ifdef HAVE_LIBXML2
 char * axBuildURI(pool *p, const char *URI, const char *base)
 {
@@ -28,10 +30,86 @@ char * axBuildURI(pool *p, const char *URI, const char *base)
         return ap_pstrdup(p, ap_make_full_path(p, ap_make_dirstr_parent(p, base), URI));
     }
     else {
-        return URI;
+        return (char*)URI;
     }
 }
 #endif
+
+pool *
+get_startup_pool(void)
+{
+    SV *sv = perl_get_sv("Apache::__POOL", FALSE);
+    if(sv) {
+        IV tmp = SvIV((SV*)SvRV(sv));
+        return (pool *)tmp;
+    }
+    return NULL;
+}
+
+int
+call_method_int(SV * obj, char * method)
+{
+    dSP;
+    int cnt;
+    int results = -1;
+    
+    ENTER;
+    SAVETMPS;
+    
+    PUSHMARK(SP);
+    EXTEND(SP, 1);
+    PUSHs(obj);
+    PUTBACK;
+    
+    cnt = perl_call_method(method, G_SCALAR);
+    
+    SPAGAIN;
+    
+    if (cnt != 1) {
+        croak("read method call failed");
+    }
+    
+    results = POPi;
+    
+    FREETMPS;
+    LEAVE;
+    
+    return results;
+}
+
+SV *
+call_method_sv(SV * obj, char * method)
+{
+    dSP;
+    int cnt;
+    STRLEN n_a;
+    SV * results;
+    ENTER;
+    SAVETMPS;
+    
+    PUSHMARK(SP);
+    EXTEND(SP, 1);
+    PUSHs(obj);
+    PUTBACK;
+    
+    cnt = perl_call_method(method, G_SCALAR);
+    
+    SPAGAIN;
+    
+    if (cnt != 1) {
+        croak("read method call failed");
+    }
+    
+    results = NEWSV(0,0);
+    sv_catsv(results, POPs);
+    
+    FREETMPS;
+    LEAVE;
+    
+    /* SvREFCNT_inc(results); */
+    
+    return results;
+}
 
 #define BUFSIZE 1024
 
@@ -45,7 +123,7 @@ BOOT:
         # warn("AxKit: add_module()\n");
         ap_add_module(&XS_AxKit);
     }
-    ap_register_cleanup(perl_get_startup_pool(), NULL,
+    ap_register_cleanup(get_startup_pool(), NULL,
             remove_module_cleanup, null_cleanup);
 
 void
@@ -57,12 +135,12 @@ END ()
             ap_remove_module(&XS_AxKit);
         }
 
-
-HV *
+SV *
 get_config (r)
         Apache  r
     PREINIT:
         axkit_dir_config * cfg;
+        HV * config;
     CODE:
         cfg = (axkit_dir_config *)
                 ap_get_module_config(r->per_dir_config, &XS_AxKit);
@@ -71,8 +149,8 @@ get_config (r)
             XSRETURN_UNDEF;
         }
         
-        RETVAL = ax_get_config(cfg);
-        sv_2mortal((SV*)RETVAL);
+        config = ax_get_config(cfg);
+        RETVAL = newRV_noinc((SV*)config);
     OUTPUT:
         RETVAL
 
@@ -80,12 +158,15 @@ void
 load_module (name)
         char * name
     CODE:
-        # warn("load_module: %s\n", name);
-        if(!perl_module_is_loaded(name)) {
-            # warn("loading...\n");
-            perl_require_module(name, NULL);
-            # warn("done\n");
-        }
+        maybe_load_module(name);
+
+void
+reconsecrate (obj, class)
+        SV * obj
+        char * class
+    CODE:
+        maybe_load_module(class);
+        sv_bless(obj, gv_stashpv(class, FALSE));
 
 char *
 build_uri (r, uri, base)
@@ -97,11 +178,136 @@ build_uri (r, uri, base)
     OUTPUT:
         RETVAL
 
+void
+Debug (level, ...)
+        int level
+    PREINIT:
+        STRLEN n_a;
+        request_rec * r;
+        SV * str;
+        int debuglevel;
+        axkit_dir_config * cfg;
+    CODE:
+        r = perl_request_rec(NULL);
+        if (r == NULL) {
+            return;
+        }
+        cfg = (axkit_dir_config *)
+                ap_get_module_config(r->per_dir_config, &XS_AxKit);
+        if (level > cfg->debug_level) {
+            return;
+        }
+        str = NEWSV(0, 256);
+        sv_setpvn(str, "", 0);
+        if (items > 1) {
+            int i;
+            char * last;
+            for (i = 1; i < (items - 1); i++) {
+                sv_catpv(str, SvPV(ST(i), n_a));
+            }
+            last = SvPV(ST(items - 1), n_a);
+            if (last[strlen(last)] == '\n') {
+                sv_catpvn(str, last, strlen(last) - 1);
+            }
+            else {
+                sv_catpv(str, last);
+            }
+        }
+        ap_log_rerror(APLOG_MARK, APLOG_NOERRNO|APLOG_WARNING, r, "[AxKit] %s", SvPV(str, n_a));
+        SvREFCNT_dec(str);
+
 #ifdef HAVE_LIBXML2
 
 MODULE = AxKit		PACKAGE = Apache::AxKit::Provider
 
 PROTOTYPES: DISABLE
+
+SV *
+_new(class, r, ...)
+        char * class
+        SV * r
+    PREINIT:
+        HV * hash;
+        SV * alternate;
+        STRLEN n_a;
+        int item_id;
+        SV * cfg;
+        SV * key;
+        int cnt;
+        SV * obj;
+        AV * item_store;
+    CODE:
+        hash = newHV();
+        hv_store(hash, "apache", 6, r, 0);
+        
+        obj = newRV_noinc((SV*)hash);
+        sv_bless(obj, gv_stashpv(class, 0));
+        
+        item_store = newAV();
+        for (item_id = 2; item_id < items; item_id++) {
+            av_push(item_store, ST(item_id));
+        }
+        
+        if (alternate = call_method_sv(perl_get_sv("AxKit::Cfg", FALSE), "ProviderClass")) {
+            SV * tmp;
+            sv_bless(obj, gv_stashsv(alternate, 0));
+            SvREFCNT_dec(alternate);
+        }
+        {
+            dSP;
+            ENTER;
+            SAVETMPS;
+            
+            PUSHMARK(SP);
+            EXTEND(SP, (items + 1));
+            PUSHs(obj);
+            for (item_id = 0; item_id <= av_len(item_store); item_id++) {
+                PUSHs(*av_fetch(item_store, item_id, 0));
+            }
+            PUTBACK;
+            
+            cnt = perl_call_method("init", G_VOID);
+            
+            SPAGAIN;
+            
+            if (cnt != 0) {
+                croak("init method call failed");
+            }
+            
+            POPs;
+            
+            FREETMPS;
+            LEAVE;
+        }
+        key = call_method_sv(obj, "key");
+        {
+            dSP;
+            ENTER;
+            SAVETMPS;
+            
+            PUSHMARK(SP);
+            EXTEND(SP, 1);
+            PUSHs(key);
+            PUTBACK;
+            
+            cnt = perl_call_pv("AxKit::add_depends", G_VOID);
+            
+            SPAGAIN;
+            
+            if (cnt != 1) {
+                croak("add_depends method call failed");
+            }
+            
+            POPs;
+            
+            FREETMPS;
+            LEAVE;
+        }
+        SvREFCNT_dec(key);
+        SvREFCNT_dec(item_store);
+        RETVAL = obj;
+    OUTPUT:
+        RETVAL
 
 SV *
 xs_get_styles_fh(r, ioref)
@@ -128,6 +334,8 @@ xs_get_styles_fh(r, ioref)
         
         ret = -1;
         
+        error_str = newSVpv("", 0);
+        
         xmlInitParser();
         
         xmlDoValidityCheckingDefaultValue = 0;
@@ -148,6 +356,8 @@ xs_get_styles_fh(r, ioref)
             xmlFreeParserCtxt(ctxt);
         }
         
+        sv_2mortal(error_str);
+        
         xmlCleanupParser();
         
         if (ret == -1) {
@@ -155,7 +365,8 @@ xs_get_styles_fh(r, ioref)
         }
         
         if (ret != XML_ERR_OK && ret != XML_ERR_UNDECLARED_ENTITY) {
-            croak("xmlParse returned error: %d", ret);
+            STRLEN len;
+            croak("xmlParse returned error: %d, %s", ret, SvPV(error_str, len));
         }
         
         return_array = newAV();
@@ -202,6 +413,8 @@ xs_get_styles_str(r, xmlstring)
         
         ptr = SvPV(xmlstring, len);
         
+        error_str = newSVpv("", 0);
+        
         xmlInitParser();
         
         xmlDoValidityCheckingDefaultValue = 0;
@@ -214,10 +427,12 @@ xs_get_styles_str(r, xmlstring)
         
         ret = xmlSAXUserParseMemory(axkitSAXHandler, (void*)&results, ptr, len);
         
+        sv_2mortal(error_str);
+        
         xmlCleanupParser();
         
         if (ret != XML_ERR_OK && ret != XML_ERR_UNDECLARED_ENTITY) {
-            croak("xmlParse returned error: %d", ret);
+            croak("xmlParse returned error: %d, %s", ret, SvPV(error_str, len));
         }
         
         return_array = newAV();

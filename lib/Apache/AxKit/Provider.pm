@@ -1,9 +1,10 @@
-# $Id: Provider.pm,v 1.33 2001/06/04 16:00:33 matt Exp $
+# $Id: Provider.pm,v 1.35 2001/06/29 21:27:50 matt Exp $
 
 package Apache::AxKit::Provider;
 use strict;
 
 use Apache::AxKit::Exception;
+use Apache::Constants qw(OK DECLINED);
 #use XML::Parser;
 
 # use vars qw/$COUNT/;
@@ -45,10 +46,9 @@ sub has_changed {
 
 sub decline {
     my $self = shift;
-    my %args = @_;
     
-    throw Apache::AxKit::Exception::Declined(
-                reason => $args{reason} || "provider declined");
+    AxKit::Debug(4, "provider declined");
+    return DECLINED;
 }
 
 sub get_ext_ent_handler {
@@ -64,8 +64,9 @@ sub get_ext_ent_handler {
                 require HTTP::GHTTP;
             };
             if ($@) {
-                require LWP;
-                return XML::Parser::lwp_ext_ent_handler(@_);
+                require LWP::Simple;
+                import LWP::Simple;
+                return get($sysid) || die "Cannot get $sysid";
             }
             my $r = HTTP::GHTTP->new($sysid);
             $r->process_request;

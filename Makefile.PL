@@ -1,4 +1,4 @@
-# $Id: Makefile.PL,v 1.45 2001/06/05 09:28:45 matt Exp $
+# $Id: Makefile.PL,v 1.50 2001/12/11 13:02:58 matt Exp $
 
 package AxKit;
 # file Makefile.PL
@@ -87,14 +87,8 @@ unless (have_module('Apache::Request', '0.31_03')) {
 }
 
 test_module('XML::XPath', '1.00', <<"REASON");
-XML::XPath 1.00 or higher is required for XPathScript and XSP
+XML::XPath 1.00 or higher is required for XPathScript
 to work. You don't have to install it, but you won't be able
-to use XPathScript stylesheets or XSP pages without it.
-REASON
-
-test_module('Storable', '0.7', <<"REASON");
-Storable 0.7 or higher is required for XPathScript to work.
-You don't have to install it, but you won't be able
 to use XPathScript stylesheets without it.
 REASON
 
@@ -111,14 +105,19 @@ XML::Sablotron 0.40 or higher is required for our Sablotron
 XSLT processor to work. You don't have to install it, 
 but you won't be able to use Apache::AxKit::Language::Sablot without it.
 REASON
+
+test_module('XML::LibXML', '1.31', <<"REASON");
+XML::LibXML 1.31 or higher is required for the XSP engine
+to work. You don't have to install it, but you won't
+be able to use XSP pages without it.
+REASON
         
-test_module('XML::LibXSLT', '0.99', <<"REASON");
-XML::LibXSLT 0.96 or higher is required for our LibXSLT 
+test_module('XML::LibXSLT', '1.31', <<"REASON");
+XML::LibXSLT 1.31 or higher is required for our LibXSLT 
 XSLT processor to work. You don't have to install it, 
 but you won't be able to use Apache::AxKit::Language::LibXSLT without it.
 REASON
 
-my $is_Win32 = ($^O =~ /Win32/);
 
 eval {
     print "running xml2-config... ";
@@ -136,7 +135,7 @@ if (have_library('xml2')) {
     $config{DEFINE} .= ' -DHAVE_LIBXML2';
     $config{LIBS} .= ' -lxml2 -lz';
 }
-else {
+elsif (!$is_Win32) {
     my $apache;
     
     print <<EOT;
@@ -181,7 +180,7 @@ get the paths to the Apache and mod_perl build directories.
 DEATH
     }
     
-    use Apache::MyConfig;
+    require Apache::MyConfig;
     $config{INC} .= qq{ -I"$Apache::MyConfig::Setup{MODPERL_INC}/../.." }
         . qq{ -I"$Apache::MyConfig::Setup{APACHE_INC}" }
         . qq{ -I"$Apache::MyConfig::Setup{APACHE_INC}/../os/win32" };
@@ -206,6 +205,7 @@ foreach my $k (keys %config) {
 }
 
 %config = () if $] > 5.00560; 
+rm_f($DEVNULL) if $is_Win32;
 
 WriteMakefile(
         'NAME' => __PACKAGE__,
@@ -222,15 +222,21 @@ WriteMakefile(
 #################################################################
 
 use Config;
+use Cwd;
 use Symbol;
 use File::Spec;
 
-use vars qw/$LINK $DEVNULL/;
+use vars qw/$DEVNULL $is_Win32/;
 
 BEGIN {
-  $LINK = "$Config{cc} $Config{ccdlflags} -o conftest $Config{ccflags} -I$Config{incpath} $Config{ldflags} %s %s conftest.c $Config{libs} %s";
-  $DEVNULL = eval { File::Spec->devnull };
-  if ($@) { $DEVNULL = "/dev/null" }
+    $is_Win32 = ($^O =~ /Win32/);
+    if ($is_Win32) {
+        $DEVNULL = 'DEVNULL';
+    }
+    else {
+        $DEVNULL = eval { File::Spec->devnull };
+        if ($@) { $DEVNULL = '/dev/null' }
+    }
 }
 
 sub rm_f {
@@ -242,6 +248,27 @@ sub rm_f {
     if (@realfiles) {
         chmod(0777, @realfiles);
         unlink(@realfiles);
+    }
+}
+
+sub rm_fr {
+    my @files = @_;
+    my @realfiles;
+    foreach (@files) {
+        push @realfiles, glob($_);
+    }
+    foreach my $file (@realfiles) {
+        if (-d $file) {
+            # warn("$file is a directory\n");
+            rm_fr("$file/*");
+            rm_fr("$file/.exists");
+            rmdir($file) || die "Couldn't remove $file: $!";
+        }
+        else {
+            # warn("removing $file\n");
+            chmod(0777, $file);
+            unlink($file);
+        }
     }
 }
 
@@ -296,40 +323,97 @@ sub backtick {
 sub try_link0 {
     my ($src, $opt) = @_;
     my $cfile = gensym();
-    open($cfile, ">conftest.c") || die "Cannot write to file conftest.c";
+    # local $config{LIBS};
+    # $config{LIBS} .= $opt;
+    unless (mkdir(".testlink", 0777)) {
+        rm_fr(".testlink");
+        mkdir(".testlink", 0777) || die "Cannot create .testlink dir: $!";
+    }
+    chdir(".testlink");
+    open($cfile, ">Conftest.xs") || die "Cannot write to file Conftest.xs: $!";
+print $cfile <<EOT;
+#ifdef __cplusplus
+extern "C" {
+#endif
+#include <EXTERN.h>
+#include <perl.h>
+#include <XSUB.h>
+#ifdef __cplusplus
+}
+#endif
+
+EOT
     print $cfile $src;
+    print $cfile <<EOT;
+
+MODULE = Conftest          PACKAGE = Conftest
+
+PROTOTYPES: DISABLE
+
+EOT
     close($cfile);
-    xsystem(sprintf($LINK, $config{INC}, $config{LIBS}, $opt));
+    open($cfile, ">Conftest.pm") || die "Cannot write to file Conftest.pm: $!";
+    print $cfile <<'EOT';
+package Conftest;
+$VERSION = 1.0;
+require DynaLoader;
+@ISA = ('DynaLoader');
+bootstrap Conftest $VERSION;
+1;
+EOT
+    close($cfile);
+    open($cfile, ">Makefile.PL") || die "Cannot write to file Makefile.PL: $!";
+    print $cfile <<'EOT';
+use ExtUtils::MakeMaker;
+my %config;
+while($_ = shift @ARGV) {
+    my ($k, $v) = split /=/, $_, 2;
+    $config{$k} = $v;
+}
+WriteMakefile(NAME => "Conftest", VERSION_FROM => "Conftest.pm", %config);
+EOT
+    close($cfile);
+    open($cfile, ">test.pl") || die "Cannot write to file test.pl: $!";
+    print $cfile <<EOT;
+use Test; BEGIN { plan tests => 1; } END { ok(\$loaded) }
+use Conftest; \$loaded++;
+EOT
+    close($cfile);
+    xsystem("$^X Makefile.PL " . join(' ', map { "'$_=$config{$_}'" } keys %config));
+    xsystem("$Config{make} test 'OTHERLDFLAGS=$opt'");
 }
 
 sub try_link {
+    my $start_dir = cwd();
     my $result = eval {
         try_link0(@_);
     };
     warn $@ if $DEBUG && $@;
-    rm_f("conftest*");
+    chdir($start_dir);
+    rm_fr(".testlink");
     return $result;
 }
 
 sub have_library {
-    my ($lib, $func) = (@_, "main");
-    printf("checking for %s() in -l%s... ", $func, $lib);
+    my ($lib, $func) = (@_, "blank");
+    printf("checking for %s() in -l%s... ", $func, $lib) if $func ne "blank";
+    printf("looking for -l%s... ", $lib) if $func eq "blank";
 
     my $result;
     if ($func) {
-        my $libs = "-l$lib";
-        if ($^O eq 'MSWin32') {
+        my $libs = $is_Win32 ? " $lib.lib  " : "-l$lib";
+        if ($is_Win32) {
             $result = try_link(<<"SRC", $libs);
 #include <windows.h>
 #include <winsock.h>
-int main() { return 0; }
+blank() { return 0; }
 int t() { ${func}(); return 0; }
 SRC
             unless ($result) {
                 $result = try_link(<<"SRC", $libs);
 #include <windows.h>
 #include <winsock.h>
-int main() { return 0; }
+blank() { return 0; }
 int t() { void ((*p)()); p = (void ((*)()))${func}; return 0; }
 SRC
             }
@@ -337,7 +421,7 @@ SRC
         else {
 
             $result = try_link(<<"SRC", $libs);
-int main() { return 0; }
+blank() { return 0; }
 int t() { ${func}(); return 0; }
 SRC
         }

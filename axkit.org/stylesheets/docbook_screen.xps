@@ -109,6 +109,18 @@ Next
 		# should only be 1
 		print apply_templates($section);
 	}
+
+if (@footnotes) {
+    print "<table cellspacing=\"0\" cellpadding=\"3\">";
+    print "<caption>Footnotes</caption>";
+    my $i = 1;
+    foreach my $footnote (@footnotes) {
+        print "<tr><td valign=\"top\"><p>$i</p></td><td valign=\"top\"><div class=\"footnote\">$footnote</div></td></tr>";
+        $i++;
+    }
+    print "</table><hr>";
+}
+
 }
 
 if ($sect) {
@@ -142,7 +154,6 @@ Next
 <tr><td align="right">
 <a href="<%=$this_page%>?passthru=1">Raw XML</a>
 </td></tr></table>
-
 
 </td>
 

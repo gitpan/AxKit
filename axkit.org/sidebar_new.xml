@@ -42,6 +42,10 @@
 			<sb:title>Support</sb:title>
 			<sb:url>/support.xml</sb:url>
 		</sb:item>
+		<sb:item>
+			<sb:title>Bugs</sb:title>
+                        <sb:url>http://rt.cpan.org/NoAuth/Bugs.html?Dist=AxKit</sb:url>
+		</sb:item>
 	</sb:section>
 
 	<sb:section>
@@ -84,7 +88,21 @@
 			<sb:title>FAQ</sb:title>
 			<sb:url>/faq.xml</sb:url>
 		</sb:item>
-    
+
+		<sb:item>
+                        <sb:title>Deutsches Artikel @ iX</sb:title>
+                        <sb:url>http://www.heise.de/ix/artikel/2001/03/167/</sb:url>
+		</sb:item>
+
+                <sb:subsection expand="no">
+                    <sb:title>Presentations</sb:title>
+                    <sb:url>/docs/presentations/index.xml</sb:url>
+                    <sb:item>
+                        <sb:title>TPC 2001 Presentations</sb:title>
+                        <sb:url>/docs/presentations/tpc2001/</sb:url>
+                    </sb:item>
+                </sb:subsection>
+ 
     <sb:item>
       <sb:title>Provider HOWTO</sb:title>
       <sb:url>/docs/provider-howto.dkb</sb:url>

@@ -128,22 +128,19 @@ include the following directives in your httpd.conf:
     # sections.
     PerlModule AxKit
     
-    AxKit On
+    SetHandler axkit
     
     AxCacheDir /tmp/axkit_cache/
     AxAddStyleMap text/xsl Apache::AxKit::Language::LibXSLT
 
 If, however, you are using other content handler modules, such
 as PHP or mod_cgi to send content to the browser, you will more
-than likely want to wrap the previous configuration lines in 
-a <Files> or <Location> tag such as:
+than likely want to use AddHandler:
 
     PerlModule AxKit
-    
-    <Files "*.xml">
-          AxKit On
-          ...
-    </Files>
+
+    AddHandler axkit .xml
+    AddHandler axkit .xsp
     
 Another symptom that you want to wrap your configuration in a conditional
 block is if you turn on debugging (see perldoc AxKit for AxDebugLevel),

@@ -1,5 +1,5 @@
 use Test;
-BEGIN { plan tests => 8 }
+BEGIN { plan tests => 9 }
 
 require "t/test_module.pl";
 
@@ -18,3 +18,5 @@ test_module("Apache::AxKit::Language::XMLNewsNITF", "XMLNews::HTMLTemplate");
 test_module("Apache::AxKit::Language::XSP", "XML::XPath");
 
 test_module("Apache::AxKit::Language::XSP::TaglibHelper", "XML::XPath");
+
+test_module("Apache::AxKit::Language::PassiveTeX");

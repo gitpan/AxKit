@@ -14,19 +14,11 @@
 		<section>
 			<title>License for AxKit</title>
 			<para>
-			AxKit is licensed under either the Artistic license, or the GNU
-			GPL version 2 (you choose either or both when you need to comply
-			with the license in some way or another).
-			</para>
-			<para>
-			Some modules that AxKit works with are distributed
-			under the GNU GPL, in particular <ulink
-			url="http://www.gingerall.com">Sablotron</ulink> from
-			gingerall.com is only available under the GNU GPL. While AxKit
-			makes fairly extensive use of <ulink
-			url="http://xml.sergeant.org">XML::XPath</ulink>, this module is
-			also developed by AxKit.com Ltd, and AxKit has a special
-			exclusive distribution license with XML::XPath.
+                        Since AxKit is now an official <a
+                        href="http://apache.org/">Apache</a> project,
+                        it is now licensed under the Apache license,
+                        which you can find <a
+                        href="http://www.opensource.org/licenses/apachepl.html">here</a>.
 			</para>
 		</section>
 	</body>

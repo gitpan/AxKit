@@ -1,0 +1,27 @@
+<table width="170" border="0" cellspacing="0" cellpadding="0">
+<tr>
+    <td colspan="3" style="line-height: 0;"><img
+        src="/img/vsep.gif" width="170" height="25" border="0" vspace="0" hspace="0" alt="--sep--" /></td>
+</tr>
+
+<tr>
+    <td colspan="3" style="line-height: 0;"><img
+        src="/img/nav_top.gif" width="170" height="12" border="0" vspace="0" hspace="0" alt="Start Navigation" /></td>
+</tr>
+
+<tr>
+    <td background="/img/nav_left.gif"><%= spacer(8,20) %></td>
+
+    <td bgcolor="#330066">
+        <!-- actual navigation -->
+        <%= apply_templates(scalar findnodes('document("/sidebar.xml")')) %>
+    </td>
+
+    <td background="/img/nav_right.gif"><%= spacer(8,20) %></td>
+</tr>
+
+<tr>
+    <td colspan="3" style="line-height: 0;"><img
+        src="/img/nav_bot.gif" width="170" height="12" border="0" vspace="0" hspace="0" alt="End Navigation" /></td>
+</tr>
+</table>

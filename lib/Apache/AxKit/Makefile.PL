@@ -1,20 +1,8 @@
-# $Id: Makefile.PL,v 1.15 2001/06/05 09:39:28 matt Exp $
+# $Id: Makefile.PL,v 1.18 2001/07/19 19:10:39 matt Exp $
 
 package Apache::AxKit::CharsetConv;
 
 use ExtUtils::MakeMaker;
-
-use Config;
-use Symbol;
-use File::Spec;
-
-use vars qw/$LINK $DEVNULL/;
-
-BEGIN {
-    $LINK = "$Config{cc} $Config{ccdlflags} -o conftest $Config{ccflags} -I$Config{incpath} $Config{ldflags} %s %s conftest.c $Config{libs} %s";
-    $DEVNULL = eval { File::Spec->devnull };
-    if ($@) { $DEVNULL = "/dev/null" }
-}
 
 ######################################################
 # Standard bits required for have_library and friends
@@ -30,20 +18,16 @@ while($_ = shift @ARGV) {
 $DEBUG = $AxKit::DEBUG || delete $config{DEBUG};
 ######################################################
 
-if ($^O =~ /Win32/) {
+if (have_library("iconv", "iconv") || have_library("iconv", "libiconv")) {
+    # probably FreeBSD or Win32
+    print "Found libiconv. Might be *BSD or Win32...\n\n";
     $config{LIBS} .= " -liconv";
 }
+elsif (have_library("c", "iconv")) {
+    # other unix
+}
 else {
-    if (have_library("iconv", "iconv") || have_library("iconv", "libiconv")) {
-        # probably FreeBSD
-        print "System is probably *BSD. Adding -liconv to LIBS\n\n";
-        $config{LIBS} .= " -liconv";
-    }
-    elsif (have_library("c", "iconv")) {
-        # Other Unix - good.
-    }
-    else {
-        print <<"REASON";
+    print <<"REASON";
 AxKit needs the iconv system library to work properly. This comes by
 default with most Unix systems, however it may be that you do not
 have the development libraries installed, or possibly that you just
@@ -52,45 +36,51 @@ is available in your distribution's ports collection. For Win32
 systems, a google search will often suffice to find a Win32 library
 version.
 REASON
-        exit(0);
-    }
+    exit(0);
+}
 
-    ######################################################
-    # test iconv() param types for const
-    print "checking if iconv() param 2 is const... ";
-    my $cfile = gensym();
-    open($cfile, ">conftest.c") || die "Cannot write to file conftest.c";
-    print $cfile <<"SRC";
-#include "iconv.h"
-int main() { return 0; }
-int t() {
-    char *foo = "foo";
-    size_t ret;
-    iconv_t iconv_handle;
-    size_t inbytesleft;
-    size_t outbytesleft;
-    char *ocursor;
-    ret = iconv(iconv_handle, &foo, &inbytesleft,
-                            &ocursor, &outbytesleft);
-    return 0;
-}
-SRC
-    close $cfile;
-    my $output = eval {
-        backtick(sprintf($LINK, $config{INC}, $config{LIBS}, '2>&1'));
-    };
-    if ($@) {
-        warn $@ if $DEBUG;
-    }
-    rm_f("conftest*");
-    if ($output =~ /warning: passing arg 2/) {
-        print "yes\n";
-        $config{DEFINE} .= uc(" -Diconv_second_param_is_const");
-    }
-    else {
-        print "no\n";
-    }
-}
+######################################################
+# test iconv() param types for const
+# print "checking if iconv() param 2 is const... ";
+# my $cfile = gensym();
+# open($cfile, ">conftest.c") || die "Cannot write to file conftest.c";
+# print $cfile <<"SRC";
+# #include "iconv.h"
+# int main() { return 0; }
+# int t() {
+#     char *foo = "foo";
+#     size_t ret;
+#     iconv_t iconv_handle;
+#     size_t inbytesleft;
+#     size_t outbytesleft;
+#     char *ocursor;
+#     ret = iconv(iconv_handle, &foo, &inbytesleft,
+#                             &ocursor, &outbytesleft);
+#     return 0;
+# }
+# SRC
+# close $cfile;
+# my $output = $is_Win32 ? 
+#     eval {
+#         backtick(sprintf($CC, $config{INC})) .
+#         backtick(sprintf($LINK, $config{LIBS}, " iconv.lib"));
+#     }
+#     :
+#     eval {
+#         backtick(sprintf($LINK, $config{INC}, $config{LIBS}, '2>&1'));
+#     };
+# 
+# if ($@) {
+#     warn $@ if $DEBUG;
+# }
+# rm_f("conftest*");
+# if ($output =~ /warning: passing arg 2/) {
+#     print "yes\n";
+#     $config{DEFINE} .= uc(" -Diconv_second_param_is_const");
+# }
+# else {
+#     print "no\n";
+# }
 
 ######################################################
 
@@ -106,6 +96,7 @@ foreach my $k (keys %config) {
 }
 
 #%config = () if $] > 5.00560; 
+rm_f($DEVNULL) if $is_Win32;
 
 WriteMakefile(
     'NAME' => 'Apache::AxKit::CharsetConv',
@@ -126,6 +117,24 @@ sub MY::constants {
 # Functions
 #################################################################
 
+use Config;
+use Cwd;
+use Symbol;
+use File::Spec;
+
+use vars qw/$DEVNULL $is_Win32/;
+
+BEGIN {
+    $is_Win32 = ($^O =~ /Win32/);
+    if ($is_Win32) {
+        $DEVNULL = 'DEVNULL';
+    }
+    else {
+        $DEVNULL = eval { File::Spec->devnull };
+        if ($@) { $DEVNULL = '/dev/null' }
+    }
+}
+
 sub rm_f {
     my @files = @_;
     my @realfiles;
@@ -136,6 +145,49 @@ sub rm_f {
         chmod(0777, @realfiles);
         unlink(@realfiles);
     }
+}
+
+sub rm_fr {
+    my @files = @_;
+    my @realfiles;
+    foreach (@files) {
+        push @realfiles, glob($_);
+    }
+    foreach my $file (@realfiles) {
+        if (-d $file) {
+            # warn("$file is a directory\n");
+            rm_fr("$file/*");
+            rm_fr("$file/.exists");
+            rmdir($file) || die "Couldn't remove $file: $!";
+        }
+        else {
+            # warn("removing $file\n");
+            chmod(0777, $file);
+            unlink($file);
+        }
+    }
+}
+
+sub xsystem {
+    my $command = shift;
+    if ($DEBUG) {
+        print $command, "\n";
+        if (system($command) != 0) {
+            die "system call to '$command' failed";
+        }
+        return 1;
+    }
+    open(OLDOUT, ">&STDOUT");
+    open(OLDERR, ">&STDERR");
+    open(STDOUT, ">$DEVNULL");
+    open(STDERR, ">$DEVNULL");
+    my $retval = system($command);
+    open(STDOUT, ">&OLDOUT");
+    open(STDERR, ">&OLDERR");
+    if ($retval != 0) {
+        die "system call to '$command' failed";
+    }
+    return 1;
 }
 
 sub backtick {
@@ -164,74 +216,109 @@ sub backtick {
     return $results;
 }
 
-sub xsystem {
-    my $command = shift;
-    if ($DEBUG) {
-        print $command, "\n";
-        if (system($command) != 0) {
-            die "system call to '$command' failed";
-        }
-        return 1;
-    }
-    open(OLDOUT, ">&STDOUT");
-    open(OLDERR, ">&STDERR");
-    open(STDOUT, ">$DEVNULL");
-    open(STDERR, ">$DEVNULL");
-    my $retval = system($command);
-    open(STDOUT, ">&OLDOUT");
-    open(STDERR, ">&OLDERR");
-    if ($retval != 0) {
-        die "system call to '$command' failed";
-    }
-    return 1;
-}
-
 sub try_link0 {
     my ($src, $opt) = @_;
     my $cfile = gensym();
-    open($cfile, ">conftest.c") || die "Cannot write to file conftest.c";
+    # local $config{LIBS};
+    # $config{LIBS} .= $opt;
+    unless (mkdir(".testlink", 0777)) {
+        rm_fr(".testlink");
+        mkdir(".testlink", 0777) || die "Cannot create .testlink dir: $!";
+    }
+    chdir(".testlink");
+    open($cfile, ">Conftest.xs") || die "Cannot write to file Conftest.xs: $!";
+print $cfile <<EOT;
+#ifdef __cplusplus
+extern "C" {
+#endif
+#include <EXTERN.h>
+#include <perl.h>
+#include <XSUB.h>
+#ifdef __cplusplus
+}
+#endif
+
+EOT
     print $cfile $src;
+    print $cfile <<EOT;
+
+MODULE = Conftest          PACKAGE = Conftest
+
+PROTOTYPES: DISABLE
+
+EOT
     close($cfile);
-    xsystem(sprintf($LINK, $config{INC}, $config{LIBS}, $opt));
+    open($cfile, ">Conftest.pm") || die "Cannot write to file Conftest.pm: $!";
+    print $cfile <<'EOT';
+package Conftest;
+$VERSION = 1.0;
+require DynaLoader;
+@ISA = ('DynaLoader');
+bootstrap Conftest $VERSION;
+1;
+EOT
+    close($cfile);
+    open($cfile, ">Makefile.PL") || die "Cannot write to file Makefile.PL: $!";
+    print $cfile <<'EOT';
+use ExtUtils::MakeMaker;
+my %config;
+while($_ = shift @ARGV) {
+    my ($k, $v) = split /=/, $_, 2;
+    warn("$k = $v\n");
+    $config{$k} = $v;
+}
+WriteMakefile(NAME => "Conftest", VERSION_FROM => "Conftest.pm", %config);
+EOT
+    close($cfile);
+    open($cfile, ">test.pl") || die "Cannot write to file test.pl: $!";
+    print $cfile <<EOT;
+use Test; BEGIN { plan tests => 1; } END { ok(\$loaded) }
+use Conftest; \$loaded++;
+EOT
+    close($cfile);
+    xsystem("$^X Makefile.PL " . join(' ', map { "'$_=$config{$_}'" } keys %config));
+    xsystem("$Config{make} test 'OTHERLDFLAGS=$opt'");
 }
 
 sub try_link {
+    my $start_dir = cwd();
     my $result = eval {
         try_link0(@_);
     };
     warn $@ if $DEBUG && $@;
-    rm_f("conftest*");
+    chdir($start_dir);
+    rm_fr(".testlink");
     return $result;
 }
 
 sub have_library {
-    my ($lib, $func) = (@_, "main");
-    
-    printf("checking for %s() in -l%s... ", $func, $lib);
+    my ($lib, $func) = (@_, "blank");
+    printf("checking for %s() in -l%s... ", $func, $lib) if $func ne "blank";
+    printf("looking for -l%s... ", $lib) if $func eq "blank";
 
     my $result;
     if ($func) {
-        my $libs = "-l$lib";
-        if ($^O eq 'MSWin32') {
+        my $libs = $is_Win32 ? " $lib.lib  " : "-l$lib";
+        if ($is_Win32) {
             $result = try_link(<<"SRC", $libs);
 #include <windows.h>
 #include <winsock.h>
-int main() { return 0; }
-int t() { #{func}(); return 0; }
+blank() { return 0; }
+int t() { ${func}(); return 0; }
 SRC
             unless ($result) {
                 $result = try_link(<<"SRC", $libs);
 #include <windows.h>
 #include <winsock.h>
-int main() { return 0; }
-int t() { void ((*p)()); p = (void ((*)()))#{func}; return 0; }
+blank() { return 0; }
+int t() { void ((*p)()); p = (void ((*)()))${func}; return 0; }
 SRC
             }
         }
         else {
 
             $result = try_link(<<"SRC", $libs);
-int main() { return 0; }
+blank() { return 0; }
 int t() { ${func}(); return 0; }
 SRC
         }

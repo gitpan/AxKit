@@ -1,4 +1,4 @@
-# $Id: AxPoint.pm,v 1.7 2001/06/03 14:15:46 matt Exp $
+# $Id: AxPoint.pm,v 1.12 2001/12/29 08:45:59 matt Exp $
 
 package Apache::AxKit::Language::AxPoint;
 
@@ -12,6 +12,7 @@ use Apache::AxKit::Language;
 use Apache::AxKit::Provider;
 use PDFLib 0.02;
 use XML::XPath;
+use File::Basename ();
 
 my @xindent;
 
@@ -19,8 +20,8 @@ sub stylesheet_exists () { 0; }
 
 sub handler {
     my $class = shift;
-    my ($r, $xml_provider, undef) = @_;
-    
+    my ($r, $xml_provider, undef, $last_in_chain) = @_;
+
     my $xpath = XML::XPath->new();
     
     my $source_tree;
@@ -59,6 +60,8 @@ sub handler {
     }
     
     $xpath->set_context($source_tree);
+
+    AxKit::Debug(7, "AxPoint: creating pdf");
     
     my $pdf = PDFLib->new();
     $pdf->papersize("slides");
@@ -69,30 +72,42 @@ sub handler {
     
     my ($logo_node) = $xpath->findnodes("/slideshow/metadata/logo");
     my ($bg_node) = $xpath->findnodes("/slideshow/metadata/background");
+
+    AxKit::Debug(7, "AxPoint: loading main bg/logo images");
     
     my ($logo, $bg);
     if ($logo_node) {
         $logo = $pdf->load_image(
             filename => $logo_node->string_value,
             filetype => get_filetype($logo_node->string_value),
-            )
-            || die "Cannot load image $logo_node!";
+            );
+        if (!$logo) {
+            AxKit::Debug(7, "AxPoint: failed to load logo " . $logo_node->string_value);
+            $pdf->finish;
+            die "Cannot load image $logo_node!";
+        }
     }
     
     if ($bg_node) {
         $bg = $pdf->load_image(
             filename => $bg_node->string_value,
             filetype => get_filetype($bg_node->string_value),
-            )
-            || die "Cannot load image $bg_node!";
+            );
+        if (!$bg) {
+            AxKit::Debug(7, "AxPoint: failed to load logo " . $bg_node->string_value);
+            $pdf->finish;
+            die "Cannot load image $bg_node!";
+        }
     }
+
+    AxKit::Debug(7, "AxPoint: Creating new_page sub");
     
     my $new_page = sub {
-        my ($node) = @_;
+        my ($node, $trans) = @_;
         
         $pdf->start_page;
         
-        my $transition = $node->findvalue('ancestor-or-self::node()/@transition');
+        my $transition = $trans || $node->findvalue('ancestor-or-self::*/@transition') || 'replace';
         
         $pdf->set_parameter("transition", lc($transition)) if $transition;
     
@@ -111,7 +126,8 @@ sub handler {
             
         $pdf->set_text_pos(80, 300);
     };
-        
+    
+    AxKit::Debug(7, "AxPoint: creating front page");
     # title page
     $new_page->($xpath->findnodes('/')->get_node(1));
     
@@ -120,7 +136,7 @@ sub handler {
     my $root_bookmark = $pdf->add_bookmark(text => "Title", open => 1);
     
     $pdf->print_boxed($xpath->findvalue("/slideshow/title"),
-            x => 20, y => 40, w => 570, h => 300, mode => "center");
+            x => 20, y => 50, w => 570, h => 300, mode => "center");
     
     $pdf->print_line("");
     $pdf->print_line("");
@@ -143,6 +159,8 @@ sub handler {
             x => 20, y => $y - 10, w => 570, h => 24);
     $pdf->print_boxed($xpath->findvalue("/slideshow/metadata/organisation"),
             x => 20, y => 40, w => 570, h => $y - 24, mode => "center");
+
+    AxKit::Debug(7, "AxPoint: creating slides");
     
     foreach my $slideset ($xpath->findnodes("/slideshow/*[name() = 'slideset' or name() = 'slide']")) {
         if ($slideset->getName() eq 'slide') {
@@ -152,12 +170,16 @@ sub handler {
             process_slideset($pdf, $new_page, $slideset, $root_bookmark);
         }
     }
+
+    AxKit::Debug(7, "AxPoint: outputting pdf");
     
     $r->content_type("application/pdf");
+
+    AxKit::Debug(5, "finish pdf");
     
     $pdf->finish;
     
-    print $pdf->get_buffer;
+    $r->print( $pdf->get_buffer );
 }
 
 sub process_slideset {
@@ -173,7 +195,22 @@ sub process_slideset {
     
     $pdf->set_font(face => "Helvetica", size => 24);
     $pdf->print_boxed($slideset->findvalue("title"),
-            x => 20, y => 40, w => 570, h => 200, mode => "center");
+            x => 20, y => 50, w => 570, h => 200, mode => "center");
+
+    my ($x, $y) = $pdf->get_text_pos();
+    $pdf->add_link(link => $slideset->findvalue('title/@href'),
+        x => 20, y => $y - 5, w => 570, h => 24) if $slideset->findvalue('title/@href');
+
+    if (my $subtitle = $slideset->findvalue("subtitle")) {
+      $pdf->set_font(face => "Helvetica", size => 18);
+      $pdf->print_boxed($subtitle,
+          x => 20, y => 20, w => 570, h => 200, mode => "center");
+      if (my $href = $slideset->findvalue('subtitle/@href')) {
+          ($x, $y) = $pdf->get_text_pos();
+          $pdf->add_link(link => $href,
+              x => 20, y => $y - 5, w => 570, h => 18);
+      }
+    }
     
     foreach my $slide ($slideset->findnodes("slide")) {
         process_slide($pdf, $new_page, $slide, $slide_bookmark);
@@ -181,7 +218,7 @@ sub process_slideset {
 }
 
 sub process_slide {
-    my ($pdf, $new_page, $slide, $parent_bookmark) = @_;
+    my ($pdf, $new_page, $slide, $parent_bookmark, $do_up_to) = @_;
     
     $pdf->end_page;
     my @images;
@@ -192,27 +229,52 @@ sub process_slide {
                 );
     }
     
-    $new_page->($slide);
+    if ($do_up_to) {
+        my @nodes = $slide->findnodes("point|source_code|image");
+        my $do_to_node = $nodes[$do_up_to - 1];
+        $new_page->($slide, $do_to_node->findvalue('@transition'));
+    }
+    else {
+        $new_page->($slide);
+    }
+    
     my $h = 300;
     if (my $title = $slide->findvalue("title")) {
-        $pdf->add_bookmark(text => $title, level => 3, parent_of => $parent_bookmark);
+        $pdf->add_bookmark(text => $title, level => 3, parent_of => $parent_bookmark) unless $do_up_to;
         $pdf->set_font(face => "Helvetica", size => 24);
         $pdf->print_boxed($title, x => 20, y => 350, 
                 w => 570, h => 70, mode => "center");
+
+        my ($x, $y) = $pdf->get_text_pos();
+        $pdf->add_link(link => $slide->findvalue('title/@href'),
+                x => 20, y => $y - 5, w => 570, h => 24) if $slide->findvalue('title/@href');
+
         $h = 370;
     }
     
     $pdf->set_text_pos(60, $h);
+
+    my $new_do_up_to = 1;
     foreach my $item ($slide->findnodes("point|source_code|image")) {
+        if (!$do_up_to && $item->findvalue('@transition')) {
+            process_slide($pdf, $new_page, $slide, $parent_bookmark, $new_do_up_to);
+        }
+
+        if ($do_up_to) {
+            last if $do_up_to == $new_do_up_to;
+        }
+        
         if ($item->getName eq "point") {
-            point($pdf, $item->findvalue('@level') || 1, $item->string_value);
+            point($pdf, $item->findvalue('@level') || 1, $item->string_value, $item->findvalue('@href'));
         }
         elsif ($item->getName eq 'source_code') {
             source_code($pdf, $item->string_value, $item->getAttribute('fontsize'));
         }
         elsif ($item->getName eq 'image') {
-            image($pdf, $item->getAttribute('scale') || 1, shift @images);
+            image($pdf, $item->getAttribute('scale') || 1, shift @images, $item->findvalue('@href'));
         }
+        
+        $new_do_up_to++;
     }
     
 }
@@ -279,7 +341,7 @@ sub bullet {
 }
 
 sub point {
-    my ($pdf, $level, $text) = @_;
+    my ($pdf, $level, $text, $href) = @_;
     
     my ($x, $y) = $pdf->get_text_pos;
     
@@ -303,6 +365,9 @@ sub point {
     ($x, $y) = $pdf->get_text_pos;
     
     $pdf->print_boxed($text, x => $x, y => 0, w => 570 - $x, h => $y + $size);
+    $pdf->add_link(link => $href,
+        x => 20, y => $y - 5 + $level, w => 570, h => $size) if $href;
+
 }
 
 sub source_code {
@@ -319,7 +384,7 @@ sub source_code {
 }
 
 sub image {
-    my ($pdf, $scale, $file_handle) = @_;
+    my ($pdf, $scale, $file_handle, $href) = @_;
     
     $pdf->print_line("");
     
@@ -337,12 +402,15 @@ sub image {
             x => (612 / 2) - ($imgw / 2),
             y => ($y - $imgh),
             scale => $scale);
+    $pdf->add_link(link => $href, x => 20, y => $y - $imgh, w => 570, h => $imgh) if $href;
     
     $pdf->set_text_pos($x, $y - $imgh);
 }
 
 sub get_filetype {
     my $filename = shift;
+
+    AxKit::Debug(8, "AxPoint: get_filetype($filename)");
     
     my ($suffix) = $filename =~ /([^\.]+)$/;
     $suffix = lc($suffix);
@@ -372,7 +440,131 @@ sub get_source_tree {
     }
 
     # warn("get_source_tree = $source_tree\n");
+    AxKit::Debug(7, "AxPoint: returning source tree"); 
     return $source_tree;
 }
 
 1;
+
+__END__
+
+=head1 NAME
+
+AxPoint - An AxKit PDF Slideshow generator
+
+=head1 SYNOPSIS
+
+  AxAddStyleMap application/x-axpoint Apache::AxKit::Language::AxPoint
+  
+  AxAddRootProcessor application/x-axpoint NULL slideshow
+
+=head1 DESCRIPTION
+
+I got sick of not being able to do pretty slideshows about AxKit without
+resorting to the bloated OpenOffice. So I decided to write something that
+allows you to do simple slideshows with bullet points and a few other
+niceties using XML, AxKit, and rendering to PDF.
+
+I discovered that PDF can do transitions, and full screen mode (even on Linux),
+and so it makes the perfect medium for doing a slideshow.
+
+Note: This module requires PDFLib.pm from CPAN. It also requires the library
+B<pdflib>, which is available under the Alladin license from
+http://www.pdflib.com/. The Alladin license does not allow re-distribution
+of modified binaries, so it is not strictly open source, but it is free to
+use even for commercial use.
+
+=head1 Usage
+
+The SYNOPSIS section describes how to set this thing up in AxKit, so here I
+will focus on the syntax of AxPoint XML files. I tend to use the suffix ".axp"
+for my AxPoint files, but you are free to use whatever you please.
+
+The easiest way to describe all the features is with a complete presentation
+first:
+
+  <slideshow transition="glitter">
+    <title>AxPoint Example</title>
+    <metadata>
+      <speaker>Matt Sergeant</speaker>
+      <email>matt@axkit.com</email>
+      <organisation>AxKit.com Ltd</organisation>
+      <link>http://axkit.com/</link>
+      <logo>ax_logo.png</logo>
+      <background>bg.png</background>
+    </metadata>
+    
+    <slide transition="dissolve">
+      <title>Top Level Slide</title>
+      <point>This is a top level slide</point>
+      <point>It is a child of the &lt;slideshow> tag</point>
+      <point>Can have it's own transition</point>
+    </slide>
+    
+    <slideset transition="blinds">
+      <title>Slidesets</title>
+      <subtitle>Slidesets can have subtitles</subtitle>
+      
+      <slide>
+        <title>Slideset Example</title>
+        <point>A slideset groups slides under a particular title</point>
+        <point>Slidesets can have a transition for the group of slides</point>
+      </slide>
+    </slideset>
+    
+    <slideset>
+      <title>Slide Tags</title>
+      
+      <slide>
+        <title>Bullet Points</title>
+        <point>Level 1 bullet : &lt;point></point>
+        <point level="1">Another Level 1 bullet : &lt;point level="1"></point>
+        <point level="2">Level 2 bullet : &lt;point level="2"></point>
+        <point level="3">Level 3 bullet : &lt;point level="3"></point>
+        <point>Back to level 1</point>
+      </slide>
+      
+      <slide>
+        <title>Source Core</title>
+        <source_code><![CDATA[
+Source code
+uses   fixed       font
+Don't forget to use CDATA sections so you can
+ <include/><some/><xml/>
+        ]]></source_code>
+      </slide>
+      
+      <slide>
+        <title>Pictures</title>
+        <point>Images are very simple, and always centered</point>
+        <image scale="0.5" href="file_large.jpg">file.jpg</image>
+      </slide>
+      
+    </slideset>
+    
+    <slideset transition="dissolve">
+      <title href="http://foo.bar/aslidesettitle">Slideset titles can have href attributes</title>
+      <subtitle href="http://foo.bar/aslidesetsubtitle">Slideset subtitles too</subtitle>
+      
+      <slide>
+        <title href="http://foo.bar/aslidetitle">Don't forget links for slide titles</title>
+        <point href="http://foo.bar/apoint">...and for points of various levels</point>
+      </slide>
+    </slideset>
+    
+    
+  </slideshow>
+
+
+It's not very complex. And with good reason: generating PDFs can be slow. With this simple schema
+we can generate a 100 slide PDF in about 1 second. There are many deficiencies with the tagset,
+most significantly that no bold or italics or any coloring can be applied to the text by using
+tags. The reason being that this is quite hard to do with PDFLib - you have to do text measurement
+yourself and do the word-wrapping yourself, and so on. The way it is setup right now is very
+simple to use and implement.
+
+=head1 AUTHOR
+
+Matt Sergeant, matt@axkit.com
+
+=cut

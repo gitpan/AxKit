@@ -1,4 +1,4 @@
-/* $Id: getstyles.h,v 1.7 2001/06/05 09:28:45 matt Exp $ */
+/* $Id: getstyles.h,v 1.10 2001/10/29 14:35:15 matt Exp $ */
 
 #ifndef WIN32
 #include <modules/perl/mod_perl.h>
@@ -33,12 +33,15 @@ typedef struct {
     char * publicid;
 } axkit_xml_bits;
 
-xmlSAXHandler axkitSAXHandlerStruct;
+extern xmlSAXHandler axkitSAXHandlerStruct;
 
-xmlSAXHandlerPtr axkitSAXHandler;
+extern xmlSAXHandlerPtr axkitSAXHandler;
 
-xmlEntityPtr blankEntity;
+extern SV * error_str;
+
+extern xmlEntityPtr blankEntity;
 
 int read_perl (SV * ioref, char * buffer, int len);
 
 #endif /* HAVE_LIBXML2 */
+

@@ -1,4 +1,4 @@
-# $Id: XPathScript.pm,v 1.62 2001/06/05 15:12:40 matt Exp $
+# $Id: XPathScript.pm,v 1.71 2001/11/29 11:36:42 matt Exp $
 
 package Apache::AxKit::Language::XPathScript;
 
@@ -51,8 +51,8 @@ sub handler {
     AxKit::Debug(6, "XPathScript: Getting XML Source");
     
     if (my $dom = $r->pnotes('dom_tree')) {
-        # dom_tree is an XML::XPath DOM
-        $source_tree = $dom;
+        # dom_tree is an XML::LibXML DOM
+        $source_tree = $parser->parse($dom->toString);
         delete $r->pnotes()->{'dom_tree'};
     }
     elsif (my $xml = $r->pnotes('xml_string')) {
@@ -594,10 +594,11 @@ sub get_package_name {
         
         my $dokids = 1;
         my $search;
-
+       my $testcode_output = 0;
         my $t = {};
         if ($trans->{testcode}) {
 #            warn "eval testcode\n";
+           $testcode_output = 1;
             my $result;
             my $testcode = $trans->{testcode};
             my $depth = 0;
@@ -618,6 +619,7 @@ sub get_package_name {
             
 #            warn "Here with $result\n";
             
+
             if ($result =~ /\D/) {
                 $dokids = 0;
                 $search = $result;
@@ -648,13 +650,13 @@ sub get_package_name {
         }
         
         # default: process children too.
-        my $pre = interpolate($node, $trans->{pre}) . 
+        my $pre = interpolate($node, $trans->{pre}, $testcode_output) . 
                 ($trans->{showtag} ? start_tag($node) : '') .
-                interpolate($node, $trans->{prechildren});
+                interpolate($node, $trans->{prechildren}, $testcode_output);
         
-        my $post = interpolate($node, $trans->{postchildren}) .
+        my $post = interpolate($node, $trans->{postchildren}, $testcode_output) .
                 ($trans->{showtag} ? end_tag($node) : '') .
-                interpolate($node, $trans->{post});
+                interpolate($node, $trans->{post}, $testcode_output);
         
         if ($dokids) {
             my $middle = '';
@@ -743,11 +745,11 @@ sub get_package_name {
     }        
     
     sub interpolate {
-        my ($node, $string) = @_;
-        return $string if $XPathScript::DoNotInterpolate;
+        my ($node, $string, $ignore) = @_;
+        return $string if $XPathScript::DoNotInterpolate || $ignore;
         return $string unless AxKit::Apache->request->dir_config('AxXPSInterpolate');
         my $new = '';
-        while ($string =~ m/\G(.*?)\{(.*?)\}/gcs) {
+        while ($string =~ m/\G(.*?)\{(.+?)\}/gcs) {
             my ($pre, $path) = ($1, $2);
             $new .= $pre;
             $new .= $node->findvalue($path);

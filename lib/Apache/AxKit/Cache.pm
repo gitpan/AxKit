@@ -1,13 +1,14 @@
-# $Id: Cache.pm,v 1.25 2001/05/29 10:20:34 matt Exp $
+# $Id: Cache.pm,v 1.30 2001/12/30 16:09:56 matt Exp $
 
 package Apache::AxKit::Cache;
 use strict;
 
 use Apache;
+use Apache::Constants qw(OK DECLINED);
 use Apache::AxKit::Exception;
 use Digest::MD5 ();
 use Compress::Zlib;
-use Fcntl qw(:flock O_RDWR O_CREAT O_RDONLY);
+use Fcntl qw(:flock O_RDWR O_WRONLY O_CREAT O_RDONLY);
 
 # use vars qw/$COUNT/;
 
@@ -16,9 +17,9 @@ sub new {
     my ($r, $xmlfile, @extras) = @_;
     
     my $gzip = 0;
-    if (grep(/gzip/, @extras)) {
+    if ($xmlfile =~ /.gzip/) {
         $gzip++;
-        @extras = grep(!/gzip/, @extras);
+#        @extras = grep(!/gzip/, @extras);
     }
     
     my $key = Digest::MD5->new->add(
@@ -30,29 +31,49 @@ sub new {
             ))->hexdigest;
     
     AxKit::Debug(7, "Cache: key = $key");
+
+    my $primary = substr($key,0,2,'');
+    my $secondary = substr($key,0,2,'');
     
 #    warn "New for: $xmlfile:" . join(':', @extras). "\n";
     
     my $cachedir = $AxKit::Cfg->CacheDir();
     
     my $no_cache;
-    
-    if (!-e $cachedir) {
-        if (!mkdir($cachedir, 0777)) {
-            warn "Can't create cache directory '$cachedir': $!\n";
-            $no_cache = 1;
-        }
-    }
+
     if ($AxKit::Cfg->NoCache()) {
         $no_cache = 1;
     }
     
+    if (!$no_cache) {
+       if (!-e $cachedir) {
+           if (!mkdir($cachedir, 0777)) {
+               AxKit::Debug(2, "Can't create cache directory '$cachedir': $!");
+               $no_cache = 1;
+           }
+       }
+
+       if (!-e "$cachedir/$primary") {
+           if (!mkdir("$cachedir/$primary", 0777)) {
+               AxKit::Debug(1, "Can't create cache directory '$cachedir/$primary': $!");
+               $no_cache = 1;
+           }
+       }
+       
+       if (!-e "$cachedir/$primary/$secondary") {
+           if (!mkdir("$cachedir/$primary/$secondary", 0777)) {
+               AxKit::Debug(1, "Can't create cache directory '$cachedir/$primary/$secondary': $!");
+               $no_cache = 1;
+           }
+       }
+   }
+
     my $self = bless { 
         apache => $r,
         key => $key, 
         no_cache => $no_cache, 
         dir => $cachedir,
-        file => "$cachedir/$key",
+        file => "$cachedir/$primary/$secondary/$key",
         gzip => $gzip,
 #        extras => \@extras,
         }, $class;
@@ -66,6 +87,15 @@ sub new {
     return $self;
 }
 
+sub _get_stats {
+    my $self = shift;
+    return if $self->{mtime};
+    my @stats = stat($self->{file});
+    my $exists = -e _ && -r _;
+    $self->{file_exists} = $exists;
+    $self->{mtime} = $stats[9];
+}
+
 # sub DESTROY {
 #     AxKit::Debug(7, "Cache->DESTROY Count: ".--$COUNT);
 # }
@@ -73,14 +103,16 @@ sub new {
 sub write {
     my $self = shift;
     return if $self->{no_cache};
+    AxKit::Debug(7, "[Cache] writing cache file $self->{file}");
     my $fh = Apache->gensym();
-    if (sysopen($fh, $self->{file}.'new', O_RDWR|O_CREAT)) {
-        flock($fh, LOCK_EX);
-        seek($fh, 0, 0);
-        truncate($fh, 0);
+    my $tmp_filename = $self->{file}."new$$";
+    if (sysopen($fh, $tmp_filename, O_WRONLY|O_CREAT)) {
+        # flock($fh, LOCK_EX);
+        # seek($fh, 0, 0);
+        # truncate($fh, 0);
         print $fh $_[0];
         close $fh;
-        rename($self->{file}.'new', $self->{file}) 
+        rename($tmp_filename, $self->{file}) 
                 || throw Apache::AxKit::Exception::IO( -text => "Couldn't rename cachefile: $!");
     }
     else {
@@ -186,6 +218,7 @@ sub deliver {
     elsif ($r->notes('axkit_passthru_type')) {
         $r->content_type($AxKit::OrigType);
     }
+
     
     my ($transformer, $doit) = AxKit::get_output_transformer();
     
@@ -193,7 +226,7 @@ sub deliver {
         AxKit::Debug(4, "Cache: Transforming content and printing to browser");
         $r->send_http_header() unless lc($r->dir_config('Filter')) eq 'on';
         $r->print( $transformer->( $self->read() ) );
-        throw Apache::AxKit::Exception::OK();
+        return OK;
     }
     else {
         AxKit::Debug(4, "Cache: Sending untransformed content to browser");
@@ -210,9 +243,7 @@ sub deliver {
             $r->filename($self->{file});
         }
         
-        throw Apache::AxKit::Exception::Declined(
-                reason => "delivering cached copy"
-                );
+        return DECLINED;
     }
     
 }
@@ -224,6 +255,7 @@ sub reset {
 
 sub mtime {
     my $self = shift;
+    $self->_get_stats;
     return $self->{mtime} if exists $self->{mtime};
     return ($self->{mtime} = (stat($self->{file}))[9]);
 }
@@ -237,6 +269,7 @@ sub has_changed {
 sub exists {
     my $self = shift;
     return if $self->{no_cache};
+    $self->_get_stats;
     return $self->{file_exists} if exists $self->{file_exists};
     return ($self->{file_exists} = -e $self->{file});
 }
@@ -254,17 +287,6 @@ sub no_cache {
     if ($_[0]) {
         AxKit::Debug(8, "Turning off cache!");
         $self->{no_cache} = 1;
-#         my $r = $self->{apache};
-#         my $fh = Apache->gensym();
-#         if (sysopen($fh, $self->{file}, O_RDONLY)) {
-#             flock($fh, LOCK_SH);
-#             $r->send_http_header();
-#             while (<$fh>) {
-#                 $r->print($_);
-#             }
-#             close $fh;
-#         }
-        
         $self->reset();
     }
     

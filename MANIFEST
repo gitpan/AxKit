@@ -3,6 +3,7 @@ README
 Makefile.PL
 AxKit.pm
 AxKit.xs
+AxKit.spec
 axconfig.h
 axconfig.c
 getstyles.h
@@ -41,6 +42,7 @@ lib/Apache/AxKit/StyleChooser/UserAgent.pm
 lib/Apache/AxKit/MediaChooser/WAPCheck.pm
 lib/Apache/AxKit/Plugins/Passthru.pm
 lib/Apache/AxKit/Plugins/Fragment.pm
+lib/Apache/AxKit/Plugins/QueryStringCache.pm
 lib/Apache/AxKit/Provider.pm
 lib/Apache/AxKit/Provider/File.pm
 lib/Apache/AxKit/Provider/Scalar.pm
@@ -50,6 +52,7 @@ lib/Apache/AxKit/Language/XPathScript.pm
 lib/Apache/AxKit/Language/AxPoint.pm
 lib/Apache/AxKit/Language/Sablot.pm
 lib/Apache/AxKit/Language/LibXSLT.pm
+lib/Apache/AxKit/Language/PassiveTeX.pm
 lib/Apache/AxKit/Language/XMLNewsRDF.pm
 lib/Apache/AxKit/Language/XMLNewsNITF.pm
 lib/Apache/AxKit/Language/XSP.pm
@@ -107,6 +110,9 @@ axkit.org/docs/xpathscript/guide.dkb
 axkit.org/docs/xsp/guide.dkb
 axkit.org/docs/xsp/index.xml
 axkit.org/docs/xsp/sqltaglib.dkb
+axkit.org/docs/presentations/tpc2001/tpc-axkit.axp
+axkit.org/docs/presentations/tpc2001/redbg.png
+axkit.org/docs/presentations/tpc2001/ax_logo.png
 axkit.org/examples/cv.xml
 axkit.org/examples/cv_example.xml
 axkit.org/examples/cv.css
@@ -115,10 +121,16 @@ axkit.org/examples/docbook.dkb
 axkit.org/examples/resume.dtd
 axkit.org/stylesheets/axkit.css
 axkit.org/stylesheets/axkit_html.css
+axkit.org/stylesheets/body_print_html.xps
+axkit.org/stylesheets/body_tag_html.xps
 axkit.org/stylesheets/docbook_example.xml
 axkit.org/stylesheets/docbook_print.xps
 axkit.org/stylesheets/docbook_screen.xps
 axkit.org/stylesheets/docbook_tags.xps
+axkit.org/stylesheets/error.xps
+axkit.org/stylesheets/error.xsl
+axkit.org/stylesheets/irc.xps
+axkit.org/stylesheets/navbar_html.xps
 axkit.org/stylesheets/new/rdf_html.xps
 axkit.org/stylesheets/new/sidebar_html.xps
 axkit.org/stylesheets/new/webpage_html.xps

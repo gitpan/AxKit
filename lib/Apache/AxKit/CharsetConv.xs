@@ -1,4 +1,4 @@
-/* $Id: CharsetConv.xs,v 1.5 2001/05/25 16:14:11 matt Exp $ */
+/* $Id: CharsetConv.xs,v 1.6 2001/11/14 13:32:21 matt Exp $ */
 /* XSUB for Perl module Apache::AxKit::CharsetConv  */
 /* Originally from Text::Iconv distribution, */
 /* all credits to Michael Piotrowski - this is a verbatim copy */
@@ -75,13 +75,8 @@ SV *do_conv(iconv_t iconv_handle, SV *string)
    
    while(inbytesleft != 0)
    {
-#ifdef ICONV_SECOND_PARAM_IS_CONST
       ret = iconv(iconv_handle, (const char**)&icursor, &inbytesleft,
 		                &ocursor, &outbytesleft);
-#else
-      ret = iconv(iconv_handle, &icursor, &inbytesleft,
-		                &ocursor, &outbytesleft);
-#endif
       
       if(ret == (size_t) -1)
       {

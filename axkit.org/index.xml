@@ -15,13 +15,14 @@
 
 <webpage>
 	<head>
-		<title>AxKit</title>
+		<title>Apache AxKit</title>
 	</head>
 	<body>
 		<section>
 			<title>Welcome to AxKit!</title>
+			<para><em>/'aks/-kit</em></para>
 			<para>
-				AxKit is an XML Application Server for <ulink
+				Apache AxKit is an XML Application Server for <ulink
 				url="http://www.apache.org/httpd.html">Apache</ulink>. It provides
 				on-the-fly conversion from XML to <ulink
 				url="http://www.w3.org/TR/REC-html40/types.html#type-media-descriptors"

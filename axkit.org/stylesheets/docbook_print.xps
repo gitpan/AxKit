@@ -57,6 +57,19 @@ for my $link (sort {$links{$a} <=> $links{$b}} keys %links) {
 <% } %>
 </table>
 
+<%
+if (@footnotes) {
+    print "<hr><table cellspacing=\"0\" cellpadding=\"3\">";
+    print "<caption>Footnotes</caption>";
+    my $i = 1;
+    foreach my $footnote (@footnotes) {
+        print "<tr><td valign=\"top\"><p>$i</p></td><td valign=\"top\"><div class=\"footnote\">$footnote</div></td></tr>";
+        $i++;
+    }
+    print "</table><hr>";
+}
+%>
+
 </td>
 </tr>
 </table>

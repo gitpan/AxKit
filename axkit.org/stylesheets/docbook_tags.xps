@@ -157,4 +157,13 @@ $t->{'link'}{testcode} = sub {
 		return 1;
 	};
 
+my @footnotes;
+
+$t->{'footnote'}{testcode} = sub {
+    my ($node, $t2) = @_;
+    push @footnotes, apply_templates('node()', $node);
+    $t2->{pre} = '<sup>' . scalar(@footnotes) . '</sup>';
+    return -1;
+};
+
 %>

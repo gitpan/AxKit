@@ -1,0 +1,163 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/strict.dtd">
+<html>
+<!--#include file="sidebar_html.xps"-->
+<!--#include file="rdf_html.xps"-->
+<!--#include file="spacer.xps"-->
+<%
+
+$t->{'dc:description'}{showtag} = 0;
+
+$t->{'link'}{pre} = '<a href="{@url}">';
+$t->{'link'}{post} = '</a>';
+
+$t->{'xlink'}{pre} = '<a href="{@uri}">';
+$t->{'xlink'}{post} = '</a>';
+
+$t->{'blog:comments'}{showtag} = 0;
+
+$t->{'rdf:Seq'}{testcode} = sub {'rdf:li'};
+
+$t->{'rdf:li'}{showtag} = 0;
+$t->{'rdf:li'}{pre} = '<div class="by">{dc:creator} : ';
+$t->{'rdf:li'}{post} = '</div>';
+
+$t->{'dc:creator'}{testcode} = sub {0};
+
+%>
+<head>
+<title><%= findvalue('/rdf:RDF/channel[1]/title') %></title>
+<meta name="Author" content="Matt Sergeant" />
+<link rel="stylesheet" href="/stylesheets/axkit.css" type="text/css" />
+</head>
+
+<!--#include file="body_tag_html.xps"-->
+
+<!-- navbar and content positioning table -->
+
+
+<table width="100%" border="0" cellspacing="0" cellpadding="0">
+<tr>
+<!-- navbar -->
+<td align="left" valign="top" width="172">
+
+<!--#include file="navbar_html.xps"-->
+
+</td>
+
+<!-- whitespace -->
+<td align="left" valign="top" width="10"><%= spacer(10,1) %></td>
+
+<!-- content -->
+<td align="left" valign="top">
+
+    <table width="100%" border="0" cellspacing="5" cellpadding="0">
+
+    <!-- toponomic marker -->
+    <tr>
+    <td align="left" valign="top">
+    <span class="toponomic">
+<a href="http://axkit.org/">http://axkit.org/</a>
+::
+<%
+{
+my $uri = $r->uri;
+$uri =~ s/^\///;
+my ($file) = $uri =~ /([^\/]+)$/;
+$uri =~ s/\Q$file\E$//;
+my $local = '';
+foreach my $part (split('/', $uri)) {
+	$local .= "/$part/index.xml";
+	my $title = findvalue("document('$local')/descendant::title[1]");
+	if ($title eq 'Index') {
+		print $part, " :: ";
+	}
+	else {
+		print "<a href=\"$local\">", $title, "</a> :: ";
+	}
+	$local =~ s/\/index\.xml$//;
+}
+if ($file ne 'index.xml') {
+	my $location = "/$file";
+	$location = "/$uri$file" if $uri;
+	print "<a href=\"$location\">", findvalue("document('$location')/descendant::title[1]"), "</a> :: ";
+}
+}
+%>
+	</span>
+    </td>
+    </tr>
+
+    <!-- line -->
+    <tr>
+    <td bgcolor="#660099" style="line-height: 0;"><%= spacer(20,1) %></td>
+    </tr>
+
+    <tr>
+    <td align="left" valign="top">
+
+        <table width="100%" border="0" cellspacing="5" cellpadding="0">
+        <tr>
+
+        <!-- main text -->
+        <td align="left" valign="top">
+        <h1>Daily Churn</h1>
+        <p>
+        This page contains URLs and comments talked about on the 
+        <a href="/support.xml">AxKit IRC channel</a>. The information is recorded
+        by an IRC bot written using POE, and written out to an RSS 1.0 file, using
+        RDF and dublin core metadata.
+        </p>
+        <% 
+        my $count = 30;
+        foreach my $item (findnodes("/rdf:RDF/item[position() <= $count]")) {
+            if ($item->findvalue('link')) {
+            %>
+            <div class="hd"><%= $item->findvalue('dc:creator') %> : <a href="<%= $item->findvalue('link') %>"><%= $item->findvalue('title') %></a></div>
+            <%
+            }
+            else {
+            %>
+            <div class="hd"><%= $item->findvalue('title') %></div>
+            <%
+            }
+            %>
+<%= apply_templates($item->findnodes('blog:comments')) %>
+            <br /><br />
+        <% } %>
+        <!-- end main -->
+        </td>
+        
+        </tr>
+        </table>
+
+    </td>
+    </tr>
+
+    <!-- line -->
+    <tr>
+    <td bgcolor="#660099" style="line-height: 0;"><%= spacer(20,1) %></td>
+    </tr>
+
+
+    <!-- copyright -->
+    <tr>
+    <td align="left" valign="top">
+    <span class="copyright">These pages are copyright &copy; 2000 AxKit.com Ltd</span>
+    </td>
+    </tr>
+
+
+
+    </table>
+
+
+</td>
+
+<!-- whitespace -->
+<td align="left" valign="top" width="10"><%= spacer(10,1) %></td>
+
+</tr>
+</table>
+
+</body>
+</html>
