@@ -3,7 +3,7 @@
 <xsp:page language="Perl"
 	xmlns:xsp="http://www.apache.org/1999/XSP/Core"
 	xmlns:session="http://www.apache.org/1999/XSP/Session"
- 	xmlns="http://www.w3.org/1999/xhtml">
+ 	xmlns:ignore="http://www.w3.org/1999/xhtml">
 <html>
     <head>
         <title>Session Taglib demo</title>

@@ -1,4 +1,4 @@
-# $Id: XSP.pm,v 1.9 2002/03/25 07:28:17 matts Exp $
+# $Id: XSP.pm,v 1.13.2.2 2002/06/08 08:41:53 matts Exp $
 
 package Apache::AxKit::Language::XSP;
 
@@ -845,7 +845,7 @@ sub end_element {
     my ($e, $element) = @_;
     
     $e->{Current_NS} = pop @{ $e->{NS_Stack} };
-    
+
     return '$parent = $parent->getParentNode;' . "\n";
 }
 
@@ -895,6 +895,10 @@ sub parse {
     my $doc;
 
     my $parser = XML::LibXML->new();
+    local $XML::LibXML::match_cb = \&match_uri;
+    local $XML::LibXML::open_cb = \&open_content_uri;
+    local $XML::LibXML::read_cb = \&read_uri;
+    local $XML::LibXML::close_cb = \&close_uri;
     $parser->expand_entities(1);
     
     if (ref($thing)) {
@@ -915,6 +919,45 @@ sub parse {
     }
     
     $self->{Handler}->end_document($document);
+}
+
+sub match_uri {
+    my $uri = shift;
+    AxKit::Debug(8, "XSP match_uri: $uri");
+    return 1 if $uri =~ /^axkit:/;
+    return $uri !~ /^\w+:/; # only handle URI's without a scheme
+}
+
+sub open_content_uri {
+    my $uri = shift || './';
+    AxKit::Debug(8, "XSP open_content_uri: $uri");
+    
+    if ($uri =~ /^axkit:/) {
+        return AxKit::get_axkit_uri($uri);
+    }
+    
+    # create a subrequest, so we get the right AxKit::Cfg for the URI
+    my $apache = AxKit::Apache->request;
+    my $sub = $apache->lookup_uri($uri);
+    local $AxKit::Cfg = Apache::AxKit::ConfigReader->new($sub);
+    
+    my $provider = Apache::AxKit::Provider->new_content_provider($sub);
+    
+    AxKit::add_depends($provider->key());
+    my $str = $provider->get_strref;
+    
+    undef $provider;
+    undef $apache;
+    undef $sub;
+    
+    return $$str;
+}
+
+sub close_uri {
+}
+
+sub read_uri {
+    return substr($_[0], 0, $_[1], "");
 }
 
 sub process_node {

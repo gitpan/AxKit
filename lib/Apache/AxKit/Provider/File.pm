@@ -1,4 +1,4 @@
-# $Id: File.pm,v 1.4 2002/04/21 14:07:16 matts Exp $
+# $Id: File.pm,v 1.8 2002/05/31 19:22:24 matts Exp $
 
 package Apache::AxKit::Provider::File;
 use strict;
@@ -20,18 +20,18 @@ sub init {
 
     my $stats_done;
     if ($p{key}) {
+        AxKit::Debug(8, "File Provider instantiated by key: $p{key}");
         $self->{file} = $p{key};
     }
     else {
-
         if ($p{uri} and $p{uri} =~ s|^file:(//)?||) {
             $p{file} = delete $p{uri};
         }
 
         if ($p{uri}) {
-            my $r = $p{rel} ? $p{rel}->apache_request() : $self->apache_request();
+            my $r = $self->apache_request();
 
-            AxKit::Debug(8, "[uri] File Provider looking up" . ($p{rel} ? " relative" : "") . " uri $p{uri}");
+            AxKit::Debug(8, "[uri] File Provider looking up uri $p{uri}");
 
             $self->{apache} = $r->lookup_uri($p{uri});
             my $status = $self->{apache}->status();
@@ -43,26 +43,19 @@ sub init {
             AxKit::Debug(8, "[uri] File Provider set filename to $self->{file}");
         }
         elsif ($p{file}) {
-            if ($p{rel} && $p{file} !~ /^\//) {
-                my $file = $p{rel}->apache_request->filename();
-                my $dir = File::Basename::dirname($file);
-                require File::Spec;
-                $self->{file} = File::Spec->rel2abs($p{file}, $dir);
-                AxKit::Debug(8, "[file] File Provider set filename to $self->{file}");
-            }
-            else {
-                $self->{file} = $p{file};
-            }
+            AxKit::Debug(8, "[file] File Provider given file: $p{file}");
+            $self->{file} = $p{file};
         }
         else {
             $self->{file} = $self->{apache}->filename();
+            AxKit::Debug(8, "[req] File Provider given \$r: $self->{file}");
             my @stats = stat($self->{apache}->finfo());
             $self->{mtime} = $stats[9];
             if (-e _) {
                 if (-r _ ) {
                     $self->{file_exists} = 1;
                 }
-
+    
                 if (-d _) {
                     $self->{is_dir} = 1;
                 }
@@ -138,13 +131,19 @@ sub process {
         return 0;
     }
 
-    local $^W;
-    if (($xmlfile =~ /\.xml$/i) ||
-        ($self->{apache}->content_type() =~ /^(text|application)\/xml/) ||
-        $self->{apache}->pnotes('xml_string')
-        ) {
-            # chdir(dirname($xmlfile));
-            return 1;
+    # Test for an XML file type only if not using FastHandler
+    if (!$AxKit::FastHandler) {
+        local $^W;
+        if (($xmlfile =~ /\.xml$/i) ||
+            ($self->{apache}->content_type() =~ /^(text|application)\/xml/) ||
+            $self->{apache}->pnotes('xml_string')
+            ) {
+                # chdir(dirname($xmlfile));
+                return 1;
+        }
+    }
+    else {
+        return 1;
     }
 
     AxKit::Debug(5, "'$xmlfile' not recognised as XML");
@@ -153,7 +152,7 @@ sub process {
 
 sub mtime {
     my $self = shift;
-    return $self->{mtime} if exists $self->{mtime};
+    return $self->{mtime} if defined $self->{mtime};
     return ($self->{mtime} = (stat($self->{file}))[9]);
 }
 
@@ -178,7 +177,8 @@ sub get_fh {
 sub get_strref {
     my $self = shift;
     if ($self->_is_dir()) {
-        throw Apache::AxKit::Exception::IO(-text => "$self->{file} is a directory - please overload File provider and use AxProvider option");
+        throw Apache::AxKit::Exception::IO(
+          -text => "$self->{file} is a directory - please overload File provider and use AxContentProvider option");
     }
     my $fh = $self->get_fh();
     local $/;

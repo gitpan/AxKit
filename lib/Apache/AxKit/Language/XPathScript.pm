@@ -1,4 +1,4 @@
-# $Id: XPathScript.pm,v 1.3 2002/03/25 14:52:20 jwalt Exp $
+# $Id: XPathScript.pm,v 1.7 2002/05/31 19:22:24 matts Exp $
 
 package Apache::AxKit::Language::XPathScript;
 
@@ -101,13 +101,9 @@ sub handler {
     AxKit::Debug(7, "Running XPathScript script\n");
     local $^W;
     my $rc = Apache::Constants::OK;
-    eval {
-        $rc = $cv->($r, $xpath, $t);
-    };
-    if ($@) {
-        AxKit::Debug(1, "XPathScript error: $@");
-        throw $@;
-    }
+
+    # Execute the page
+    $rc = $cv->($r, $xpath, $t);
 
     if (!$r->pnotes('xml_string') &&
         !$r->dir_config('XPSNoApplyTemplatesOnEmptyOutput')) { # no output? Try apply_templates
@@ -129,19 +125,24 @@ sub get_source_tree {
     AxKit::Debug(7, "XPathScript: reparsing file");
     eval {
         my $fh = $provider->get_fh();
-        # warn("parsing FH $fh with parser $parser\n");
+# warn("parsing FH $fh with parser $parser\n");
         local $/;
         my $contents = <$fh>;
-        # warn("FH contains: $contents\n");
+# warn("FH contains: $contents\n");
         $source_tree = $parser->parse($contents);
-        # warn("Parse completed\n");
+# warn("Parse completed\n");
         close($fh);
+# warn("closed filehandle\n");
     };
     if ($@) {
-        # warn("parse_fh failed\n");
-        $source_tree = $parser->parse(${ $provider->get_strref() });
+# warn("parse_fh failed\n");
+        my $str = $provider->get_strref();
+# warn("Got str\n");
+        $source_tree = $parser->parse($$str);
+# warn("Got source tree\n");
     }
-
+    
+    AxKit::Debug(7, "XPathScript: Returning parsed source tree");
     # warn("get_source_tree = $source_tree\n");
     return $source_tree;
 }
@@ -149,13 +150,15 @@ sub get_source_tree {
 sub check_inc_mtime {
     my ($mtime, $provider, $includes) = @_;
     
+    my $apache = $provider->apache_request;
+    
     for my $inc (@$includes) {
 #        warn "Checking mtime for $inc\n";
-        my $inc_provider = Apache::AxKit::Provider->new(
-                AxKit::Apache->request, 
-                uri => $inc,
-                rel => $provider,
-                );
+        my $sub = $apache->lookup_uri($inc);
+        local $AxKit::Cfg = Apache::AxKit::ConfigReader->new($sub);
+        
+        my $inc_provider = Apache::AxKit::Provider->new_style_provider($sub);
+        
         if ($inc_provider->has_changed($mtime)) {
 #            warn "$inc newer (" . $inc_provider->mtime() . ") than last compile ($mtime) causing recompile\n";
             return;
@@ -291,11 +294,11 @@ sub include_file {
 
     push @{$stash->{$key}{includes}}, $filename;
     
-    my $inc_provider = Apache::AxKit::Provider->new(
-            AxKit::Apache->request,
-            uri => $filename,
-            rel => $provider,
-            );
+    my $apache = $provider->apache_request;
+    my $sub = $apache->lookup_uri($filename);
+    local $AxKit::Cfg = Apache::AxKit::ConfigReader->new($sub);
+    
+    my $inc_provider = Apache::AxKit::Provider->new_style_provider($sub);
     
     return extract($inc_provider, $script_output);
 }
@@ -318,7 +321,10 @@ sub XML::XPath::Function::document {
     my $results = XML::XPath::NodeSet->new();
     my $uri = $params[0];
     my $newdoc;
-    if ($uri =~ /^\w\w+:/) { # assume it's scheme://foo uri
+    if ($uri =~ /^axkit:/) {
+        $newdoc = $parser->parse( AxKit::get_axkit_uri($uri) );
+    }
+    elsif ($uri =~ /^\w\w+:/) { # assume it's scheme://foo uri
         eval {
             # warn "Trying to parse $params[0]\n";
             $newdoc = $parser->parse(
@@ -338,15 +344,23 @@ sub XML::XPath::Function::document {
         }
     }
     else {
-        # warn("Parsing local: $uri\n");
-        my $provider = Apache::AxKit::Provider->new(
-                    AxKit::Apache->request, 
-                    uri => $uri,
-                );
+        AxKit::Debug(3, "Parsing local: $uri\n");
+        
+        # create a subrequest, so we get the right AxKit::Cfg for the URI
+        my $apache = AxKit::Apache->request;
+        my $sub = $apache->lookup_uri($uri);
+        local $AxKit::Cfg = Apache::AxKit::ConfigReader->new($sub);
+        
+        my $provider = Apache::AxKit::Provider->new_content_provider($sub);
+        
         $newdoc = get_source_tree($provider, $parser);
+        undef $provider;
+        undef $apache;
+        undef $sub;
     }
 
     $results->push($newdoc) if $newdoc;
+    #AxKit::Debug(8, "XPathScript: document() returning");
     return $results;
 }
 
@@ -365,11 +379,16 @@ sub get_mtime {
         return 0;
     }
 
+    my $apache = $provider->apache_request;
+    
     for my $inc (@{$stash->{$filename}{includes}}) {
-        my $inc_provider = Apache::AxKit::Provider->new(
-                AxKit::Apache->request, 
-                uri => $inc,
-                rel => $provider,
+        
+        my $sub = $apache->lookup_uri($inc);
+        local $AxKit::Cfg = Apache::AxKit::ConfigReader->new($sub);
+        
+        my $inc_provider = Apache::AxKit::Provider->new_style_provider(
+                $sub, 
+                # uri => $inc,
                 );
         
 #        warn "Checking mtime of $inc\n";
@@ -621,7 +640,7 @@ sub get_package_name {
 #            warn "Here with $result\n";
             
 
-            if ($result =~ /\D/) {
+            if ($result !~ /^-?\d+$/) {
                 $dokids = 0;
                 $search = $result;
             }

@@ -1,4 +1,4 @@
-# $Id: Provider.pm,v 1.4 2002/04/02 16:27:54 matts Exp $
+# $Id: Provider.pm,v 1.9 2002/05/31 19:22:23 matts Exp $
 
 package Apache::AxKit::Provider;
 use strict;
@@ -9,12 +9,13 @@ use Apache::Constants qw(OK DECLINED);
 
 # use vars qw/$COUNT/;
 
-sub new {
+sub new_style_provider {
     my $class = shift;
     my $apache = shift;
     my $self = bless { apache => $apache }, $class;
     
-    if (my $alternate = $AxKit::Cfg->ProviderClass()) {
+    if (my $alternate = $AxKit::Cfg->StyleProviderClass()) {
+        AxKit::Debug(7, "Style Provider Override: $alternate" );
         AxKit::reconsecrate($self, $alternate);
     }
     
@@ -23,6 +24,28 @@ sub new {
     AxKit::add_depends($self->key());
 
     return $self;
+}
+
+sub new_content_provider {
+    my $class = shift;
+    my $apache = shift;
+    my $self = bless { apache => $apache }, $class;
+    
+    if (my $alternate = $AxKit::Cfg->ContentProviderClass()) {
+        AxKit::Debug(7, "Content Provider Override: $alternate" );
+        AxKit::reconsecrate($self, $alternate);
+    }
+    
+    $self->init(@_);
+    
+    AxKit::add_depends($self->key());
+
+    return $self;
+}
+
+sub new {
+    my $class = shift;
+    return $class->new_content_provider( @_ );
 }
 
 sub init {
@@ -41,6 +64,7 @@ sub apache_request {
 sub has_changed {
     my $self = shift;
     my $time = shift;
+    return 1 unless defined $time;
     return $self->mtime > $time;
 }
 
@@ -56,6 +80,7 @@ sub get_ext_ent_handler {
     return sub {
         my ($e, $base, $sysid, $pubid) = @_;
 #        warn "ext_ent: base => $base, sys => $sysid, pub => $pubid\n";
+        AxKit::Debug(6, "Provider get_ext_ent_handler for $sysid");
         if ($sysid =~ /^http:/) {
             if ($pubid) {
                 return ''; # do not bring in public DTD's
@@ -79,15 +104,22 @@ sub get_ext_ent_handler {
             die "Cannot download https (SSL) or ftp URL's yet. Patches welcome";
         }
 
+        # create a subrequest, so we get the right AxKit::Cfg for the URI
+        my $apache = AxKit::Apache->request;
+        my $sub = $apache->lookup_uri($sysid);
+        local $AxKit::Cfg = Apache::AxKit::ConfigReader->new($sub);
+    
 #        warn "File provider ext_ent_handler called with '$sysid'\n";
-        my $provider = Apache::AxKit::Provider->new(
-                AxKit::Apache->request,
-                uri => $sysid,
-#                rel => $self,
-                );
+        my $provider = Apache::AxKit::Provider->new($sub);
+        
 #        warn "Got provider with key: ", $provider->key, "\n";
         my $str = $provider->get_strref;
 #        warn "Returning string with length: ", length($$str), "\n";
+
+        undef $provider;
+        undef $apache;
+        undef $sub;
+        
         return $$str;
     };
 }
@@ -161,7 +193,10 @@ sub get_styles {
     }
     
     # Let GetMatchingProcessors to process the @$styles array
-    AxKit::Debug(4, "Calling GetMatchingProcessors with ($media, $pref_style, $vals->[0], $vals->[1], $vals->[2])");
+    {
+      local $^W; # suppress "Use of uninitialized value" warnings
+      AxKit::Debug(4, "Calling GetMatchingProcessors with ($media, $pref_style, $vals->[0], $vals->[1], $vals->[2])");
+    }
     my @styles = $AxKit::Cfg->GetMatchingProcessors($media,
 		$pref_style, @$vals[0 .. 2], $xml_styles, $self);
     
@@ -253,7 +288,9 @@ sub xs_get_styles {
         unshift @{$e->{XMLStyle_style}}, @{$e->{XMLStyle_style_persistant}};
     }
     
-    AxKit::Debug(4, "xs_get_styles returned: $bits->[3], $bits->[4], $element");
+    { local $^W;
+      AxKit::Debug(4, "xs_get_styles returned: $bits->[3], $bits->[4], $element");
+    }
     
     return ($e->{XMLStyle_style}, $bits->[3], $bits->[4], $element);
 }
@@ -413,18 +450,27 @@ Apache::AxKit::Provider - base Provider class
 
 =head1 SYNOPSIS
 
-Override the base Provider class and enable it using:
+Override the base ContentProvider class and enable it using:
 
-    AxProvider MyClass
+    AxContentProvider MyClass
     
     # alternatively use:
-    # PerlSetVar AxProvider MyClass
+    # PerlSetVar AxContentProvider MyClass
+
+Override the base StyleProvider class and enable it using:
+
+    AxStyleProvider MyClass
+    
+    # alternatively use:
+    # PerlSetVar AxStyleProvider MyClass
 
 =head1 DESCRIPTION
 
-The Provider class is used to read in the data source for the given URL.
-The default Provider is Provider::File, which reads from the filesystem,
-although obviously you can read from just about anywhere.
+The Provider class is used to read in the data sources for the given URL.
+The ContentProvider handles the task of returning the data for the XML source
+document, while the StyleProvider fetches the data for any stylesheets that
+will be applied to that source document. The default for each is Provider::File, 
+which reads from the filesystem, although obviously you can read from just about anywhere.
 
 Should you wish to override the default Provider, these are the methods
 you need to implement:

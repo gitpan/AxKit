@@ -1,4 +1,4 @@
-# $Id: ConfigReader.pm,v 1.2 2002/04/02 16:27:54 matts Exp $
+# $Id: ConfigReader.pm,v 1.8 2002/06/04 17:21:30 jwalt Exp $
 
 package Apache::AxKit::ConfigReader;
 
@@ -10,7 +10,11 @@ sub new {
     my $class = shift;
     my $r = shift;
     
-    my $cfg = AxKit::get_config($r) || {};
+#    my $cfg = AxKit::get_config($r);
+#    if (!$cfg) {
+#        $cfg = {};
+#        AxKit::Debug(2, "Unable to get_config(). Using blank hashref instead");
+#    }
     
 #    use Apache::Peek 'Dump';
 #    Dump($cfg);
@@ -18,13 +22,25 @@ sub new {
 #     $Data::Dumper::Indent = 1;
 #     warn("Cfg: ", Data::Dumper->Dump([$cfg], ['cfg']));
 
-    my $self = bless { apache => $r, cfg => $cfg, output_charset_ok => 0 }, $class;
+    my $self = bless { apache => $r, output_charset_ok => 0 }, $class;
     
-    if (my $alternate = $cfg->{ConfigReader} || $r->dir_config('AxConfigReader')) {
-        AxKit::reconsecrate($self, $alternate);
+    $self->get_config($r);
+    
+    if (my $alternate = $self->{cfg}->{ConfigReader} || $r->dir_config('AxConfigReader')) {
+        if ($alternate ne __PACKAGE__) {
+            AxKit::reconsecrate($self, $alternate);
+            # re-get config if different package
+            $self->get_config($r);
+        }
     }
     
     return $self;
+}
+
+# you may want to override this in your subclass if you write your own ConfigReader
+sub get_config {
+    my $self = shift;
+    $self->{cfg} = _get_config($self->{apache});
 }
 
 # sub DESTROY {
@@ -57,10 +73,10 @@ sub CacheDir {
     return $dir . "/.xmlstyle_cache";
 }
 
-sub ProviderClass {
+sub ContentProviderClass {
     my $self = shift;
-    if (my $alternate = $self->{cfg}{Provider} || 
-            $self->{apache}->dir_config('AxProvider')) {
+    if (my $alternate = $self->{cfg}{ContentProvider} || 
+            $self->{apache}->dir_config('AxContentProvider')) {
         return $alternate;
     }
     
@@ -137,6 +153,17 @@ sub StackTrace {
     return $self->{cfg}{StackTrace} ||
             $self->{apache}->dir_config('AxStackTrace') ||
             0;
+}
+
+sub TraceIntermediate {
+    my $self = shift;
+    if (my $dir = $self->{cfg}{TraceIntermediate} ||
+            $self->{apache}->dir_config('AxTraceIntermediate')) {
+        return undef if $dir =~ m/^\s*(?:off|none|disabled?)\s*$/i;
+        return $dir;
+    }
+
+    return undef;
 }
 
 sub LogDeclines {
@@ -222,7 +249,7 @@ sub ErrorStyles {
     
     my $style = $self->{cfg}{ErrorStylesheet};
     my ($type, $href);
-    if (!$style) {
+    if (!$style || !@$style) {
         ($type, $href) = split(/\s*=>\s*/,
                 ($self->{apache}->dir_config('AxErrorStylesheet') || ''),
                 2);

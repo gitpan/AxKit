@@ -1,4 +1,4 @@
-# $Id: Sablot.pm,v 1.3 2002/03/25 14:06:09 jwalt Exp $
+# $Id: Sablot.pm,v 1.4 2002/05/26 16:47:58 matts Exp $
 
 package Apache::AxKit::Language::Sablot;
 
@@ -131,7 +131,7 @@ sub SHGetAll {
     
     my $uri = $scheme . $rest;
     
-    $uri =~ s/^axkit\///;
+    $uri =~ s/^sabaxkit\///;
     
     AxKit::Debug(8, "Sablot: Looking up URI: $uri\n");
     
@@ -153,7 +153,7 @@ BEGIN {
     package Apache::AxKit::Language::Sablot;
 
     $xslt_processor = XML::Sablotron->new();
-    $xslt_processor->SetBase("axkit:");
+    $xslt_processor->SetBase("sabaxkit:");
 
     $handler = Apache::AxKit::Language::Sablot::Handler->new();
     

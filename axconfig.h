@@ -1,4 +1,4 @@
-/* $Id: axconfig.h,v 1.2 2002/04/02 16:27:53 matts Exp $ */
+/* $Id: axconfig.h,v 1.4 2002/06/04 16:37:12 jwalt Exp $ */
 
 #ifdef WIN32
 #define _INC_DIRENT
@@ -35,12 +35,13 @@ typedef struct {
     /* simple types */
     char * cache_dir;
     char * config_reader_module;
-    char * provider_module;
+    char * contentprovider_module;
     char * styleprovider_module;
     char * default_style;
     char * default_media;
     char * cache_module;
     char * output_charset;
+    char * trace_intermediate;
     int    debug_level;
     int    translate_output;
     int    gzip_output;

@@ -1,4 +1,4 @@
-/* $Id: axconfig.c,v 1.2 2002/04/02 16:27:53 matts Exp $ */
+/* $Id: axconfig.c,v 1.8.2.1 2002/06/06 20:00:19 matts Exp $ */
 
 #ifndef WIN32
 #include <modules/perl/mod_perl.h>
@@ -101,12 +101,13 @@ new_axkit_dir_config (pool *p)
 
     new->cache_dir = 0;
     new->config_reader_module = 0;
-    new->provider_module = 0;
+    new->contentprovider_module = 0;
     new->styleprovider_module = 0;
     new->default_style = 0;
     new->default_media = 0;
     new->cache_module = 0;
     new->output_charset = 0;
+    new->trace_intermediate = 0;
 
     /* complex types */
     new->type_map = NULL;
@@ -129,7 +130,8 @@ new_axkit_dir_config (pool *p)
         "new.reset_processors: %d\n"
         "new.cache_dir: %d\n"
         "new.config_reader_module: %d\n"
-        "new.provider_module: %d\n"
+        "new.contentprovider_module: %d\n"
+        "new.styleprovider_module: %d\n"
         "new.default_style: %d\n"
         "new.default_media: %d\n"
         "new.cache_module: %d\n"
@@ -152,7 +154,8 @@ new_axkit_dir_config (pool *p)
         new->reset_processors,
         new->cache_dir,
         new->config_reader_module,
-        new->provider_module,
+        new->contentprovider_module,
+        new->styleprovider_module,
         new->default_style,
         new->default_media,
         new->cache_module,
@@ -279,7 +282,8 @@ merge_axkit_dir_config (pool *p, void *parent_dirv, void *subdirv)
         "parent_dir.reset_processors: %d\n"
         "parent_dir.cache_dir: %d\n"
         "parent_dir.config_reader_module: %d\n"
-        "parent_dir.provider_module: %d\n"
+        "parent_dir.contentprovider_module: %d\n"
+        "parent_dir.styleprovider_module: %d\n"
         "parent_dir.default_style: %d\n"
         "parent_dir.default_media: %d\n"
         "parent_dir.cache_module: %d\n"
@@ -302,7 +306,8 @@ merge_axkit_dir_config (pool *p, void *parent_dirv, void *subdirv)
         parent_dir->reset_processors,
         parent_dir->cache_dir,
         parent_dir->config_reader_module,
-        parent_dir->provider_module,
+        parent_dir->contentprovider_module,
+        parent_dir->styleprovider_module,
         parent_dir->default_style,
         parent_dir->default_media,
         parent_dir->cache_module,
@@ -327,7 +332,8 @@ merge_axkit_dir_config (pool *p, void *parent_dirv, void *subdirv)
         "subdir.reset_processors: %d\n"
         "subdir.cache_dir: %d\n"
         "subdir.config_reader_module: %d\n"
-        "subdir.provider_module: %d\n"
+        "subdir.contentprovider_module: %d\n"
+        "subdir.styleprovider_module: %d\n"
         "subdir.default_style: %d\n"
         "subdir.default_media: %d\n"
         "subdir.cache_module: %d\n"
@@ -350,7 +356,8 @@ merge_axkit_dir_config (pool *p, void *parent_dirv, void *subdirv)
         subdir->reset_processors,
         subdir->cache_dir,
         subdir->config_reader_module,
-        subdir->provider_module,
+        subdir->contentprovider_module,
+        subdir->styleprovider_module,
         subdir->default_style,
         subdir->default_media,
         subdir->cache_module,
@@ -382,11 +389,11 @@ merge_axkit_dir_config (pool *p, void *parent_dirv, void *subdirv)
         new->config_reader_module = ap_pstrdup(p, parent_dir->config_reader_module);
     }
     
-    if (subdir->provider_module) {
-        new->provider_module = ap_pstrdup(p, subdir->provider_module);
+    if (subdir->contentprovider_module) {
+        new->contentprovider_module = ap_pstrdup(p, subdir->contentprovider_module);
     }
-    else if (parent_dir->provider_module) {
-        new->provider_module = ap_pstrdup(p, parent_dir->provider_module);
+    else if (parent_dir->contentprovider_module) {
+        new->contentprovider_module = ap_pstrdup(p, parent_dir->contentprovider_module);
     }
     
     if (subdir->styleprovider_module) {
@@ -423,7 +430,14 @@ merge_axkit_dir_config (pool *p, void *parent_dirv, void *subdirv)
     else if (parent_dir->output_charset) {
         new->output_charset = ap_pstrdup(p, parent_dir->output_charset);
     }
-    
+
+    if (subdir->trace_intermediate) {
+        new->trace_intermediate = ap_pstrdup(p, subdir->trace_intermediate);
+    }
+    else if (parent_dir->trace_intermediate) {
+        new->trace_intermediate = ap_pstrdup(p, parent_dir->trace_intermediate);
+    }
+
     new->debug_level =
         subdir->debug_level != -1 ? subdir->debug_level :
                                     parent_dir->debug_level;
@@ -983,6 +997,15 @@ ax_add_plugin (cmd_parms *cmd, axkit_dir_config *ax, char *module)
 }
 
 CHAR_P
+ax_set_provider (cmd_parms *cmd, axkit_dir_config *ax, char *provider)
+{
+    ax_preload_module(&provider);
+    ax->contentprovider_module = provider;
+    ax->styleprovider_module = provider;
+    return NULL;
+}
+
+CHAR_P
 ax_reset_plugins (cmd_parms *cmd, axkit_dir_config *ax)
 {
     ax->reset_plugins++;
@@ -1024,19 +1047,27 @@ void axkit_module_init(server_rec *s, pool *p)
 static int axkit_handler(request_rec *r)
 {
     int retval;
-    SV * handler_sv = newSVpv("AxKit::fast_handler", 0);
-
-    SV * cfg = perl_get_sv("AxKit::Cfg", FALSE);
-    SV * cache = perl_get_sv("AxKit::Cache", FALSE);
-    SV * hs = perl_get_sv("AxKit::HeadersSent", FALSE);
-    SV * debuglevel = perl_get_sv("AxKit::DebugLevel", FALSE);
-    SV * errorlevel = perl_get_sv("Error::Debug", FALSE);
+    SV * handler_sv;
+    SV * cfg;
+    SV * debuglevel;
+    SV * errorlevel;
+    
+    if (S_ISDIR(r->finfo.st_mode)) {
+        axkit_dir_config * cfg = (axkit_dir_config *)ap_get_module_config(r->per_dir_config, &XS_AxKit);
+        if (!cfg || cfg->handle_dirs != 1) {
+            return DECLINED;
+        }
+    }
+    
+    handler_sv = newSVpv("AxKit::fast_handler", 0);
+    
+    cfg = perl_get_sv("AxKit::Cfg", FALSE);
+    debuglevel = perl_get_sv("AxKit::DebugLevel", FALSE);
+    errorlevel = perl_get_sv("Error::Debug", FALSE);
 
     ENTER;
 
     save_item(cfg);
-    save_item(cache);
-    save_item(hs);
     save_item(debuglevel);
     save_item(errorlevel);
 
@@ -1045,6 +1076,11 @@ static int axkit_handler(request_rec *r)
     LEAVE;
 
     SvREFCNT_dec(handler_sv);
+    
+    if (retval == DECLINED) {
+        r->handler = "default-handler";
+        return ap_invoke_handler(r);
+    }
 
     return retval;
 }
@@ -1123,9 +1159,13 @@ static command_rec axkit_mod_cmds[] = {
       OR_ALL, TAKE1,
       "alternative module to use for reading configuration" },
 
-    { "AxProvider", ax_set_module_slot,
-      (void *)XtOffsetOf(axkit_dir_config, provider_module),
+    { "AxContentProvider", ax_set_module_slot,
+      (void *)XtOffsetOf(axkit_dir_config, contentprovider_module),
       OR_ALL, TAKE1,
+      "alternative module to use for reading the xml" },
+
+    { "AxProvider", ax_set_provider,
+      NULL, OR_ALL, TAKE1,
       "alternative module to use for reading the xml" },
 
     { "AxStyleProvider", ax_set_module_slot,
@@ -1169,6 +1209,11 @@ static command_rec axkit_mod_cmds[] = {
       (void *)XtOffsetOf(axkit_dir_config, output_charset),
       OR_ALL, TAKE1,
       "character set used by iconv" },
+
+    { "AxTraceIntermediate", ap_set_string_slot,
+      (void *)XtOffsetOf(axkit_dir_config, trace_intermediate),
+      OR_ALL, TAKE1,
+      "location of a directory to write intermediate xml documents to (for debugging)" },
 
     { "AxGzipOutput", ap_set_flag_slot,
       (void *)XtOffsetOf(axkit_dir_config, gzip_output),
@@ -1216,7 +1261,7 @@ static command_rec axkit_mod_cmds[] = {
       OR_ALL, FLAG,
       "On or Off [default] to make AxKit process directory requests using XML::Directory" },
 
-    { "AxIgnoreStypePI", ap_set_flag_slot,
+    { "AxIgnoreStylePI", ap_set_flag_slot,
       (void *)XtOffsetOf(axkit_dir_config, ignore_style_pi),
       OR_ALL, FLAG,
       "On or Off [default] to disable xml-stylesheet PI processing" },
@@ -1267,9 +1312,9 @@ ax_get_config (axkit_dir_config * cfg)
         hv_store(retval, "ConfigReader",
                 12, (newSVpv(cfg->config_reader_module, 0)), 0);
     }
-    if (cfg->provider_module) {
-        hv_store(retval, "Provider",
-                8, (newSVpv(cfg->provider_module, 0)), 0);
+    if (cfg->contentprovider_module) {
+        hv_store(retval, "ContentProvider",
+                15, (newSVpv(cfg->contentprovider_module, 0)), 0);
     }
     if (cfg->styleprovider_module) {
         hv_store(retval, "StyleProvider",
@@ -1290,6 +1335,10 @@ ax_get_config (axkit_dir_config * cfg)
     if (cfg->output_charset) {
         hv_store(retval, "OutputCharset",
                 13, (newSVpv(cfg->output_charset, 0)), 0);
+    }
+    if (cfg->trace_intermediate) {
+        hv_store(retval, "TraceIntermediate",
+                17, (newSVpv(cfg->trace_intermediate, 0)), 0);
     }
     if (cfg->debug_level) {
         hv_store(retval, "DebugLevel",

@@ -1,4 +1,4 @@
-/* $Id: AxKit.xs,v 1.1 2002/01/13 20:45:08 matts Exp $ */
+/* $Id: AxKit.xs,v 1.5 2002/06/04 07:51:54 matts Exp $ */
 
 #ifdef __cplusplus
 extern "C" {
@@ -135,25 +135,6 @@ END ()
             ap_remove_module(&XS_AxKit);
         }
 
-SV *
-get_config (r)
-        Apache  r
-    PREINIT:
-        axkit_dir_config * cfg;
-        HV * config;
-    CODE:
-        cfg = (axkit_dir_config *)
-                ap_get_module_config(r->per_dir_config, &XS_AxKit);
-        
-        if (!cfg) {
-            XSRETURN_UNDEF;
-        }
-        
-        config = ax_get_config(cfg);
-        RETVAL = newRV_noinc((SV*)config);
-    OUTPUT:
-        RETVAL
-
 void
 load_module (name)
         char * name
@@ -174,6 +155,9 @@ build_uri (r, uri, base)
         char * uri
         char * base
     CODE:
+        if (r == NULL) {
+            croak("build_uri: Unexpected r == NULL");
+        }
         RETVAL = axBuildURI(r->pool, uri, base);
     OUTPUT:
         RETVAL
@@ -187,13 +171,17 @@ Debug (level, ...)
         SV * str;
         int debuglevel;
         axkit_dir_config * cfg;
-    CODE:
+    PPCODE:
         r = perl_request_rec(NULL);
         if (r == NULL) {
             return;
         }
         cfg = (axkit_dir_config *)
                 ap_get_module_config(r->per_dir_config, &XS_AxKit);
+        if (!cfg) {
+            /* AxKit is not handler in this directory */
+            return;
+        }
         if (level > cfg->debug_level) {
             return;
         }
@@ -215,6 +203,45 @@ Debug (level, ...)
         }
         ap_log_rerror(APLOG_MARK, APLOG_NOERRNO|APLOG_WARNING, r, "[AxKit] %s", SvPV(str, n_a));
         SvREFCNT_dec(str);
+
+
+MODULE = AxKit		PACKAGE = Apache::AxKit::ConfigReader
+
+PROTOTYPES: DISABLE
+
+SV *
+_get_config (r=NULL)
+        Apache  r
+    CODE:
+    {
+        axkit_dir_config * cfg;
+        HV * config;
+        
+        if (r == NULL) {
+            croak("_get_config: Unexpected request_rec = NULL");
+        }
+
+        if (r->per_dir_config == NULL) {
+            croak("_get_config: Unexpected per_dir_config = NULL");
+        }
+        
+        cfg = (axkit_dir_config *)
+                ap_get_module_config(r->per_dir_config, &XS_AxKit);
+        
+        if (!cfg) {
+            config = newHV();
+        }
+        else {
+            config = ax_get_config(cfg);
+            if (!config) {
+                config = newHV();
+            }
+        }
+        RETVAL = newRV_noinc((SV*)config);
+    }
+    OUTPUT:
+        RETVAL
+
 
 #ifdef HAVE_LIBXML2
 
@@ -248,7 +275,7 @@ _new(class, r, ...)
             av_push(item_store, ST(item_id));
         }
         
-        if (alternate = call_method_sv(perl_get_sv("AxKit::Cfg", FALSE), "ProviderClass")) {
+        if (alternate = call_method_sv(perl_get_sv("AxKit::Cfg", FALSE), "ContentProviderClass")) {
             SV * tmp;
             sv_bless(obj, gv_stashsv(alternate, 0));
             SvREFCNT_dec(alternate);

@@ -15,8 +15,8 @@ test_module("Apache::AxKit::Language::XMLNewsRDF", "XMLNews::HTMLTemplate");
 
 test_module("Apache::AxKit::Language::XMLNewsNITF", "XMLNews::HTMLTemplate");
 
-test_module("Apache::AxKit::Language::XSP", "XML::XPath");
+test_module("Apache::AxKit::Language::XSP", "XML::LibXML");
 
-test_module("Apache::AxKit::Language::XSP::TaglibHelper", "XML::XPath");
+test_module("Apache::AxKit::Language::XSP::TaglibHelper", "XML::LibXML");
 
 test_module("Apache::AxKit::Language::PassiveTeX");

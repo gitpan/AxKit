@@ -1,4 +1,4 @@
-# $Id: LibXSLT.pm,v 1.7 2002/04/22 13:06:39 jwalt Exp $
+# $Id: LibXSLT.pm,v 1.13 2002/06/04 07:52:17 matts Exp $
 
 package Apache::AxKit::Language::LibXSLT;
 
@@ -47,8 +47,9 @@ sub handler {
     }
     
     my $parser = XML::LibXML->new();
+    $parser->expand_entities(1);
     local $XML::LibXML::match_cb = \&match_uri;
-    local $XML::LibXML::open_cb = \&open_uri;
+    local $XML::LibXML::open_cb = \&open_content_uri;
     local $XML::LibXML::read_cb = \&read_uri;
     local $XML::LibXML::close_cb = \&close_uri;
 
@@ -72,11 +73,12 @@ sub handler {
 
     my $stylesheet;
     my $cache = $style_cache{$style->key()};
-    if (!$style->has_changed($cache->{mtime}) && ref($cache->{depends}) eq 'ARRAY') {
+    if ($cache && !$style->has_changed($cache->{mtime}) && ref($cache->{depends}) eq 'ARRAY') {
+        AxKit::Debug(8, "[LibXSLT] checking if stylesheet is cached");
         my $changed = 0;
         DEPENDS:
         foreach my $depends (@{ $cache->{depends} }) {
-            my $p = Apache::AxKit::Provider->new($r, key => $depends);
+            my $p = Apache::AxKit::Provider->new_style_provider($r, key => $depends);
             if ( $p->has_changed( $cache->{mtime} ) ) {
                 $changed = 1;
                 last DEPENDS;
@@ -98,9 +100,11 @@ sub handler {
             $style_doc = $parser->parse_fh($fh, $style_uri);
         };
         if ($@) {
-            my $stylestring = ${$style->get_strref()};
-            $style_doc = $parser->parse_string($stylestring, $style_uri);
+            my $stylestring = $style->get_strref();
+            $style_doc = $parser->parse_string($$stylestring, $style_uri);
         }
+        
+        local $XML::LibXML::open_cb = \&open_stylesheet_uri;
         
         $stylesheet = XML::LibXSLT->parse_stylesheet($style_doc);
         
@@ -144,18 +148,57 @@ sub fixup_params {
 sub match_uri {
     my $uri = shift;
     AxKit::Debug(8, "LibXSLT match_uri: $uri");
+    return 1 if $uri =~ /^axkit:/;
     return $uri !~ /^\w+:/; # only handle URI's without a scheme
 }
 
-sub open_uri {
+sub open_content_uri {
     my $uri = shift || './';
-    AxKit::Debug(8, "LibXSLT open_uri: $uri");
-    my $provider = Apache::AxKit::Provider->new(
-        AxKit::Apache->request(),
-        uri => $uri,
-        );
+    AxKit::Debug(8, "LibXSLT open_content_uri: $uri");
+    
+    if ($uri =~ /^axkit:/) {
+        return AxKit::get_axkit_uri($uri);
+    }
+    
+    # create a subrequest, so we get the right AxKit::Cfg for the URI
+    my $apache = AxKit::Apache->request;
+    my $sub = $apache->lookup_uri($uri);
+    local $AxKit::Cfg = Apache::AxKit::ConfigReader->new($sub);
+    
+    my $provider = Apache::AxKit::Provider->new_content_provider($sub);
+    
     add_depends($provider->key());
     my $str = $provider->get_strref;
+    
+    undef $provider;
+    undef $apache;
+    undef $sub;
+    
+    return $$str;
+}
+
+sub open_stylesheet_uri {
+    my $uri = shift || './';
+    AxKit::Debug(8, "LibXSLT open_stylesheet_uri: $uri");
+    
+    if ($uri =~ /^axkit:/) {
+        return AxKit::get_axkit_uri($uri);
+    }
+    
+    # create a subrequest, so we get the right AxKit::Cfg for the URI
+    my $apache = AxKit::Apache->request;
+    my $sub = $apache->lookup_uri($uri);
+    local $AxKit::Cfg = Apache::AxKit::ConfigReader->new($sub);
+    
+    my $provider = Apache::AxKit::Provider->new_style_provider($sub);
+    
+    add_depends($provider->key());
+    my $str = $provider->get_strref;
+    
+    undef $provider;
+    undef $apache;
+    undef $sub;
+    
     return $$str;
 }
 

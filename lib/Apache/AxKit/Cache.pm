@@ -1,13 +1,13 @@
-# $Id: Cache.pm,v 1.3 2002/02/18 18:36:20 darobin Exp $
+# $Id: Cache.pm,v 1.5.2.1 2002/06/06 20:00:19 matts Exp $
 
 package Apache::AxKit::Cache;
 use strict;
 
 use Apache;
-use Apache::Constants qw(OK DECLINED);
+use Apache::Constants qw(OK DECLINED SERVER_ERROR);
 use Apache::AxKit::Exception;
 use Digest::MD5 ();
-use Compress::Zlib;
+use Compress::Zlib qw(gzopen);
 use Fcntl qw(:flock O_RDWR O_WRONLY O_CREAT O_RDONLY);
 
 # use vars qw/$COUNT/;
@@ -22,6 +22,7 @@ sub new {
 #        @extras = grep(!/gzip/, @extras);
     }
     
+    local $^W; # suppress "Use of uninitialized value" warnings
     my $key = Digest::MD5->new->add(
             join(':', 
                 $r->get_server_name,
@@ -123,14 +124,10 @@ sub write {
     }
     
     if ($self->{gzip} && $AxKit::Cfg->GzipOutput) {
-        AxKit::Debug(3, 'Creating gzip output cache');
-        my $fh = Apache->gensym();
-        if (sysopen($fh, $self->{file}.'new.gz', O_RDWR|O_CREAT)) {
-            flock($fh, LOCK_EX);
-            seek($fh, 0, 0);
-            truncate($fh, 0);
-            print $fh ''.Compress::Zlib::memGzip($_[0]);
-            close $fh;
+        AxKit::Debug(3, "Creating gzip output cache: $self->{file}.gz");
+        if (my $gz = gzopen($self->{file}.'new.gz', "wb")) {
+            $gz->gzwrite($_[0]);
+            $gz->gzclose();
             rename($self->{file}.'new.gz', $self->{file}.'.gz')
                     || throw Apache::AxKit::Exception::IO( -text => "Couldn't rename gzipped cachefile: $!");
         }
@@ -202,7 +199,7 @@ sub get_type {
 
 sub deliver {
     my $self = shift;
-    return if $self->{no_cache};
+    return SERVER_ERROR if $self->{no_cache};
     my $r = $self->{apache};
 
     {

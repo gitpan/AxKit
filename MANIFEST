@@ -55,7 +55,6 @@ axkit.org/license.xml
 axkit.org/mailinglist.xml
 axkit.org/news.xml
 axkit.org/sidebar.xml
-axkit.org/sidebar_new.xml
 axkit.org/stylesheets/axkit.css
 axkit.org/stylesheets/axkit_html.css
 axkit.org/stylesheets/body_print_html.xps
@@ -140,6 +139,7 @@ lib/Apache/AxKit/Language/Sablot.pm
 lib/Apache/AxKit/Language/XMLNewsNITF.pm
 lib/Apache/AxKit/Language/XMLNewsRDF.pm
 lib/Apache/AxKit/Language/XPathScript.pm
+lib/Apache/AxKit/Language/SAXMachines.pm
 lib/Apache/AxKit/Language/XSP.pm
 lib/Apache/AxKit/Language/XSP/SimpleTaglib.pm
 lib/Apache/AxKit/Language/XSP/TaglibHelper.pm

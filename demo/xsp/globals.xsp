@@ -1,5 +1,4 @@
 <?xml version="1.0"?>
-<?xml-stylesheet href="NULL" type="application/x-xsp"?>
 <xsp:page language="Perl"
 	xmlns:xsp="http://www.apache.org/1999/XSP/Core"
 	xmlns:session="http://www.apache.org/1999/XSP/Session"

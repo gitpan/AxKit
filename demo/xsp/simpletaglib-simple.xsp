@@ -3,7 +3,7 @@
 <xsp:page
     language="Perl"
     xmlns:xsp="http://apache.org/xsp/core/v1"
-    xmlns:simple="http://www.creITve.de/2002/XSP/Demo/Simple"
+    xmlns:demo="http://www.creITve.de/2002/XSP/Demo/Simple"
 >
 <html>
 <head>
@@ -21,6 +21,7 @@
 <li>node list in xml context: <demo:times/></li>
 <li>node list in perl array context: <xsp:expr>join(", ",<demo:times/>)</xsp:expr></li>
 <li>node list in perl scalar context: <xsp:expr>scalar(<demo:times/>)</xsp:expr></li>
+</ul>
 <h2>Input modes</h2>
 <ul>
 <li>last access time of this page in this process: <demo:last-time as="string"/></li>
@@ -30,7 +31,7 @@
 <li>last access time of this page in this process: <demo:last-time as="string"/></li>
 <li>input as child element, no output: <demo:set-custom-time><time>1000000000</time></demo:set-custom-time></li>
 <li>last access time of this page in this process: <demo:last-time as="string"/></li>
-<li>input as content: <demo:set-custom-time-content>9876543210</demo:set-custom-time></li>
+<li>input as content: <demo:set-custom-time-content>9876543210</demo:set-custom-time-content></li>
 <li>last access time of this page in this process: <demo:last-time as="string"/></li>
 </ul>
 </body>

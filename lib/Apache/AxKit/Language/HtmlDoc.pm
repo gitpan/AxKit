@@ -1,4 +1,4 @@
-# $Id: HtmlDoc.pm,v 1.1 2002/03/25 14:06:09 jwalt Exp $
+# $Id: HtmlDoc.pm,v 1.2 2002/05/26 16:47:58 matts Exp $
 # Apache::AxKit::Language::HtmlDoc - xhtml->pdf renderer
 package Apache::AxKit::Language::HtmlDoc;
 
@@ -26,7 +26,7 @@ sub handler {
 
     my $parser = XML::LibXML->new();
     local $XML::LibXML::match_cb = \&Apache::AxKit::Language::LibXSLT::match_uri;
-    local $XML::LibXML::open_cb = \&Apache::AxKit::Language::LibXSLT::open_uri;
+    local $XML::LibXML::open_cb = \&Apache::AxKit::Language::LibXSLT::open_content_uri;
     local $XML::LibXML::read_cb = \&Apache::AxKit::Language::LibXSLT::read_uri;
     local $XML::LibXML::close_cb = \&Apache::AxKit::Language::LibXSLT::close_uri;
 

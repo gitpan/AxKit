@@ -19,8 +19,8 @@ AxAddXSPTaglib AxKit::XSP::Demo::Simple
 # Note: these require additional setup. Not sure how/if that
 # can be handled automagically
 <Files session.xsp>
-	AxAddPlugin Apache::AxKit::Plugin::Session
-	AxAddXSPTaglib AxKit::XSP::Session
+#	AxAddPlugin Apache::AxKit::Plugin::Session
+	AxAddXSPTaglib +AxKit::XSP::Session
 </Files>
 
 <Files globals.xsp>

@@ -1,4 +1,4 @@
-# $Id: Makefile.PL,v 1.6 2002/04/02 16:27:53 matts Exp $
+# $Id: Makefile.PL,v 1.8.4.2 2002/06/10 11:41:44 jwalt Exp $
 
 package AxKit;
 # file Makefile.PL
@@ -50,6 +50,7 @@ DEATH
 }
 
 require Apache::src;
+require Apache::MyConfig;
 
 my $xml_parser_found = 0;
 
@@ -119,16 +120,16 @@ XSLT processor to work. You don't have to install it,
 but you won't be able to use Apache::AxKit::Language::Sablot without it.
 REASON
 
-test_module('XML::LibXML', '1.31', <<"REASON");
+test_module('XML::LibXML', '1.50', <<"REASON");
 [Warning]
-XML::LibXML 1.31 or higher is required for the XSP engine
+XML::LibXML 1.50 or higher is required for the XSP engine
 to work. You don't have to install it, but you won't
 be able to use XSP pages without it.
 REASON
         
-test_module('XML::LibXSLT', '1.31', <<"REASON");
+test_module('XML::LibXSLT', '1.49', <<"REASON");
 [Warning]
-XML::LibXSLT 1.31 or higher is required for our LibXSLT 
+XML::LibXSLT 1.49 or higher is required for our LibXSLT 
 XSLT processor to work. You don't have to install it, 
 but you won't be able to use Apache::AxKit::Language::LibXSLT without it.
 REASON
@@ -229,6 +230,10 @@ if ($DEBUG) {
 
 my %prereq_pm = %{delete $config{PREREQ_PM}||{}};
 
+unless ($Apache::MyConfig::Setup{PERL_USELARGEFILES} == 1) {
+    $config{CCFLAGS} = strip_lfs($config{CCFLAGS});
+}
+
 foreach my $k (keys %config) {
     push @ARGV, "$k=$config{$k}";
 }
@@ -274,6 +279,14 @@ BEGIN {
     else {
         $RUNNING_UNDER_CPAN = $ENV{RUNNING_UNDER_CPAN} || 0;
     }
+}
+
+sub strip_lfs {
+    my($cflags) = @_;
+    return $cflags unless $Config{uselargefiles};
+    my $lf = $Config{ccflags_uselargefiles} || '-D_LARGEFILE_SOURCE -D_FILE_OFFSET_BITS=64';
+    $cflags =~ s/$lf//;
+    $cflags;
 }
 
 sub rm_f {
