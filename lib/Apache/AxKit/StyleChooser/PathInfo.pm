@@ -1,4 +1,4 @@
-# $Id: PathInfo.pm,v 1.2 2000/05/02 10:32:08 matt Exp $
+# $Id: PathInfo.pm,v 1.3 2000/05/06 11:12:21 matt Exp $
 
 package Apache::AxKit::StyleChooser::PathInfo;
 
@@ -46,7 +46,7 @@ it, simply add this module to the list of PerlHandlers prior to
 Apache::XMLStylesheet:
 
 	PerlHandler Apache::AxKit::StyleChooser::PathInfo \
-			Apache::XMLStylesheet
+			Apache::AxKit::StyleFinder
 
 Then simply by referencing your xml files as follows:
 

@@ -1,9 +1,9 @@
 package Apache::AxKit::Language::NotXSLT;
 
-# $Id: NotXSLT.pm,v 1.2 2000/05/02 10:32:05 matt Exp $
+# $Id: NotXSLT.pm,v 1.5 2000/05/10 21:21:24 matt Exp $
 
 use strict;
-use vars qw($VERSION $PREFIX $cache $parser);
+use vars qw(@ISA $VERSION $PREFIX $cache);
 
 $VERSION = '0.04';
 
@@ -11,12 +11,15 @@ use Apache;
 use Apache::Constants;
 use Apache::File;
 use XML::XPath;
+use XML::XPath::Node;
 use XML::XPath::XMLParser;
+use Apache::AxKit::Language;
+
+@ISA = 'Apache::AxKit::Language';
 
 sub handler {
-	my $r = shift;
-	
-	my ($xmlfile, $stylesheet) = @_;
+	my $class = shift;
+	my ($r, $xmlfile, $stylesheet) = @_;
 	
 
 #	warn "In NotXSLT with $xmlfile and $stylesheet\n";
@@ -26,7 +29,7 @@ sub handler {
 	
 	my $source_finder = XML::XPath->new;
 	
-	$parser ||= XML::XPath::XMLParser->new;
+	my $parser = XML::XPath::XMLParser->new;
 	
 	my $source_tree;
 	
@@ -75,13 +78,13 @@ sub handler {
 	# because there could be comments or PI's here.
 	# The root node MUST contain a xmlns:<prefix>="..."
 	ROOT:
-	foreach my $node (@{$template_tree->[node_children]}) {
-		if (ref($node) eq 'element') {
-			# root node!
+	foreach my $node ($template_tree->getChildNodes) {
+		if ($node->getNodeType == ELEMENT_NODE) {
+			# first element node!
 			$root_node = $node;
-			foreach my $ns (@{$node->[node_namespaces]}) {
-				if ($ns->[node_expanded] eq 'http://sergeant.org/notxslt') {
-					$PREFIX = $ns->[node_prefix];
+			foreach my $ns ($node->getNamespaceNodes) {
+				if ($ns->getExpanded eq 'http://sergeant.org/notxslt') {
+					$PREFIX = $ns->getPrefix;
 					last ROOT;
 				}
 			}
@@ -90,12 +93,8 @@ sub handler {
 		}
 	}
 	
-	$r->send_http_header;
-	
-	unless ($r->header_only) {
-		my $string = parse($source_finder, $source_tree, $root_node);
-		$r->print($string);
-	}
+	my $string = parse($source_finder, $source_tree, $root_node);
+	$r->print($string);
 	
 	return OK;
 	
@@ -135,40 +134,38 @@ sub parse {
 	my $string;
 	
 #	print "Node type is ", ref($node), "\n";
-	for (ref($node)) {
-		if ($_ eq 'element') {
+	for ($node->getNodeType) {
+		if ($_ == ELEMENT_NODE) {
 			local $^W;
-			if ($node->[node_prefix] eq $PREFIX) {
+			if ($node->getPrefix eq $PREFIX) {
 				$string .= process_template_node($xp, $context, $node);
 			}
 			else {
 				# gather attributes
 				my @attribs;
-				$string .= "<" . $node->[node_name];
-				foreach my $attr (@{$node->[node_attribs]}) {
-					$string .= " " . $attr->[node_key] . '="' . escape($attr->[node_value]) . '"';
+				$string .= "<" . $node->getName;
+				foreach my $attr ($node->getAttributeNodes) {
+					$string .= $attr->toString;
 				}
 				
-				if (@{$node->[node_children]}) {
+				if (@{$node->getChildNodes}) {
 					$string .= ">";
 					# process children
-					foreach my $n (@{$node->[node_children]}) {
+					foreach my $n ($node->getChildNodes) {
 						$string .= parse($xp, $context, $n);
 					}
-					$string .= "</" . $node->[node_name] . ">";
+					$string .= "</" . $node->getName . ">";
 				}
 				else {
-					$string .= "/>";
+					$string .= " />";
 				}
 			}
 		}
-		elsif ($_ eq 'text') {
-			$string .= $node->[node_text];
-#			$string .= escape($node->[node_text]);
+		elsif ($_ == TEXT_NODE) {
+			$string .= $node->toString;
 		}
-		elsif ($_ eq 'comment') {
+		elsif ($_ == COMMENT_NODE) {
 			# ignore comments for now.
-			# print STDERR $node->[node_comment], "\n";
 		}
 	}
 	
@@ -180,12 +177,12 @@ sub process_template_node {
 
 	my $string;
 	
-	if ($node->[node_name] eq "$PREFIX:select") {
+	if ($node->getLocalName eq "select") {
 		# find match in $xp, and output.
 		my $match;
-		foreach my $attrib (@{$node->[node_attribs]}) {
-			if ($attrib->[node_key] eq 'match') {
-				$match = $attrib->[node_value];
+		foreach my $attrib ($node->getAttributeNodes) {
+			if ($attrib->getName eq 'match') {
+				$match = $attrib->getValue;
 			}
 		}
 		
@@ -197,7 +194,7 @@ sub process_template_node {
 		
 		if ($results->isa('XML::XPath::NodeSet')) {
 			foreach my $result ($results->get_nodelist) {
-				$string .= XML::XPath::XMLParser::as_string($result);
+				$string .= $result->toString;
 #				$string .= escape(XML::XPath::XMLParser::as_string($result));
 			}
 		}
@@ -206,12 +203,12 @@ sub process_template_node {
 #			$string .= escape($results->value);
 		}
 	}
-	elsif ($node->[node_name] eq "$PREFIX:for-each") {
+	elsif ($node->getLocalName eq "for-each") {
 		# find match, get matching nodes, loop over matching nodes
 		my $match;
-		foreach my $attrib (@{$node->[node_attribs]}) {
-			if ($attrib->[node_key] eq 'match') {
-				$match = $attrib->[node_value];
+		foreach my $attrib ($node->getAttributeNodes) {
+			if ($attrib->getName eq 'match') {
+				$match = $attrib->getValue;
 			}
 		}
 		
@@ -221,7 +218,7 @@ sub process_template_node {
 		
 		if ($results->isa('XML::XPath::NodeSet')) {
 			foreach my $result ($results->get_nodelist) {
-				foreach my $kid (@{$node->[node_children]}) {
+				foreach my $kid ($node->getChildNodes) {
 					$string .= parse($xp, $result, $kid);
 				}
 			}
@@ -230,12 +227,12 @@ sub process_template_node {
 			die "$PREFIX:for-each match doesn't match a set of nodes";
 		}
 	}
-	elsif ($node->[node_name] eq "$PREFIX:exec") {
+	elsif ($node->getLocalName eq "exec") {
 		# find match and ignore results.
 		my $match;
-		foreach my $attrib (@{$node->[node_attribs]}) {
-			if ($attrib->[node_key] eq 'match') {
-				$match = $attrib->[node_value];
+		foreach my $attrib ($node->getAttributeNodes) {
+			if ($attrib->getName eq 'match') {
+				$match = $attrib->getValue;
 			}
 		}
 		
@@ -243,11 +240,11 @@ sub process_template_node {
 		
 		my $results = $xp->find($match, $context);
 	}
-	elsif ($node->[node_name] eq "$PREFIX:verbatim") {
+	elsif ($node->getLocalName eq "verbatim") {
 		my $match;
-		foreach my $attrib (@{$node->[node_attribs]}) {
-			if ($attrib->[node_key] eq 'match') {
-				$match = $attrib->[node_value];
+		foreach my $attrib ($node->getAttributeNodes) {
+			if ($attrib->getName eq 'match') {
+				$match = $attrib->getValue;
 			}
 		}
 		
@@ -257,27 +254,26 @@ sub process_template_node {
 		
 		if ($results->isa('XML::XPath::NodeSet')) {
 			foreach my $node ($results->get_nodelist) {
-				if (ref($node) eq 'element') {
-					$string .= "<" . $node->[node_name];
-					foreach my $attr (@{$node->[node_attribs]}) {
-						$string .= " " . $attr->[node_key] . '="' . escape($attr->[node_value]) . '"';
+				if ($node->getNodeType == ELEMENT_NODE) {
+					$string .= "<" . $node->getName;
+					foreach my $attr ($node->getAttributeNodes) {
+						$string .= $attr->toString;
 					}
 
-					if (@{$node->[node_children]}) {
+					if ($node->getChildNodes) {
 						$string .= ">";
 						# process children
-						foreach my $n (@{$node->[node_children]}) {
+						foreach my $n ($node->getChildNodes) {
 							$string .= parse($xp, $context, $n);
 						}
-						$string .= "</" . $node->[node_name] . ">";
+						$string .= "</" . $node->getName . ">";
 					}
 					else {
-						$string .= "/>";
+						$string .= " />";
 					}
 				}
-				elsif (ref($node) eq 'text') {
-					$string .= $node->[node_text];
-#					$string .= escape($node->[node_text]);
+				elsif ($node->getNodeType == TEXT_NODE) {
+					$string .= $node->getData;
 				}
 			}
 		}
@@ -357,6 +353,15 @@ XML::XPath(1).
 =cut
 
 # $Log: NotXSLT.pm,v $
+# Revision 1.5  2000/05/10 21:21:24  matt
+# Support for cascading via xml_string
+#
+# Revision 1.4  2000/05/08 13:10:31  matt
+# Updated to new XML::XPath 0.50
+#
+# Revision 1.3  2000/05/06 11:11:58  matt
+# Implemented Languages as subclass of Language.pm
+#
 # Revision 1.2  2000/05/02 10:32:05  matt
 # Rename to AxKit
 #

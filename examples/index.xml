@@ -1,0 +1,29 @@
+<?xml version="1.0"?>
+<?xml-stylesheet href="default.notxsl" 
+				type="application/x-notxslt" 
+				title="default"?>
+<?xml-stylesheet href="default.xps" 
+				type="application/x-xpathscript"
+				title="xpathscript"
+				alternate="yes"?>
+<page>
+	<head>
+		<title>Welcome to AxKit!</title>
+	</head>
+<body bgcolor="white">
+
+<section>
+<title>Congratulations!</title>
+If this page displays as HTML, you have managed to successfully 
+install AxKit. If not, please check your error log and re-check
+your installation.
+</section>
+
+<section>
+<title>AxKit</title>
+The Apache XML Delivery Toolkit can be found
+<a href="http://xml.sergeant.org/axkit/">here</a>.
+</section>
+
+</body>
+</page>

@@ -15,64 +15,19 @@ overwritten. The toolkit also provides hooks for DOM based stylesheets
 to cascade. This allows (for example) the initial stylesheet to provide
 menu items and table of contents, while the final stylesheet formats
 the finished file to the desired look. It's also possible to provide
-multiple language support this way. 
+multiple language support this way.
 
-Installation
+Home Page
 
-Installation is relatively simple, provided you already have mod_perl
-installed on your Apache server. Download the toolkit and extract. Then
-in the new directory created type: 
-
-	perl Makefile.PL 
-	make 
-	make test 
-	make install
-
-Then add the following lines to your httpd.conf, or .htaccess file: 
-
-	PerlTypeHandler +Apache::AxKit::XMLFinder
-
-	PerlHandler +Apache::AxKit::StyleFinder
-
-	PerlSetVar StylesheetMap "application/x-xpathscript => \
-			Apache::AxKit::Language::XPathScript"
-
-The StylesheetMap is the only thing you need to change if you add more
-stylesheet processing systems (or develop your own). 
-
-You're now ready to start delivering XML files with
-Apache::XPathScript, a system which combines XPath and ASP-like syntax.
-Type "perldoc Apache::XPathScript" for a brief overview of the syntax. 
-
-
-Associating XML Files with Stylesheets
-
-The method by which you associate stylesheets with XML files is
-detailed at http://www.w3.org/TR/xml-stylesheet and also in the HTML
-4.0 specification which the above links to. In brief, to associate an
-XML file with an XpathScript stylesheet, add the following processing
-instruction to the top of the file, just after the <?xml?>
-declaration: 
-
-<?xml-stylesheet href="/mystyle.xps" 
-	type="application/x-xpathscript"?>
-
-That is the simplest form that processing instruction can take. See the
-above link for more details and options. 
-
-Download
-
-The latest version of AxKit can always be found at
-http://xml.sergeant.org/download/. 
+The web site for AxKit is http://xml.sergeant.org/axkit/
 
 Mailing List
 
 For questions about AxKit, please join the mailing list, by sending a
-blank mail to: axdtk-subscribe@sergeant.org. This is an ezmlm mailing
+blank mail to: axkit-subscribe@sergeant.org. This is an ezmlm mailing
 list. 
 
-   Archive
+Archive
 
-   The archive of the mailing list, containing some useful
-   information and tidbits, is at 
-   http://xml.sergeant.org/cgi-bin/ezmlm-cgi/2.
+The archive of the mailing list, containing some useful information 
+and tidbits, is at http://xml.sergeant.org/cgi-bin/ezmlm-cgi/2.

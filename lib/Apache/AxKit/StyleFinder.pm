@@ -1,4 +1,4 @@
-# $Id: StyleFinder.pm,v 1.2 2000/05/02 10:32:04 matt Exp $
+# $Id: StyleFinder.pm,v 1.8 2000/05/10 21:18:52 matt Exp $
 
 package Apache::AxKit::StyleFinder;
 
@@ -9,27 +9,34 @@ $VERSION = '0.08';
 
 use Apache;
 use Apache::Constants;
+use Apache::File;
 use Apache::MimeXML;
+use Apache::AxKit::ConfigReader;
 use XML::Parser;
 use Digest::MD5 'md5_hex';
+use File::Basename;
+use Fcntl qw(:DEFAULT);
 
 my $xmlparser;
 
 sub handler {
 	my $r = shift;
 
-	return DECLINED unless $r->is_main();
+	# handled by XMLFinder.pm now?
+#	return DECLINED unless $r->is_main();
+	
+	return DECLINED if $r->notes('axkit_passthru');
 	
 #	warn "In AxKit::StyleFinder\n";
 	
 	my $xmlfile = $r->filename;
 	
-	unless (-e $r->finfo) {
+	unless (-e $xmlfile) {
 		$r->log->error("File does not exist: $xmlfile");
 		return NOT_FOUND;
 	}
 	
-	if (-d $r->finfo) {
+	if (-d _) {
 		return DECLINED;
 	}
 	
@@ -39,48 +46,50 @@ sub handler {
 		return DECLINED;
 	}
 	
-	my %style_mapping = split(/\s*(?:=>|,)\s*/, $r->dir_config('StylesheetMap'));
-	
 	return DECLINED unless $xmlfile; # just to be safe.
+	
+	my $cfg = Apache::AxKit::ConfigReader->new($r);
+	my %style_mapping = %{ $cfg->StyleMap };
+	my $cascade = $cfg->StylesCascade;
 	
 	my $preferred = $r->notes('preferred_style') || $r->dir_config('PreferredStyle') || '';
 	my $media = $r->notes('preferred_media') || $r->dir_config('PreferredMedia') || 'screen';
-	my $cascade = $r->dir_config('StylesCascade');
-	if (!defined $cascade) {
-		$cascade = 1;
+
+	if ($media !~ /^(screen|tty|tv|projection|handheld|print|braille|aural)$/) {
+		$media = 'screen';
 	}
-	elsif (lc($cascade) eq 'off') {
-		$cascade = 0;
-	}
-	elsif (lc($cascade) eq 'on' || !defined($cascade)) {
-		$cascade = 1;
-	}	
 	
 	my $big_hash = md5_hex("$xmlfile:$preferred:$media:$cascade");
 	
-	my $mtime = -M $r->finfo;
+	my $mtime = -M _;
 	
 	my $styles;
-	my $recreate;
+	my $ext_ents;
+	my $recreate = 0;
 	if (exists($Apache::AxKit::StyleFinder{$big_hash})
 			&& $Apache::AxKit::StyleFinder{$big_hash}{mtime} <= $mtime)
 	{
 		$styles = $Apache::AxKit::StyleFinder{$big_hash}{styles};
+		$ext_ents = $Apache::AxKit::StyleFinder{$big_hash}{external_entities};
 	}
 	else {
 		$recreate++;
+#		warn "xmlfile mtime cache ($mtime) vs ($Apache::AxKit::StyleFinder{$big_hash}{mtime})\n";
 		$styles = [];
+		$ext_ents = [];
 
-		$xmlparser ||= XML::Parser->new();
+		$xmlparser ||= XML::Parser->new(ParseParamEnt => 1);
 		$xmlparser->setHandlers(
 				Start => \&parse_start,
 				Proc => \&parse_pi,
+				Entity => \&parse_entity_decl,
 				);
 
 		eval {
 			$xmlparser->parsefile($xmlfile,
 				XMLStyle_preferred => $preferred,
 				XMLStyle_style => $styles,
+				XMLStyle_ext_ents => $ext_ents,
 				XMLStyle_style_screen => [],
 				XMLStyle_media => $media,
 				XMLStyle_cascade => $cascade,
@@ -94,29 +103,63 @@ sub handler {
 		}
 
 		if (!@$styles) {
-			my $defaultStyleMap = $r->dir_config('DefaultStyleMap');
-			if ($defaultStyleMap) {
-				my $s = {};
-				($s->{href}, $s->{type}) = split(/\s+/, $defaultStyleMap);
-				push @$styles, $s;
+			my @defaultStyles = ();
+			foreach my $val (@{$cfg->DefaultStyleMap}) {
+				if (!$val->[2] || ($val->[2] eq 'all' || $val->[2] eq $media)) {
+					push @$styles, { href => $val->[0], type => $val->[1], media => $val->[2] };
+				}
 			}
-			else {
+			if (!@$styles) {
 				warn "XML file '$xmlfile' doesn't contain an appropriate xml-stylesheet processing instruction\n";
+				warn "And no DefaultStyleMap defined\n";
 				return DECLINED;
 			}
 		}
 
 		foreach my $style (@$styles) {
 #			warn "Looking up $style->{href} (from $xmlfile)\n";
-			my $stylefile = $r->lookup_uri($style->{href})->filename;
-#			warn "Matches up to $stylefile\n";
+			if ($style->{href}) {
+				if ($style->{href} =~ /^(http|https|ftp):\/\//i) {
+					warn "Only relative URI's supported in <?xml-stylesheet?> at this time\n";
+					return DECLINED;
+				}
+
+				my $stylefile = $r->lookup_uri($style->{href})->filename;
+	#			warn "Matches up to $stylefile\n";
+
+				unless (-e $stylefile) {
+					warn "Stylesheet '$stylefile' for '$xmlfile' does not exist\n";
+					return DECLINED;
+				}
+
+				$style->{stylefile} = $stylefile;
+			}
 			
-			unless (-e $stylefile) {
-				warn "Stylesheet '$stylefile' for '$xmlfile' does not exist\n";
+			# Now we have all the conditions we need, we just have to load the
+			# module and see if it has the right method.
+
+			my $mapto;
+			unless ($mapto = $style_mapping{ $style->{type} }) {
+				warn "No implementation mapping available for type '$style->{type}'\n";
 				return DECLINED;
 			}
 			
-			$style->{stylefile} = $stylefile;
+			$style->{module} = $mapto;
+
+			# first load module if it's not already loaded.
+			my $module = $mapto . '.pm';
+			$module =~ s/::/\//g;
+
+			if (!$INC{$module}) {
+				eval {
+					require $module;
+				};
+				if ($@) {
+					warn "Load of '$mapto' failed with: $@\n";
+					return DECLINED;
+				}
+			}
+
 		}
 		
 		$Apache::AxKit::StyleFinder{$big_hash} = {
@@ -125,32 +168,60 @@ sub handler {
 				};
 	}
 	
-	my $cachedir = $r->dir_config('CacheDir');
-	if (!$cachedir) {
-		$cachedir = $xmlfile;
-		$cachedir =~ s/\/([^\/]*)$/\/.xmlstyle_cache/;
+	{ local $^W;
+	if ($preferred && ($styles->[0]{title} ne $preferred)) {
+		# we selected a style that didn't exist. 
+		# Make sure we default the cache file, otherwise
+		# we setup a potential DoS
+		$big_hash = md5_hex("$xmlfile::$media:$cascade");
 	}
+	}
+	
+	my $cachedir = $cfg->CacheDir;
 	
 	if (!-e $cachedir) {
 		if (!mkdir($cachedir, 0777)) {
 			warn "Can't create cache directory '$cachedir': $!\n";
 		}
+#		warn "cachedir cache\n";
+		$recreate++;
 	}
 
 	if (!$recreate) {
-		my $mtime_cache = -M "$cachedir/$big_hash";
-
-		if (!defined $mtime_cache) {
-	#		warn "No cache file\n";
+#		warn "checking if '$cachedir/$big_hash' exists\n";
+		if (!-e "$cachedir/$big_hash") {
+#			warn "No cache file\n";
 			$recreate++;
 		}
 		else {
+			my $mtime_cache = -M _;
 			foreach my $style (@$styles) {
 				# check changetimes of styles
-				if (-M $style->{stylefile} <= $mtime_cache) {
-	#				warn "$style->{stylefile} is newer : ", -M $style->{stylefile},
-	#						" > $mtime_cache\n";
-					$recreate++;
+				next unless $style->{href};
+				no strict 'refs';
+				eval {
+					if ($style->{module}->get_mtime($style->{stylefile})
+							<= $mtime_cache) {
+		#				warn "$style->{stylefile} is newer : ", -M $style->{stylefile},
+		#						" > $mtime_cache\n";
+#						warn "stylesheet mtime cache\n";
+						$recreate++;
+					}
+				};
+				if ($@) {
+					warn "get_mtime error: $@\n";
+					return DECLINED;
+				}
+			}
+			
+			# do external entities now!
+			if (!$recreate) {
+				foreach my $ext (@$ext_ents) {
+					my $entfile = $r->lookup_uri($ext)->filename;
+					if ($entfile && (-M $entfile <= $mtime_cache)) {
+#						warn "extent cache\n";
+						$recreate++;
+					}
 				}
 			}
 		}
@@ -159,10 +230,11 @@ sub handler {
 	if (!$recreate) {
 #		warn "returning cached copy\n";
 		$r->filename("$cachedir/$big_hash");
-		if (open(FH, "$cachedir/$big_hash\.type")) {
-			flock(FH, 1); # lock for reading
-			my $type = <FH>;
-			close FH;
+		my $fh = Apache->gensym();
+		if (sysopen($fh, "$cachedir/$big_hash\.type", O_RDONLY)) {
+			flock($fh, 1); # lock for reading
+			my $type = <$fh>;
+			close $fh;
 			chomp $type;
 			my ($t, $e) = $type =~ m/^(.*?);\s*(.*)$/;
 			$r->content_type($t);
@@ -177,68 +249,27 @@ sub handler {
 	
 	$r->notes('cachefile', "$cachedir/$big_hash");
 	
-	unlink($r->notes('cachefile'));
-	
 	# rebless $r to my own nasty package...
 	bless $r, 'Apache::AxKit::StyleFinder::Apache';
 	
 	# re-tie STDOUT
 	tie *STDOUT, 'Apache::AxKit::StyleFinder::Apache', $r;
 	
-	foreach my $style (@$styles) {
-		my $mapto;
-		unless ($mapto = $style_mapping{ $style->{type} }) {
-			warn "No implementation mapping available for type '$style->{type}'\n";
-			return DECLINED;
-		}
+	if (grep { $_ !~ /::SAX::/ } @$styles) {
+		# not all SAX drivers, use default method
+		foreach my $style (@$styles) {
+			my $stylefile = $style->{stylefile};
 
-		if ($style->{href} =~ /^(http|https|ftp):\/\//i) {
-			warn "Only relative URI's supported in <?xml-stylesheet?> at this time\n";
-			return DECLINED;
-		}
+			$r->notes('resetstring', 1);
+	
+			no strict 'refs';
+			
+			my $mapto = $style->{module};
 
-		my $stylefile = $style->{stylefile};
-
-		# Now we have all the conditions we need, we just have to load the
-		# module and see if it has the right method.
-
-		# first load module if it's not already loaded.
-		my $module = $mapto . '.pm';
-		$module =~ s/::/\//g;
-
-		if (!$INC{$module}) {
-			eval {
-				require $module;
-			};
-			if ($@) {
-				$module =~ s/::\w+\.pm$/.pm/;
-				eval {
-					require $module;
-				};
-				if ($@) {
-					warn "Load of '$mapto' failed with: $@\n";
-					return DECLINED;
-				}
-			}
-		}
-
-		# now check if it's a function or a module we're talking about.
-
-		no strict 'refs';
-
-		if (defined &$mapto) {
-			# mapto is a function
-			my $retval = &$mapto($xmlfile, $stylefile);
-			if ($retval == DECLINED) {
-				return DECLINED;
-			}
-		}
-		else {
-			# mapto is a module, call handler()
-			$mapto .= "::handler";
-			if (defined &$mapto) {
+			my $method = "handler";
+			if (defined &{"$mapto\::$method"}) {
 #					warn "Calling $mapto\n";
-				my $retval = &$mapto($r, $xmlfile, $stylefile);
+				my $retval = $mapto->$method($r, $xmlfile, $stylefile);
 				if ($retval == DECLINED) {
 					return DECLINED;
 				}
@@ -249,13 +280,54 @@ sub handler {
 			}
 		}
 	}
+	else {
+		# All SAX Drivers!
+		# use chaining style?
+	}
 	
 	OUTPUT:
 	
-	if ($r->pnotes('dom_tree')) {
-		my $output = $r->pnotes('dom_tree')->toString;
-		$r->pnotes('dom_tree')->dispose;
+	if (my $dom = $r->pnotes('dom_tree')) {
+		my $output = $dom->toString;
+		$dom->dispose;
 		$r->print($output);
+	}
+	
+	if (!$r->notes('nocache')) {
+		$r->filename($r->notes('cachefile'));
+
+#		warn "Opening cachefile for writing\n";
+		my $fh = Apache->gensym();
+		if (sysopen($fh, $r->notes('cachefile')."new", O_RDWR|O_CREAT)) {
+			flock($fh, 2); # lock for writing
+			seek($fh, 0, 0);
+			truncate($fh, 0);
+			print $fh $r->notes('xml_string');
+			close $fh;
+			rename($r->notes('cachefile')."new", $r->notes('cachefile')) || die "Couldn't rename cachefile: $!";
+		}
+		else {
+			die "Couldn't open file: $!\n";
+		}
+
+		$fh = Apache->gensym();
+		if (sysopen($fh, "$cachedir/$big_hash\.type", O_RDONLY)) {
+			flock($fh, 1); # lock for reading
+			my $type = <$fh>;
+			close $fh;
+			chomp $type;
+			my ($t, $e) = $type =~ m/^(.*?);\s*(.*)$/;
+			$r->content_type($t);
+			$r->content_encoding($e);
+		}
+		else {
+			$r->content_type('text/html');
+			$r->content_encoding('utf-8');
+		}
+		
+		$r->notes('nocache', 1);
+		$r->send_http_header;
+		$r->print($r->notes('xml_string'));
 	}
 	
 	return OK;
@@ -461,12 +533,22 @@ sub parse_start {
 	die "OK";
 }
 
+sub parse_entity_decl {
+	my $e = shift;
+	my ($name, $val, $sysid, $pubid, $ndata) = @_;
+	if (!defined $val) {
+		# external entity - save so the cache gets done properly!
+		push @{$e->{XMLStyle_ext_ents}}, $sysid;
+	}
+}
+
 {
 	# Overridden Apache package.
 	
 	package Apache::AxKit::StyleFinder::Apache;
 	use vars qw/@ISA/;
 	use Apache;
+	use Fcntl qw(:DEFAULT);
 	@ISA = 'Apache';
 	
 	sub content_type {
@@ -475,14 +557,17 @@ sub parse_start {
 		
 		if ($type) {
 #			warn "Writing content type '$type'\n";
-			if (open(FH, ">".$self->notes('cachefile').'.type')) {
-				flock(FH, 2); # lock for writing
-				print FH $type;
+			my $fh = Apache->gensym();
+			if (sysopen($fh, $self->notes('cachefile').'.type', O_RDWR|O_CREAT)) {
+				flock($fh, 2); # lock for writing
+				seek($fh, 0, 0);
+				truncate($fh, 0);
+				print $fh $type;
 				my $encoding;
 				if ($encoding = $self->content_encoding()) {
-					print FH "; ", $encoding;
+					print $fh "; ", $encoding;
 				}
-				close FH;
+				close $fh;
 			}
 		}
 		
@@ -496,11 +581,14 @@ sub parse_start {
 		
 		if ($encoding) {
 #			warn "Writing content encoding '$encoding'\n";
-			if (open(FH, ">".$self->notes('cachefile').'.type')) {
-				flock(FH, 2); # lock for writing
-				print FH $self->content_type();
-				print FH "; ", $encoding;
-				close FH;
+			my $fh = Apache->gensym();
+			if (sysopen($fh, $self->notes('cachefile').'.type', O_RDWR|O_CREAT)) {
+				flock($fh, 2); # lock for writing
+				seek($fh, 0, 0);
+				truncate($fh, 0);
+				print $fh $self->content_type();
+				print $fh "; ", $encoding;
+				close $fh;
 			}
 		}
 		
@@ -510,18 +598,18 @@ sub parse_start {
 	sub print {
 		my $self = shift;
 		
-		if (!$self->no_cache()) {
-			my $fh;
-#			warn "Opening cachefile for writing $self!\n";
-			$fh = Apache->gensym();
-			if (open($fh, ">>".$self->notes('cachefile'))) {
-				flock($fh, 2); # lock for writing
-				print $fh @_;
-				close $fh;
+		if (!$self->notes('nocache')) {
+
+			if ($self->notes('resetstring')) {
+				$self->notes('xml_string', '');
+				$self->notes('resetstring', 0);
 			}
+			
+			$self->notes('xml_string', join('', $self->notes('xml_string'), @_));
 		}
-		
-		$self->SUPER::print(@_);
+		else {
+			$self->SUPER::print(@_);
+		}
 	}
 	
 	sub PRINT {
@@ -532,11 +620,38 @@ sub parse_start {
 		my $self = shift;
 		my ($set) = @_;
 		
-		if ($set) {
-			unlink($self->notes('cachefile')); # don't check return value!
-		}
-		
 		$self->SUPER::no_cache(@_);
+		
+		if ($set) {
+#			warn "caching being turned off!\n";
+			$self->notes('nocache', 1);
+			# send what's been sent already
+			my $fh = Apache->gensym();
+			if (sysopen($fh, $self->notes('cachefile') . ".type", O_RDONLY)) {
+				flock($fh, 1); # lock for reading
+				my $type = <$fh>;
+				close $fh;
+				chomp $type;
+				my ($t, $e) = $type =~ m/^(.*?);\s*(.*)$/;
+				$self->content_type($t);
+				$self->content_encoding($e);
+			}
+			else {
+				$self->content_type('text/html');
+				$self->content_encoding('utf-8');
+			}
+			
+			$fh = Apache->gensym();
+			if (sysopen($fh, $self->notes('cachefile'), O_RDONLY)) {
+				flock($fh, 1);
+				while (<$fh>) {
+					$self->SUPER::print($_);
+				}
+				close $fh;
+			}
+			
+			unlink($self->notes('cachefile'));
+		}
 	}
 }
 
@@ -547,17 +662,9 @@ __END__
 
 Apache::AxKit::StyleFinder - Execute module based on <?xml-stylesheet?>
 
-=head1 SYNOPSIS
-
-  # in .htaccess
-  PerlSetVar StylesheetMap "text/xsl => XML::XSLT::transformfiles, \
-                            application/x-mystyle => My::Style"
-  
-  PerlSetVar PreferredStyle "default style"
-  
-  PerlSetVar DefaultStyleMap "/default.xsl text/xsl"
-
 =head1 DESCRIPTION
+
+(These docs need a re-work!)
 
 This module automatically detects XML stylesheet types and associates
 modules/functions with those stylesheets according to the

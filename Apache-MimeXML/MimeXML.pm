@@ -1,4 +1,4 @@
-# $Id: MimeXML.pm,v 1.1.1.1 2000/05/01 16:12:36 matt Exp $
+# $Id: MimeXML.pm,v 1.2 2000/05/10 21:23:41 matt Exp $
 
 package Apache::MimeXML;
 
@@ -58,16 +58,18 @@ sub handler {
 
 		if ($encoding eq 'utf-16-be') {
 			$encoding = $r->dir_config('XMLUtf16EncodingBE') || 'utf-16';
+			$type =~ s/^text\/xml$/application\/xml/;
 		}
 		elsif ($encoding eq 'utf-16-le') {
 			$encoding = $r->dir_config('XMLUtf16EncodingLE') || 'utf-16-le';
+			$type =~ s/^text\/xml$/application\/xml/;
 		}
 		
 		$r->notes('is_xml', 1);
 		$r->push_handlers('PerlFixupHandler', 
 				sub { 
 					my $r = shift;
-					$r->content_type($type);
+					$r->content_type("$type; charset=$encoding");
 					$r->content_encoding($encoding);
 					return OK;
 				});

@@ -1,20 +1,24 @@
-# $Id: XPathScript.pm,v 1.3 2000/05/02 12:24:00 matt Exp $
+# $Id: XPathScript.pm,v 1.8 2000/05/10 21:20:46 matt Exp $
 
 package Apache::AxKit::Language::XPathScript;
 
 use strict;
-use vars qw($VERSION $cache $parser);
+use vars qw(@ISA $VERSION $cache);
 
 use Apache::File;
 use Apache::Constants;
-use XML::XPath;
+use XML::XPath 0.50;
 use XML::XPath::XMLParser;
+use XML::XPath::Node;
+use Apache::AxKit::Language;
 
-$VERSION = '0.03';
+@ISA = 'Apache::AxKit::Language';
+
+$VERSION = '0.05';
 
 sub handler {
-	my $r = shift;
-	my ($xmlfile, $stylesheet) = @_;
+	my $class = shift;
+	my ($r, $xmlfile, $stylesheet) = @_;
 	
 	my $xp = XML::XPath->new();
 	
@@ -22,19 +26,22 @@ sub handler {
 	
 	my $source_tree;
 	
-	if ($r->pnotes('dom_tree')) {
-		my $dom = $r->pnotes('dom_tree');
+	my $parser = XML::XPath::XMLParser->new();
+	
+	if (my $dom = $r->pnotes('dom_tree')) {
 		use XML::XPath::Builder;
 		my $builder = XML::XPath::Builder->new();
 		$source_tree = $dom->to_sax( Handler => $builder );
+	}
+	elsif (my $xml = $r->notes('xml_string')) {
+#		warn "Parsing from string : $xml\n";
+		$source_tree = $parser->parse($xml);
 	}
 	else {
 		if (exists($cache->{$xmlfile}) 
 				&& ($cache->{$xmlfile}{mtime} <= $mtime)) {
 			$source_tree = $cache->{$xmlfile}{tree};
 		}
-
-		$parser ||= XML::XPath::XMLParser->new();
 
 		if (!$source_tree) {
 			eval {
@@ -79,8 +86,7 @@ sub handler {
 	$Apache::AxKit::Language::XPathScript::trans = $t;
 	
 	eval {
-		$r->content_type('text/html');
-		$r->content_encoding('utf-8');
+#		$r->send_http_header;
 		local $^W;
 		$cv->($r, $xp, $t);
 	};
@@ -138,7 +144,7 @@ sub compile {
 			'package ',
 			$package,
 			'; use Apache qw(exit);',
-			'use XML::XPath::XMLParser;',
+			'use XML::XPath::Node;',
 			'Apache::AxKit::Language::XPathScript::Toys->import;',
 			'sub handler {',
 			'my ($r, $xp, $t) = @_;',
@@ -176,13 +182,14 @@ sub get_package_name {
 {
 	package Apache::AxKit::Language::XPathScript::Toys;
 	
-	use XML::XPath::XMLParser;
+	use XML::XPath::Node;
 
 	use vars '@ISA', '@EXPORT';
 	use Exporter;
 	@ISA = ('Exporter');
 	@EXPORT = ('findnodes', 
-				'findvalue', 
+				'findvalue',
+				'findvalues',
 				'findnodes_as_string',
 				'apply_templates',
 			);
@@ -194,6 +201,11 @@ sub get_package_name {
 	sub findvalue {
 		$Apache::AxKit::Language::XPathScript::xp->findvalue(@_);
 	}
+	
+	sub findvalues {
+		my @nodes = findnodes(@_);
+		map { findvalue('.', $_) } @nodes;
+	}
 
 	sub findnodes_as_string {
 		$Apache::AxKit::Language::XPathScript::xp->findnodes_as_string(@_);
@@ -203,7 +215,7 @@ sub get_package_name {
 		my @nodes = @_;
 		
 		local $^W;
-				
+		
 		if (@nodes && !ref($nodes[0])) {
 			# probably called with a path to find
 			return apply_templates(findnodes(@_));
@@ -224,20 +236,21 @@ sub get_package_name {
 				
 		my $translations = $Apache::AxKit::Language::XPathScript::trans;
 		
-		if (ref($node) ne 'element') {
-			if (ref($node) eq 'text' && $node->[node_text] =~ /^\s*$/) {
-				return ' '; # strip whitespace by default
+		if ($node->getNodeType != ELEMENT_NODE) {
+			if ($node->getNodeType == TEXT_NODE && 
+					$node->getValue =~ /^\s*$/) {
+				return ' '; # strip whitespace nodes by default
 			}
-			return XML::XPath::XMLParser::as_string($node);
+			return $node->toString;
 		}
 		
-#		warn "translate_node: ", $node->[node_name], "\n";
+#		warn "translate_node: ", $node->getName, "\n";
 		
-		my $trans = $translations->{$node->[node_name]};
+		my $trans = $translations->{$node->getName};
 
 		if (!$trans) {
 			return start_tag($node) . 
-					apply_templates(@{$node->[node_children]}) .
+					apply_templates(@{$node->getChildNodes}) .
 					end_tag($node);
 		}
 		
@@ -245,8 +258,10 @@ sub get_package_name {
 		
 		my $dokids = 1;
 
+		my $t = {};
 		if ($trans->{testcode}) {
-			my $result = eval { $trans->{testcode}->($node); };
+#			warn "Evalling testcode\n";
+			my $result = $trans->{testcode}->($node, $t);
 			if ($result == 0) {
 				# don't process anything.
 				return;
@@ -257,10 +272,18 @@ sub get_package_name {
 			}
 		}
 		
+		local $translations->{$node->getName} = $trans;
+		if (%$t) {
+			foreach my $key (keys %$t) {
+				$translations->{$node->getName}{$key} = $t->{$key};
+			}
+			$trans = $translations->{$node->getName};
+		}
+		
 		# default: process children too.
 		return $trans->{pre} . 
 				($trans->{showtag} ? start_tag($node) : '') .
-				($dokids ? apply_templates(@{$node->[node_children]}) : '') .
+				($dokids ? apply_templates(@{$node->getChildNodes}) : '') .
 				($trans->{showtag} ? end_tag($node) : '') .
 				$trans->{post};
 	}
@@ -268,14 +291,16 @@ sub get_package_name {
 	sub start_tag {
 		my ($node) = @_;
 		
-		my $string = "<" . $node->[node_name];
+		return '' unless $node->getName;
 		
-		foreach my $ns (@{$node->[node_namespaces]}) {
-			$string .= XML::XPath::XMLParser::as_string($ns);
+		my $string = "<" . $node->getName;
+		
+		foreach my $ns ($node->getNamespaceNodes) {
+			$string .= $ns->toString;
 		}
 		
-		foreach my $attr (@{$node->[node_attribs]}) {
-			$string .= XML::XPath::XMLParser::as_string($attr);
+		foreach my $attr (@{$node->getAttributeNodes}) {
+			$string .= $attr->toString;
 		}
 
 		$string .= ">";
@@ -286,7 +311,9 @@ sub get_package_name {
 	sub end_tag {
 		my ($node) = @_;
 		
-		return "</" . $node->[node_name] . ">";
+		return '' unless $node->getName;
+		
+		return "</" . $node->getName . ">";
 	}
 
 	1;
@@ -343,8 +370,8 @@ templates extremely simply:
   <%
   foreach my $n (findnodes('//fred')) {
     print "Found a fred\n";
-    foreach my $m (findnode('..', $n)) {
-      print "fred's parent was: ", $m->[node_name], "\n";
+    foreach my $m (findvalues('..', $n)) {
+      print "fred's parent was: $m\n";
     }
   }
   %>
@@ -408,8 +435,10 @@ of <a>...</a>.
 	%>
 
 This sets up a sub to determine what to do with the node when
-apply_templates is used. The sub recieves the node as the first (and
-only) parameter. Return 0 to stop processing at that node and return,
+apply_templates is used. The sub recieves the node as the first parameter,
+and a hash reference that you can temporarily set the pre, post and showtag
+values in, as the second parameter.
+Return 0 to stop processing at that node and return,
 return -1 to process that node but not its children, and return 1 to
 process this node normally (i.e. process this node and its children). An
 example of where this might be useful is to test the context of this node:
@@ -418,6 +447,7 @@ example of where this might be useful is to test the context of this node:
 	$t->{'a'}{testcode} = 
         sub {
                 my $node = shift;
+				my $hash = shift;
                 if (findvalue('ancestor::foo = true()', $node)) {
                     return 0;
                 }
@@ -433,17 +463,18 @@ depending on context, for example:
   $t->{'title'}{testcode} =
         sub {
                 my $node = shift;
+				my $hash = shift;
                 if (findvalue('parent::section = true()', $node)) {
-                        $t->{'title'}{pre} = '<h1>';
-                        $t->{'title'}{post} = '</h1>';
+                        $hash->{pre} = '<h1>';
+                        $hash->{post} = '</h1>';
                 }
                 elsif (findvalue('parent::subsection = true()', $node)) {
-                       $t->{'title'}{pre} = '<h2>';
-                        $t->{'title'}{post} = '</h2>';
+                       $hash->{pre} = '<h2>';
+                       $hash->{post} = '</h2>';
                 }
 				else {
-					$t->{'title'}{pre} = '<title>';
-					$t->{'title'}{post} = '</title>';
+					$hash->{pre} = '<title>';
+					$hash->{post} = '</title>';
 				}
                 return 1;
         };
@@ -463,13 +494,14 @@ This is the code I use to process some web pages:
   $t->{'title'}{testcode} =
     sub {
         my $node = shift;
+		my $hash = shift;
         if (findvalue('parent::section = true()', $node)) {
-            $t->{'title'} =
-                 { pre => '<h2>', post => '</h2>' };
+            $hash->{pre} = '<h2>';
+			$hash->{post} = '</h2>';
         }
         elsif (findvalue('parent::subsection = true()', $node)) {
-            $t->{'title'} =
-                 { pre => '<h3>', post => '</h3>' };
+			$hash->{pre} = '<h3>';
+			$hash->{post} = '</h3>';
         }
         return 1;
     };

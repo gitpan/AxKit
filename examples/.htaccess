@@ -1,0 +1,6 @@
+PerlTypeHandler +Apache::AxKit::XMLFinder
+PerlHandler +Apache::AxKit::StyleFinder
+
+AxAddStyleMap application/x-xpathscript Apache::AxKit::Language::XPathScript
+AxAddStyleMap application/x-notxslt Apache::AxKit::Language::NotXSLT
+
