@@ -1,4 +1,4 @@
-# $Id: QueryString.pm,v 1.3 2000/05/06 11:12:21 matt Exp $
+# $Id: QueryString.pm,v 1.4 2000/06/12 16:21:11 matt Exp $
 
 package Apache::AxKit::StyleChooser::QueryString;
 
@@ -33,7 +33,7 @@ it, simply add this module to the list of PerlHandlers prior to
 Apache::XMLStylesheet:
 
 	PerlHandler Apache::AxKit::StyleChooser::QueryString \
-			Apache::AxKit::StyleFinder
+			AxKit
 
 Then simply by referencing your xml files as follows:
 

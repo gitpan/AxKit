@@ -1,6 +1,5 @@
-PerlTypeHandler +Apache::AxKit::XMLFinder
-PerlHandler +Apache::AxKit::StyleFinder
+SetHandler perl-script
+PerlHandler AxKit
 
 AxAddStyleMap application/x-xpathscript Apache::AxKit::Language::XPathScript
-AxAddStyleMap application/x-notxslt Apache::AxKit::Language::NotXSLT
-
+AxAddStyleMap text/xsl Apache::AxKit::Language::Sablot

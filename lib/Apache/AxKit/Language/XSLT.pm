@@ -1,10 +1,9 @@
-# $Id: XSLT.pm,v 1.10 2000/05/28 07:49:05 matt Exp $
+# $Id: XSLT.pm,v 1.13 2000/06/02 18:27:35 matt Exp $
 
 package Apache::AxKit::Language::XSLT;
 
 use strict;
 use XML::XSLT;
-use Apache::Constants;
 use Apache::AxKit::Language;
 
 use vars qw/@ISA/;
@@ -13,22 +12,22 @@ use vars qw/@ISA/;
 
 sub handler {
 	my $class = shift;
-	my ($r, $xmlfile, $stylefile) = @_;
+	my ($r, $xml, $style) = @_;
 
 #	warn "Parsing stylefile '$stylefile'\n";
-	my $parser = XML::XSLT->new($stylefile, "FILE");
+	my $parser = XML::XSLT->new($style->get_strref(), "STRING");
 
 	if (my $dom_tree = $r->pnotes('dom_tree')) {
 #		warn "Parsing dom_tree: ", $dom_tree->toString, "\n";
 		$parser->transform_document($dom_tree, "DOM");
 	}
-	elsif (my $xml = $r->notes('xml_string')) {
+	elsif (my $xmlstr = $r->notes('xml_string')) {
 #		warn "Parsing string:\n$xml\n";
-		$parser->transform_document($xml, "STRING");
+		$parser->transform_document($xmlstr, "STRING");
 	}
 	else {
 #		warn "Parsing file '$xmlfile'\n";
-		$parser->transform_document($xmlfile, "FILE");
+		$parser->transform_document($xml->get_strref(), "STRING");
 	}
 
 	if (my $dom = $r->pnotes('dom_tree')) {
@@ -42,8 +41,6 @@ sub handler {
 	delete $parser->{result};
 	
 	$parser->dispose();
-
-	return OK;
 }
 
 1;

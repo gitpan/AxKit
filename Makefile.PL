@@ -6,6 +6,8 @@ use ExtUtils::MakeMaker;
 use Apache::ExtUtils qw/command_table/;
 use Apache::src ();
 
+require 5.005;
+
 my %config;
 
 while($_ = shift) {
@@ -46,6 +48,31 @@ my @directives = (
 				},
 				{ name => 'AxConfigReader',
 				  errmsg => 'alternative module to use for reading configuration',
+				  args_how => 'TAKE1',
+				  req_override => 'OR_ALL',
+				},
+				{ name => 'AxProvider',
+				  errmsg => 'alternative module to use for reading the xml',
+				  args_how => 'TAKE1',
+				  req_override => 'OR_ALL',
+				},
+				{ name => 'AxStyle',
+				  errmsg => 'a default stylesheet (title) to use',
+				  args_how => 'TAKE1',
+				  req_override => 'OR_ALL',
+				},
+				{ name => 'AxMedia',
+				  errmsg => 'a default media to use other than screen',
+				  args_how => 'TAKE1',
+				  req_override => 'OR_ALL',
+				},
+				{ name => 'AxCacheModule',
+				  errmsg => 'alternative cache module',
+				  args_how => 'TAKE1',
+				  req_override => 'OR_ALL',
+				},
+				{ name => 'AxStyleProvider',
+				  errmsg => 'alternative module to use for reading stylesheets',
 				  args_how => 'TAKE1',
 				  req_override => 'OR_ALL',
 				},
@@ -90,7 +117,7 @@ WriteMakefile(
 		'VERSION_FROM' => 'AxKit.pm',
 		'INC' => Apache::src->new->inc,
 		'PREREQ_PM' => {
-				'XML::XPath' => 0.50,
+				'XML::XPath' => 0.55,
 				'XML::Parser' => 2.27,
 				'Digest::MD5' => 2.09,
 				'mod_perl' => 1.17,

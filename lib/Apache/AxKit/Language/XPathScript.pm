@@ -1,17 +1,19 @@
-# $Id: XPathScript.pm,v 1.13 2000/05/28 07:49:05 matt Exp $
+# $Id: XPathScript.pm,v 1.20 2000/06/15 10:30:56 matt Exp $
 
 package Apache::AxKit::Language::XPathScript;
 
 use strict;
-use vars qw(@ISA $VERSION $cache);
+use vars qw(@ISA $VERSION $stash);
 
 use Apache;
 use Apache::File;
-use Apache::Constants;
 use XML::XPath 0.50;
 use XML::XPath::XMLParser;
 use XML::XPath::Node;
+use Apache::AxKit::Provider;
+use Apache::AxKit::StyleProvider;
 use Apache::AxKit::Language;
+use Apache::AxKit::Cache;
 use File::Basename;
 use Cwd;
 use Storable;
@@ -22,11 +24,9 @@ $VERSION = '0.05';
 
 sub handler {
 	my $class = shift;
-	my ($r, $xmlfile, $stylesheet) = @_;
+	my ($r, $xml_provider, $style_provider) = @_;
 	
 	my $xp = XML::XPath->new();
-	
-	my $mtime = -M $r->finfo;
 	
 	my $source_tree;
 	
@@ -44,51 +44,55 @@ sub handler {
 		$source_tree = $parser->parse($xml);
 	}
 	else {
-		my $storfile = $r->notes('cachefile').".xpathstor";
-		if (exists($cache->{$xmlfile})
-				&& ($cache->{$xmlfile}{mtime} <= $mtime)) {
+		my $mtime = $xml_provider->mtime();
+	
+#		warn "Creating xpathstor cache\n";
+		my $cache = Apache::AxKit::Cache->new($r, $r->filename(), 'xpathstor');
+		my $key = $xml_provider->key();
+		if (exists($stash->{$key})
+				&& ($stash->{$key}{mtime} <= $mtime)) {
+#			warn "Getting thawed tree\n";
 			eval {
-				$source_tree = Storable::retrieve($storfile);
+				$source_tree = Storable::thaw($cache->read());
 			};
 		}
 		
 		if (!$source_tree) {
-			eval {
-				$source_tree = $parser->parsefile($xmlfile);
-			};
+#			warn "reparsing\n";
+			my $fh = eval { $xml_provider->get_fh() };
 			if ($@) {
-				warn "Parse of '$xmlfile' failed: $@";
-				return DECLINED;
+				$source_tree = $parser->parse(${$xml_provider->get_strref()});
 			}
-			Storable::nstore($source_tree, $storfile);
-			$cache->{$xmlfile}{mtime} = $mtime;
+			else {
+				$source_tree = $parser->parse($fh);
+			}
+
+			$cache->write(Storable::freeze($source_tree));
+			$stash->{$key}{mtime} = $mtime;
 		}
 	}
-	
+
 	$xp->set_context($source_tree);
 	
-	$mtime = -M $stylesheet;
+	my $mtime = $style_provider->mtime();
+
+	my $style_key = $style_provider->key();
+	my $package = get_package_name($style_key);
 	
-	my $package = get_package_name($stylesheet);
-	
-	my $cwd = cwd;
-		
-	chdir(dirname($stylesheet));
-	
-#	warn "Checking ", $cache->{$stylesheet}{mtime}, " against $mtime\n";
-	if (exists($cache->{$stylesheet})
-			&& ($cache->{$stylesheet}{mtime} <= $mtime)
-			&& grep { -M $_ > $mtime } @{$cache->{$stylesheet}{includes}}) {
+#	warn "Checking stylesheet mtime: $mtime\n";
+	if ($stash->{$style_key}
+			&& exists($stash->{$style_key}{mtime})
+			&& ($stash->{$style_key}{mtime} <= $mtime)
+			&& check_inc_mtime($stash->{$style_key}{mtime}, $style_provider, $stash->{$style_key}{includes})) {
 		# cached... just exec.
 #		warn "Using stylesheet cache\n";
 	}
 	else {
 		# recompile stylesheet.
-		compile($package, $stylesheet);
-		$cache->{$stylesheet}{mtime} = $mtime;
+#		warn "Recompiling stylesheet $style_key\n";
+		compile($package, $style_provider);
+		$stash->{$style_key}{mtime} = get_mtime($class, $style_provider->apache_request(), $r);
 	}
-	
-	chdir($cwd);
 	
 	my $old_status = $r->status;
 	
@@ -99,38 +103,56 @@ sub handler {
 	my $t = {};
 	$Apache::AxKit::Language::XPathScript::trans = $t;
 	
-	eval {
-#		$r->send_http_header;
-		local $^W;
-		$cv->($r, $xp, $t);
-	};
+#	warn "Running script\n";
+	local $^W;
+	$cv->($r, $xp, $t);
+	
+#	warn "Run\n";
+
 	$Apache::AxKit::Language::XPathScript::xp = undef;
 	$Apache::AxKit::Language::XPathScript::trans = undef;
-	if ($@) {
-		$r->log_error($@);
-		return 500;
-	}
 	
 #	warn "Returning $old_status\n";
 	return $r->status($old_status);
 }
 
+sub check_inc_mtime {
+	my ($mtime, $provider, $includes) = @_;
+	
+	for my $inc (@$includes) {
+#		warn "Checking mtime for $inc\n";
+		my $old_r = $provider->apache_request();
+		my $r = $old_r->lookup_file($inc);
+		my $inc_provider = Apache::AxKit::StyleProvider->new($r);
+		if ($inc_provider->mtime() < $mtime) {
+#			warn "$inc newer (" . $inc_provider->mtime() . ") than last compile ($mtime) causing recompile\n";
+			return;
+		}
+	}
+	return 1;
+}
+
 sub extract {
-	my ($filename) = @_;
+	my ($provider) = @_;
 	
 	my $contents;
 	
-	my $fh = Apache->gensym();
-	if (open($fh, $filename)) {
+#	warn "Extracting\n";
+	my $fh = eval { $provider->get_fh() };
+	if ($@) {
+#		warn "Get from strref\n";
+		$contents = ${$provider->get_strref()};
+	}
+	else {
+#		warn "get from fh\n";
 		local $/;
 		$contents = <$fh>;
 	}
-	else {
-		warn "Cannot open '$filename': $!";
-		return '';
-	}
 	
-	$cache->{$filename}{includes} = [];
+#	warn "extracting $contents\n";
+	
+	my $key = $provider->key();
+	$stash->{$key}{includes} = [];
 	
 	my $script;
 	
@@ -141,9 +163,9 @@ sub extract {
 		$line += $text =~ tr/\n//;
 		$text =~ s/\|/\\\|/g;
 		$script .= "print q|$text|;";
-		$script .= "\n#line $line $filename\n";
+		$script .= "\n#line $line $key\n";
 		if ($type eq '<%=') {
-			$contents =~ /\G(.*?)%>/gcs || die "No terminating '%>' after line $line ($filename)";
+			$contents =~ /\G(.*?)%>/gcs || die "No terminating '%>' after line $line ($key)";
 			my $perl = $1;
 			$script .= "print( $perl );\n";
 			$line += $perl =~ tr/\n//;
@@ -156,13 +178,13 @@ sub extract {
 			}
 			
 			if (!$params{file}) {
-				die "No matching file attribute in #include at line $line ($filename)";
+				die "No matching file attribute in #include at line $line ($key)";
 			}
 			
-			$script .= include_file($params{file}, $filename);
+			$script .= include_file($params{file}, $provider);
 		}
 		else {
-			$contents =~ /\G(.*?)%>/gcs || die "No terminating '%>' after line $line ($filename)";
+			$contents =~ /\G(.*?)%>/gcs || die "No terminating '%>' after line $line ($key)";
 			my $perl = $1;
 			$script .= $perl;
 			$line += $perl =~ tr/\n//;
@@ -179,9 +201,9 @@ sub extract {
 }
 
 sub compile {
-	my ($package, $filename) = @_;
+	my ($package, $provider) = @_;
 	
-	my $script = extract($filename);
+	my $script = extract($provider);
 	
 	my $eval = join('',
 			'package ',
@@ -191,7 +213,7 @@ sub compile {
 			'Apache::AxKit::Language::XPathScript::Toys->import;',
 			'sub handler {',
 			'my ($r, $xp, $t) = @_;',
-			"\n#line 1 $filename\n",
+			"\n#line 1 " . $provider->key() . "\n",
 			$script,
 			"\n}",
 			);
@@ -207,45 +229,43 @@ sub compile {
 }
 
 sub include_file {
-	my ($filename, $stylesheet) = @_;
-	
+	my ($filename, $provider) = @_;
+
 	# return if already included
-	return '' if grep {$_ eq $filename} @{$cache->{$stylesheet}{includes}};
+	my $key = $provider->key();
+	return '' if grep {$_ eq $filename} @{$stash->{$key}{includes}};
 	
-	push @{$cache->{$stylesheet}{includes}}, $filename;
+	push @{$stash->{$key}{includes}}, $filename;
 	
-	return extract($filename);
+	my $r = eval {$provider->apache_request()->lookup_file($filename);};
+	my $inc_provider = Apache::AxKit::StyleProvider->new($r);
+	return extract($inc_provider);
 }
 
 sub get_mtime {
 	my $class = shift;
-	my ($filename) = @_;
+	my ($request, $r) = @_;
 #	warn "get_mtime\n";
-	my $mtime = -M $filename;
-	if (!exists($cache->{$filename})) {
-		# compile stylesheet.
-		my $cwd = cwd;
-		
-		chdir(dirname($filename));
-			compile(get_package_name($filename), $filename);
-		chdir($cwd);
+	my $provider = Apache::AxKit::StyleProvider->new($request);
+	my $mtime = $provider->mtime();
+	my $filename = $provider->key();
+#	warn "mtime: $filename = $mtime\n";
+	if (!$stash->{$filename}) {
+		# compile stylesheet
+		compile(get_package_name($filename), $provider);
 	
-		$cache->{$filename}{mtime} = $mtime;
+		$stash->{$filename}{mtime} = $mtime;
+		return 0;
 	}
 
-	my $cwd = cwd;
-	chdir(dirname($filename));
-	for my $include (@{$cache->{$filename}{includes}}) {
-#		warn "Checking include '$include' timestamp\n";
-		next unless -e $include;
-#		warn "Exists...\n";
-		my $inc_mtime = -M _;
-		if ($inc_mtime < $mtime) {
-#			warn "'$include' is newer ( $inc_mtime < $mtime )\n";
-			$mtime = $inc_mtime;
+	for my $inc (@{$stash->{$filename}{includes}}) {
+		my $r = $provider->apache_request()->lookup_file($inc);
+		my $inc_provider = Apache::AxKit::StyleProvider->new($r);
+#		warn "Checking mtime of $inc\n";
+		if ($inc_provider->mtime() < $mtime) {
+			$mtime = $inc_provider->mtime();
 		}
 	}
-	chdir($cwd);
 	
 #	warn "returning $mtime\n";
 	return $mtime;
@@ -304,17 +324,39 @@ sub get_package_name {
 		$Apache::AxKit::Language::XPathScript::xp->matches(@_);
 	}
 	
-	sub apply_templates {
-		my @nodes = @_;
-		
-		local $^W;
-		
-		if (@nodes && !ref($nodes[0])) {
-			# probably called with a path to find
-			return apply_templates(findnodes(@_));
+	sub apply_templates (;$@) {
+		unless (@_) {
+			return apply_templates(findnodes('/'));
 		}
 		
-		my $retval;
+		my ($arg1, @args) = @_;
+
+		if (!ref($arg1)) {
+			# called with a path to find
+#			warn "apply_templates with path '$arg1'\n";
+			return apply_templates(findnodes($arg1, @args));
+		}
+		
+		my $retval = '';
+		if ($arg1->isa('XML::XPath::NodeSet')) {
+			foreach my $node ($arg1->get_nodelist) {
+				$retval .= translate_node($node);
+			}
+		}
+		else {
+			$retval .= translate_node($arg1);
+			foreach my $node (@args) {
+				$retval .= translate_node($node);
+			}
+		}
+		
+		return $retval;
+	}
+	
+	sub _apply_templates {
+		my @nodes = @_;
+		
+		my $retval = '';
 		foreach my $node (@nodes) {
 			$retval .= translate_node($node);
 		}
@@ -335,11 +377,17 @@ sub get_package_name {
 		
 #		warn "translate_node: ", $node->getName, "\n";
 		
-		my $trans = $translations->{$node->getName};
+		my $node_name = $node->getName;
+		my $trans = $translations->{$node_name};
 
 		if (!$trans) {
+			$node_name = '*';
+			$trans = $translations->{$node_name};
+		}
+		
+		if (!$trans) {
 			return start_tag($node) . 
-					apply_templates(@{$node->getChildNodes}) .
+					_apply_templates(@{$node->getChildNodes}) .
 					end_tag($node);
 		}
 		
@@ -361,20 +409,42 @@ sub get_package_name {
 			}
 		}
 		
-		local $translations->{$node->getName} = $trans;
+		local $translations->{$node_name};
+		# copy old values in
+		%{$translations->{$node_name}} = %$trans;
+		
 		if (%$t) {
 			foreach my $key (keys %$t) {
-				$translations->{$node->getName}{$key} = $t->{$key};
+				$translations->{$node_name}{$key} = $t->{$key};
 			}
-			$trans = $translations->{$node->getName};
+			$trans = $translations->{$node_name};
 		}
 		
 		# default: process children too.
-		return $trans->{pre} . 
+		my $pre = $trans->{pre} . 
 				($trans->{showtag} ? start_tag($node) : '') .
-				($dokids ? apply_templates(@{$node->getChildNodes}) : '') .
+				$trans->{prechildren};
+		
+		my $post = $trans->{postchildren} .
 				($trans->{showtag} ? end_tag($node) : '') .
 				$trans->{post};
+		
+		if ($dokids) {
+			my $middle = '';
+			for my $kid ($node->getChildNodes()) {
+				if ($kid->isElementNode) {
+					$middle .= $trans->{prechild} .
+							_apply_templates($kid) .
+							$trans->{postchild};
+				}
+				else {
+					$middle .= _apply_templates($kid);
+				}
+			}
+			return $pre . $middle . $post;
+		}
+		
+		return $pre . $post;
 	}
 	
 	sub start_tag {
@@ -413,223 +483,17 @@ __END__
 
 =head1 NAME
 
-Apache::AxKit::Language::XPathScript - Simple XPath web scripting
+Apache::AxKit::Language::XPathScript - An XML Stylesheet Language
 
 =head1 SYNOPSIS
 
-  PerlTypeHandler Apache::AxKit::XMLFinder
-  PerlHandler Apache::AxKit::StyleFinder
-  PerlSetVar StylesheetMap "application/x-xpathscript => \
+  AxAddStyleMap "application/x-xpathscript => \
 		Apache::AxKit::Language::XPathScript"
 
 =head1 DESCRIPTION
 
-This module provides the user with simple XPath crossed with ASP-style scripting
-in a template. The system picks the template from the <?xml-stylesheet?>
-processing instruction using Apache::AxKit::StyleFinder and then
-this module combines the xml source file, and the stylesheet by setting
-the xml file up as the document for XPath expressions to be used.
-
-=head1 SYNTAX
-
-The syntax follows the basic ASP stuff. <% introduces perl code, and %> closes
-that section of perl code. <%= ... %> can be used to output a perl expression.
-The ASP syntax <!--#include file="filename"--> can be used to include other
-files.
-
-The interesting stuff comes when you start to use XPath. The following methods
-are available for your use:
-
-=over
-
-=item findnodes($path, [$context])
-
-=item findvalue($path, [$context])
-
-=item findnodes_as_string($path, [$context])
-
-=item apply_templates( $path, [$context])
-
-=item apply_templates( @nodes )
-
-=back
-
-The find* functions are identical to the XML::XPath methods of the same name, so
-see L<XML::XPath> for more information. They allow you to create dynamic
-templates extremely simply:
-
-  <%
-  foreach my $n (findnodes('//fred')) {
-    print "Found a fred\n";
-    foreach my $m (findvalues('..', $n)) {
-      print "fred's parent was: $m\n";
-    }
-  }
-  %>
-
-This, combined with the simplicity of both ASP and XPath, make a pretty powerful
-combination.
-
-Even more powerful though is the ability to do XSLT-like apply-templates on
-nodes. The apply_templates function looks at the information in the $t hash
-reference. If there is a key with the same name as the current tag, the
-values in that key are used for processing. Here's a guide to some of the
-possibilities:
-
-	<%
-	foreach my $node (findnodes('xpath/here')) {
-        	print apply_templates($node);
-	}
-	%>
-
-That prints all nodes found by the path, recursively applying any templates
-in $t.
-
-	<%
-	print findvalue('xpath/here', $context);
-	%>
-
-That prints the value of whatever was found by the XPath search in context
-$context. (if the search returns a NodeSet it prints the string-value of
-the nodeset. See the Xpath spec for what that means).
-
-	<%
-	print findnodes_as_string('xpath/here');
-	%>
-
-That prints the nodes as they were found. e.g. if the xml was:
-
-	<foo>
-        	<bar><foobar>Hello!</foobar></bar>
-	</foo>
-
-and the search was '/foo/bar/foobar' it prints '<foobar>Hello!</foobar>'.
-
-	<%
-	$t->{'a'}{pre} = '<i>';
-	$t->{'a'}{post} = '</i>';
-	$t->{'a'}{showtag} = 1;
-	%>
-
-When using apply_templates(@nodes) (recommended), this prints all <a> tags
-with <i>...</i> around them.
-
-	<%
-	$t->{'a'}{pre} = '<i>';
-	$t->{'a'}{post} = '</i>';
-	%>
-
-When using apply_templates(@nodes), on <a> tags, prints <i>...</i> instead
-of <a>...</a>.
-
-	<%
-	$t->{'a'}{testcode} = sub {...};
-	%>
-
-This sets up a sub to determine what to do with the node when
-apply_templates is used. The sub recieves the node as the first parameter,
-and a hash reference that you can temporarily set the pre, post and showtag
-values in, as the second parameter.
-Return 0 to stop processing at that node and return,
-return -1 to process that node but not its children, and return 1 to
-process this node normally (i.e. process this node and its children). An
-example of where this might be useful is to test the context of this node:
-
-	<%
-	$t->{'a'}{testcode} = 
-        sub {
-                my $node = shift;
-				my $hash = shift;
-                if (findvalue('ancestor::foo = true()', $node)) {
-                    return 0;
-                }
-                return 1;
-        };
-	%>
-
-This only process 'a' nodes that aren't descendants of a 'foo' element.
-
-You can also use testcode to setup custom values for pre and post,
-depending on context, for example:
-
-  $t->{'title'}{testcode} =
-        sub {
-                my $node = shift;
-				my $hash = shift;
-                if (findvalue('parent::section = true()', $node)) {
-                        $hash->{pre} = '<h1>';
-                        $hash->{post} = '</h1>';
-                }
-                elsif (findvalue('parent::subsection = true()', $node)) {
-                       $hash->{pre} = '<h2>';
-                       $hash->{post} = '</h2>';
-                }
-				else {
-					$hash->{pre} = '<title>';
-					$hash->{post} = '</title>';
-				}
-                return 1;
-        };
-
-Which sets titles to appear as h1's in a section context, or as h2's in a
-subsection context, or just ordinary titles in other contexts.
-
-=head1 A COMPLETE EXAMPLE
-
-This is the code I use to process some web pages:
-
-  <%
-  $t->{'a'}{pre} = '<i>';
-  $t->{'a'}{post} = '</i>';
-  $t->{'a'}{showtag} = 1;
-  
-  $t->{'title'}{testcode} =
-    sub {
-        my $node = shift;
-		my $hash = shift;
-        if (findvalue('parent::section = true()', $node)) {
-            $hash->{pre} = '<h2>';
-			$hash->{post} = '</h2>';
-        }
-        elsif (findvalue('parent::subsection = true()', $node)) {
-			$hash->{pre} = '<h3>';
-			$hash->{post} = '</h3>';
-        }
-        return 1;
-    };
-  
-  $t->{'section'}{post} = '<p>';
-  $t->{'subsection'}{post} = '<br>';
-  
-  %>
-  <html>
-  <head>
-  	<meta http-equiv="Content-Type" content="text/html; charset=utf-8"/>
-  	<%= apply_templates('/page/head/title') %>
-  </head>
-  <body bgcolor="white">
-  	<h1><%= findvalue('/page/head/title/text()') %></h1>
-	
-  <%= apply_templates('/page/body/section') %>
-
-  <br>
-  <small>This page is copyright Fastnet Software Ltd, 2000.
-  Contact <a href="mailto:matt@sergeant.org">Matt Sergeant</a>
-  for details and availability.</small>
-  </body>
-  </html>
-
-
-=head1 AUTHOR
-
-Matt Sergeant, matt@sergeant.org
-
-=head1 SEE ALSO
-
-XML::XPath.
-
-=head1 LICENSE
-
-This module is free software, and is distributed under the same terms as Perl.
+This documentation has been removed. The definitive reference for 
+XPathScript is now at http://xml.sergeant.org/axkit/xpathscript/guide.dkb
+in DocBook format.
 
 =cut

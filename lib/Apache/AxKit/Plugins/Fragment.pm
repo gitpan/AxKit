@@ -1,4 +1,4 @@
-# $Id: Fragment.pm,v 1.2 2000/05/12 11:44:22 matt Exp $
+# $Id: Fragment.pm,v 1.3 2000/06/12 16:19:19 matt Exp $
 
 package Apache::AxKit::Plugins::Fragment;
 
@@ -99,7 +99,7 @@ to wrap it in <foo>...</foo>.
 Simply add this module to the plugin list before StyleFinder:
 
 	PerlHandler Apache::AxKit::Plugins::Fragment \
-			Apache::AxKit::StyleFinder
+			AxKit
 
 Then request a URL as follows:
 

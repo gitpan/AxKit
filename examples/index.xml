@@ -1,11 +1,6 @@
 <?xml version="1.0"?>
-<?xml-stylesheet href="default.notxsl" 
-				type="application/x-notxslt" 
-				title="default"?>
 <?xml-stylesheet href="default.xps" 
-				type="application/x-xpathscript"
-				title="xpathscript"
-				alternate="yes"?>
+		type="application/x-xpathscript"?>
 <page>
 	<head>
 		<title>Welcome to AxKit!</title>

@@ -1,10 +1,12 @@
-# $Id: XMLFinder.pm,v 1.5 2000/05/10 21:24:05 matt Exp $
+# $Id: XMLFinder.pm,v 1.6 2000/06/15 10:30:53 matt Exp $
 
 package Apache::AxKit::XMLFinder;
 
 use strict;
 use Apache::MimeXML;
 use Apache::Constants;
+
+die "************ THIS MODULE IS DEPRECATED *******************\nSee perldoc AxKit now\n";
 
 sub handler {
 	my $r = shift;
@@ -34,11 +36,7 @@ Apache::AxKit::XMLFinder - Detects XML files
 
 =head1 DESCRIPTION
 
-This module is one of the key parts of AxKit. It detects when an XML file
-is being requested using the routines in Apache::MimeXML.
-
-=head1 SYNOPSIS
-
-	PerlTypeHandler Apache::AxKit::XMLFinder
+This module is deprecated to the point of no longer working. Please
+see L<AxKit> instead.
 
 =cut

@@ -1,10 +1,10 @@
-# $Id: XSP.pm,v 1.4 2000/05/28 07:49:05 matt Exp $
+# $Id: XSP.pm,v 1.7 2000/06/10 14:29:21 matt Exp $
 
 package Apache::AxKit::Language::XSP;
 
 use strict;
 use Apache::AxKit::Language;
-use Apache::Constants;
+use Apache::AxKit::Language::XSP::SQL;
 use Apache::Request;
 use XML::Parser;
 
@@ -18,17 +18,25 @@ sub get_mtime {
 	return 30; # 30 days in the cache?
 }
 
+sub register {
+    my $class = shift;
+    $class->register_taglib('http://www.apache.org/1999/XSP/Core');
+}
+
 my $cache;
 
 sub handler {
 	my $class = shift;
-	my ($r, $xmlfile) = @_;
+	my ($r, $xml) = @_;
 	
-	$class->register_taglib('http://www.apache.org/1999/XSP/Core');
+	$class->register();
+    Apache::AxKit::Language::XSP::SQL->register();
 	
 #	warn "XSP Parse: $xmlfile\n";
 	
-	my $package = get_package_name($xmlfile);
+	my $key = $xml->key();
+	
+	my $package = get_package_name($key);
 	my $parser = XML::Parser->new(
 			ErrorContext => 2,
 			Namespaces => 1,
@@ -53,27 +61,34 @@ sub handler {
 			$dom_tree->dispose;
 			delete $r->pnotes()->{'dom_tree'};
 		}
-		elsif (my $xml = $r->notes('xml_string')) {
-			$to_eval = $parser->parse($xml);
+		elsif (my $xmlstr = $r->notes('xml_string')) {
+			$to_eval = $parser->parse($xmlstr);
 		}
 		else {
 			# check mtime.
-			my $mtime = -M $r->finfo();
-			if (exists($cache->{$xmlfile})
-					&& ($cache->{$xmlfile}{mtime} <= $mtime)
+			my $mtime = $xml->mtime();
+            no strict 'refs';
+			if (exists($cache->{$key})
+					&& ($cache->{$key}{mtime} <= $mtime)
+                    && defined &{"${package}::handler"}
 					)
 			{
 				# cached
 			}
 			else {
-				$to_eval = $parser->parsefile($xmlfile);
-				$cache->{$xmlfile}{mtime} = $mtime;
+				my $fh = eval { $xml->get_fh() };
+				if ($@) {
+					$to_eval = $parser->parse(${$xml->get_strref()});
+				}
+				else {
+					$to_eval = $parser->parse($fh);
+				}
+				$cache->{$key}{mtime} = $mtime;
 			}
 		}
 	};
 	if ($@) {
-		warn "Parse of '$xmlfile' failed: $@\n";
-		return DECLINED;
+		die "Parse of '$key' failed: $@";
 	}
 	
 	if ($to_eval) {
@@ -82,8 +97,7 @@ sub handler {
 		eval $to_eval;
 		if ($@) {
 			warn "Script:\n$to_eval\n";
-			warn "Failed to parse: $@";
-			return DECLINED;
+			die "Failed to parse: $@";
 		}
 	}
 	
@@ -97,6 +111,8 @@ sub handler {
 	
 	my $cgi = Apache::Request->new($r);
 	
+	$r->no_cache(1);
+
 	$r->pnotes('dom_tree', 
 				eval {
 					local $^W;
@@ -104,13 +120,9 @@ sub handler {
 				}
 		);
 	if ($@) {
-		warn "XSP Script failed: $@\n";
-		return DECLINED;
+		die "XSP Script failed: $@";
 	}
 	
-	$r->no_cache(1);
-
-	return OK;
 }
 
 sub parse_init {
@@ -308,8 +320,14 @@ sub parse_char {
 		return '{ my $text = $document->createTextNode(q(' . $text . '));' .
 				'$parent->appendChild($text); }' . "\n";
 	}
-	
-	return $text;
+    elsif ($e->current_element() =~ /^(expr|include|structure|dtd|logic)$/) {
+        return $text;
+    }
+    
+    return '' unless $e->{XSP_User_Root};
+
+    $text =~ s/\|/\\\|/g;	
+	return ". q|$text|";
 }
 
 sub parse_start {
@@ -340,15 +358,15 @@ sub parse_start {
 				'$parent->appendChild($elem); $parent = $elem; }' . "\n";
 	}
 	elsif ($tag eq 'attribute') {
-		return '{ my $attr = $document->createAttributeNode(q(' . $attribs{'name'} . '), q(';
+		return '{ my $attr = $document->createAttribute(q(' . $attribs{'name'} . '), ""';
 	}
 	elsif ($tag eq 'pi') {
 	}
 	elsif ($tag eq 'comment') {
-		return '{ my $comment = $document->createComment(q(';
+		return '{ my $comment = $document->createComment(""';
 	}
 	elsif ($tag eq 'text') {
-		return '{ my $text = $document->createTextNode(q(';
+		return '{ my $text = $document->createTextNode(""';
 	}
 	elsif ($tag eq 'expr') {
 #		warn "start Expr: CurrentEl: ", $e->current_element, "\n";
@@ -386,15 +404,15 @@ sub parse_end {
 		return '$parent = $parent->getParentNode;' . "\n";
 	}
 	elsif ($tag eq 'attribute') {
-		return ')); $parent->setAttributeNode($attr); }' . "\n";
+		return '); $parent->setAttributeNode($attr); }' . "\n";
 	}
 	elsif ($tag eq 'pi') {
 	}
 	elsif ($tag eq 'comment') {
-		return ')); $parent->appendChild($comment); }' . "\n";
+		return '); $parent->appendChild($comment); }' . "\n";
 	}
 	elsif ($tag eq 'text') {
-		return ')); $parent->appendChild($text); }' . "\n";
+		return '); $parent->appendChild($text); }' . "\n";
 	}
 	elsif ($tag eq 'expr') {
 #		warn "end Expr: CurrentEl: ", $e->current_element, "\n";
@@ -412,12 +430,8 @@ sub parse_end {
 	return '';
 }
 
-sub parse_comment {
-	return '';
-}
-
 ##############################################################
-# XSP Utils Library
+# XSP Utils Library - is this needed???
 ##############################################################
 
 package Apache::AxKit::Language::XSP::Utils;

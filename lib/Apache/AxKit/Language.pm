@@ -1,4 +1,4 @@
-# $Id: Language.pm,v 1.3 2000/05/19 15:46:44 matt Exp $
+# $Id: Language.pm,v 1.4 2000/06/02 13:41:48 matt Exp $
 
 package Apache::AxKit::Language;
 
@@ -7,16 +7,15 @@ use Apache::Constants;
 
 sub handler {
 	my $class = shift;
-	my ($r, $xmlfile, $stylefile) = @_;
+	my ($r, $xml, $style) = @_;
 	
-	return DECLINED;
+	die "Need to subclass handler() method";
 }
 
 sub get_mtime {
 	my $class = shift;
-	my $stylefile = shift;
-#	warn "get_mtime called on $stylefile\n";
-	return -M $stylefile;
+	my $provider = shift;
+	return $provider->mtime();
 }
 
 sub stylesheet_exists { 1; }

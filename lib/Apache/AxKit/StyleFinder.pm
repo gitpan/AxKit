@@ -1,4 +1,4 @@
-# $Id: StyleFinder.pm,v 1.13 2000/05/28 07:48:50 matt Exp $
+# $Id: StyleFinder.pm,v 1.14 2000/06/12 16:17:09 matt Exp $
 
 package Apache::AxKit::StyleFinder;
 
@@ -6,6 +6,8 @@ use strict;
 use vars qw($VERSION);
 
 $VERSION = '0.08';
+
+die "************ THIS MODULE IS DEPRECATED *******************\nSee perldoc AxKit now\n";
 
 use Apache;
 use Apache::Constants;
@@ -654,170 +656,6 @@ Apache::AxKit::StyleFinder - Execute module based on <?xml-stylesheet?>
 
 =head1 DESCRIPTION
 
-(These docs need a re-work!)
-
-This module automatically detects XML stylesheet types and associates
-modules/functions with those stylesheets according to the
-StylesheetMap variable. See http://www.w3.org/TR/xml-stylesheet for
-details on the xml-stylesheet processing instruction that this module
-uses.
-
-This module also checks for you whether the xml file and stylesheet files
-exist, so you don't need to check that in your template/stylesheet
-implementation if you don't want to. If an error occurs at any point
-it is logged in the error log, and DECLINED is returned, so that other
-Apache modules might have a chance to process the file.
-
-In the mapping you can either present a function (fully qualified
-with package), or a package. Different parameters are passed depending
-on whether you specify a function or a package:
-
-=over
-
-=item 'type' => Package::function
-
-The function receives the xml filename as the first parameter, and
-the stylesheet filename as the second parameter. The return value of
-the method is not considered, and Apache always returns OK.
-
-=item 'type' => Package
-
-The Package's handler() function is called, with the Apache::Request
-object as the first parameter, the xml filename as the second parameter
-and the stylesheet filename as the third parameter. Apache returns
-whatever the return value of the handler() function is.
-
-=back
-
-If no <?xml-stylesheet?> processing instruction is found, or that
-processing instruction is in some way broken, then the option
-I<DefaultStyleMap> is checked for, and the href and type in that
-variable (separated by whitespace) are used instead.
-
-=head1 Cascading Style Sheets
-
-I'm not talking about HTML css here. I'm talking about any type of 
-stylesheet system that you want to cascade. i.e. you want the output
-of one stylesheet to be the input to the next. This system supports
-cascading by default, but you can turn this off using the directive:
-
-	PerlSetVar StylesCascade Off
-
-To your httpd.conf or .htaccess file. B<However>... it is the responsibility
-of the module in question (the module that is cascading) to pass on the
-output to the next stylesheet's input. To do this a module must store it's
-DOM tree output in $r->pnotes('dom_tree'). This module will figure out for
-you all the caching and printing the DOM tree (using $dom->toString).
-
-=head1 Stylesheet Choice
-
-Choosing from multiple stylesheets is a difficult problem. There are many
-things to consider. With a cascading system, which the HTML specification
-was designed for, it's a simple choice, and well defined by the HTML
-specification. However for non-cascading systems it gets a little harder.
-
-The approach I've taken is a scoring system. The scoring is based on the
-selected "title", the selected "media" and the values in xml-stylesheet.
-The selected media and title can both be set one of two ways. The first
-is to specify them in httpd.conf or .htaccess:
-
-	PerlSetVar PreferredMedia print
-	PerlSetVar PreferredStyle "my alternate style"
-
-This is a rather static setting, and a better way is to use a stacked
-handlers and set the notes 'preferred_style' and preferred_media'. To
-do this setup Apache::AxKit::StyleFinder as the first handler in a chain:
-
-    PerlHandler My::MediaExtractor \
-                My::StyleExtractor \
-                +Apache::AxKit::StyleFinder
-
-This actually sets up 2 extra handlers: One extracts the media and one
-extracts the preferred stylesheet. There are many potential ways to do
-this - its up to you how you do it. I suggest either a value in the
-querystring, or a PATH_INFO, or for media types you could/should use a
-browser detection routine combined with perhaps a querystring/PATH_INFO
-for requesting a printable version. That's just a suggestion... See
-L<AXDTL::StyleChooser::QueryString> and L<Apache::AxKit::StyleChooser::PathInfo>
-for working examples that you can use.
-
-Having set all that up, how does Apache::AxKit::StyleFinder pick a stylesheet
-to use. After all, it has to pick just one stylesheet if it's not in
-cascading mode. The scoring is based on whether the xml-stylesheet
-references a persistant stylesheet, a preferred stylesheet, or an
-alternate stylesheet, all combined with what I consider to be errors, and
-the values given for media and preferred style by the methods above. Here
-is the table of scoring used:
-
-          |  Media  | Title  | Title   |
-    Score | Matches | Exists | Matches | Alternate
-  ++++++++++++++++++++++++++++++++++++++++++++++++++
-  0           no        no        -         no
-  3           yes       no        -         no
-  5           no        yes      N/A        no
-  8           no        yes      yes        yes
-  10          yes       yes      N/A        no
-  15          yes       yes      yes        yes
-  -5 (err?)   yes       no        -         yes
-  -10 (err?)  no        no        -         yes
-
-It's also worth noting that the default media if it doesn't exist is
-"screen", and this is also the default if it doesn't get set by one
-of the above methods. So the chances of a media match are quite high.
-And it's worth noting that Cocoon-style broken media types are not
-supported. The media types must come from the list in REC-html40, or
-they will simply be ignored.
-
-If you think this table is in some way incorrect, let me know. I did
-put quite a bit of thought into it, but I'm sure it could probably 
-be improved somehow. Before you come back to me about it though, please
-do read the HTML40 specification. It has some details about what
-defines a preferred, persistant and alternate stylesheet that are
-relevant here.
-
-=head2 Cascading Styles
-
-Of course the above is irrelevant when you leave the default option of
-StylesCascade Yes on. When that is the case, the stylesheets chosen are
-according to the rules specified by the W3C at 
-http://www.w3.org/TR/REC-html40/styles.html for details on the rules
-involved, but the basics are:
-
-=over 4
-
-=item *
-
-If no title is defined (and alternate="..." doesn't exist or is "no") then
-this is a persistent stylesheet, and is always applied (provided the media
-matches).
-
-=item *
-
-If a title is defined and alternate="no" (or isn't present), this is a
-preferred stylesheet, and is used if no preferred stylesheet is chosen
-(see details above on choosing a preferred style).
-
-=item *
-
-If alternate="yes", a title must be defined. This stylesheet is used if
-and only if it is selected as a preferred style.
-
-=item *
-
-Media type must always match (media="all" matches everything). The default
-media type is "screen" if it is not provided in the processing instruction.
-If no module provides media matching capabilities,
-then the default media of "screen" is used to compare to the value in the
-processing instruction.
-
-=back
-
-=head1 AUTHOR
-
-Matt Sergeant, matt@sergeant.org
-
-=head1 LICENSE
-
-This module is distributed under the same terms as Perl itself.
+This module is completely deprecated to the point of not working.
 
 =cut

@@ -1,4 +1,4 @@
-# $Id: ConfigReader.pm,v 1.3 2000/05/10 21:20:04 matt Exp $
+# $Id: ConfigReader.pm,v 1.5 2000/06/01 16:41:40 matt Exp $
 
 package Apache::AxKit::ConfigReader;
 
@@ -82,6 +82,62 @@ sub CacheDir {
 	use File::Basename;
 	my $dir = dirname($self->{apache}->filename());
 	return $dir . "/.xmlstyle_cache";
+}
+
+sub ProviderClass {
+	my $self = shift;
+	if ($self->{cfg}{Provider}) {
+		return $self->{cfg}{Provider};
+	}
+	
+	my $provider = $self->{apache}->dir_config('AxProvider');
+	return $provider if $provider;
+	
+	return 'Apache::AxKit::Provider::File';
+}
+
+sub StyleProviderClass {
+	my $self = shift;
+	if ($self->{cfg}{StyleProvider}) {
+		return $self->{cfg}{StyleProvider};
+	}
+	
+	my $provider = $self->{apache}->dir_config('AxStyleProvider');
+	return $provider if $provider;
+	
+	return 'Apache::AxKit::Provider::File';
+}	
+
+sub PreferredStyle {
+	my $self = shift;
+	
+	return
+		$self->{apache}->notes('preferred_style')
+				||
+		$self->{cfg}->{Style}
+				||
+		$self->{apache}->dir_config('PreferredStyle')
+				||
+		'';
+}
+
+sub PreferredMedia {
+	my $self = shift;
+	
+	return
+		$self->{apache}->notes('preferred_media')
+				||
+		$self->{cfg}->{Media}
+				||
+		$self->{apache}->dir_config('PreferredMedia')
+				||
+		'screen';
+}
+
+sub CacheModule {
+	my $self = shift;
+	
+	return $self->{cfg}{CacheModule};
 }
 
 1;
