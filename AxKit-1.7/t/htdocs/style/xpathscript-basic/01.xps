@@ -1,0 +1,5 @@
+<%
+my $r = shift;
+%>
+<root>Current URI: <%= $r->uri %></root>
+

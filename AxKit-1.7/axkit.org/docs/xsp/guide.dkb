@@ -1,0 +1,427 @@
+<?xml version="1.0" encoding="ISO-8859-1"?>
+<?xml-stylesheet href="/stylesheets/docbook_screen.xps" type="application/x-xpathscript"
+title="default"?>
+<?xml-stylesheet href="/stylesheets/docbook_print.xps"
+type="application/x-xpathscript" title="print" alternate="yes"?>
+<!DOCTYPE article [
+<!ENTITY prompt "&#x25; ">
+]>
+<article>
+
+<artheader>
+	<title>Using XSP in AxKit</title>
+	
+	<author>
+		<firstname>Matt</firstname>
+		<surname>Sergeant</surname>
+		<affiliation>
+			<address><email>matt@sergeant.org</email></address>
+		</affiliation>
+	</author>
+	
+	<copyright>
+		<year>2000</year>
+		<holder role="mailto:matt@sergeant.org">AxKit.com Ltd</holder>
+	</copyright>
+
+	<abstract>
+		<para>This article covers the XSP technology within AxKit, how to
+		get started using XSP to create dynamic pages, and a full guide to
+		the XSP syntax.</para>
+	</abstract>
+</artheader>
+
+<sect1>
+<title>Introduction</title>
+<para>
+XSP is a server-side technology for embedding code into XML. It belongs
+to the same family of products as ASP and JSP. However XSP focuses
+completely on XML, and contains methods for generating XML that make
+life for the XML programmer easier. XSP is designed to work in the early
+stages of the XML processing pipeline, often as the very first stage in
+the processing pipeline. Generally the output from XSP goes on to
+further stage processing to deliver HTML or WAP. XSP also has powerful
+database tools that deliver their output in XML for further
+manipulation.
+</para>
+<para>
+A simple XSP example that generates the current time looks like this:
+<informalexample>
+<programlisting><![CDATA[
+<xsp:page xmlns:xsp="http://www.apache.org/1999/XSP/Core"
+	xmlns="uri://axkit.org/NS/MyHomePage"
+	language="Perl">
+	<page>
+		<body>
+			<heading>Hello World</heading>
+			It is now: <xsp:expr>scalar localtime</xsp:expr>
+		</body>
+	</page>
+</xsp:page>
+]]></programlisting>
+</informalexample>
+</para>
+<para>
+And the output from that example is:
+<informalexample>
+<programlisting><![CDATA[
+<page xmlns="uri://axkit.org/NS/MyHomePage">
+	<body>
+		<heading>Hello World</heading>
+		It is now: Sat Jun 24 10:46:51 2000
+	</body>
+</page>
+]]></programlisting>
+</informalexample>
+</para>
+<para>
+While this isn't going to be displayable by any current browser (unless
+we're talking about client side XSLT or even CSS), AxKit pipes this into
+the next stage of transformation, which is likely to be an XSLT
+processor, to generate HTML or any other format.
+</para>
+<para>
+Using the XSP constructs, like <literal>&lt;xsp:expr></literal> we can build up
+complex rules and code structures to generate the desired output. XSP
+includes several tags for making life easier for generating XML, as
+we'll see later.
+</para>
+</sect1>
+<sect1>
+<title>The Elements of XSP</title>
+<para>
+We've already mentioned that XSP includes tags for generating XML, and
+it should be noted that the above <literal>&lt;xsp:expr></literal> does
+not generate text, but a DOM text node. In this section we'll see what
+tags XSP offers to us, and later we'll see how to put them all together.
+</para>
+<para>
+First though, its important to know a little bit about how XSP works
+behind the scenes withing AxKit. Astute readers will have noted that the
+<literal>&lt;xsp:page></literal> tag included a
+<literal>language="Perl"</literal> attribute. This is because XSP is
+language independant. While AxKit only implements XSP with the Perl
+language, <ulink url="http://xml.apache.org/cocoon">Cocoon</ulink> has
+implemented support for Java and Javascript, and other languages are
+coming online with the Cocoon project soon.
+</para>
+<para>
+When AxKit parses the XSP page it generates a Perl class - an object
+oriented Perl module. This class can be considered to have three main
+sections:
+<itemizedlist>
+	<listitem>structure - this currently only defines libraries that your
+	XSP code might use, although it is left open for other structural
+	items</listitem>
+	<listitem>logic - this section is for any logic in addition to that
+	which you wish to embed directly within the output. This generally
+	includes function definitions and global variables (although see <xref
+	linkend="global_vars_not_global"/> for some important information on
+	global variables)</listitem>
+	<listitem>content - the main section of XSP occurs
+	as soon as the XSP parser sees a non-XSP tag (which is
+	called the "User root" tag).</listitem>
+</itemizedlist>
+A breakdown of how this might look to a perl programmer is as follows:
+<informalexample>
+<programlisting><![CDATA[
+package MyModule;
+
+# begin structure
+use MyLib;
+# end structure
+
+# begin logic
+sub foo {
+	return "bar";
+}
+# end logic
+
+# begin content
+sub handler {
+	# generate DOM tree of content output
+	...
+}
+# end content
+1;
+]]></programlisting>
+</informalexample>
+</para>
+<para>
+When an XSP page is executed, assuming the code is already compiled,
+AxKit attempts to execute the <literal>handler()</literal> function.
+</para>
+<para>
+Now that we know what sort of code is behind the execution of XSP, lets
+get deeper into those sections.
+</para>
+<sect2>
+<title>Structure</title>
+<para>
+Structure tags may appear only between the root
+<literal>&lt;xsp:page></literal> tag and  the user root tag. The syntax
+of the structure tag is:
+<informalexample>
+<programlisting><![CDATA[
+<xsp:structure>
+	<xsp:include>MyLib</xsp:include>
+</xsp:structure>
+]]></programlisting>
+</informalexample>
+</para>
+<para>
+This adds the following to the structure section of the compiled class:
+<informalexample>
+<programlisting>
+use MyLib;
+</programlisting>
+</informalexample>
+</para>
+<para>
+Currently <literal>&lt;xsp:include></literal> is the only tag provided
+for use within the structure section.
+</para>
+</sect2>
+
+<sect2>
+<title>Logic</title>
+<para>
+The logic section is freeform, and should generally be used along with
+an accompanying <literal>&lt;![CDATA[...]]&gt;</literal> declaration to
+ensure that your code is not treated as XML. Note that unlike some
+languages, perl may be particularly prone to having the string
+<literal>"]]&gt;"</literal> somewhere in the code, so be aware of that as
+you work in CDATA sections. A simple solution is to change that to
+<literal>"]] &gt;"</literal> - note the extra space.
+</para>
+<para>
+An example of a logic section might be the definition of a function for
+providing the current time:
+<informalexample>
+<programlisting><![CDATA[
+<xsp:structure>
+	<xsp:include>Time::Piece</xsp:include>
+</xsp:structure>
+
+<xsp:logic><![CDATA[
+sub mytime {
+	my ($time) = @_;
+	$time ||= time;
+	return Time::Piece->new($time);
+}
+]]>]]&gt;<![CDATA[</xsp:logic>
+]]></programlisting>
+</informalexample>
+</para>
+</sect2>
+
+<sect2>
+<title>Content</title>
+<para>
+The content section consists of automatically generated code based on the
+non-xsp tags in the document, along with code that has been generated
+based on the xsp tags.
+</para>
+<para>
+Currently XSP is DOM based (there are plans to make a SAX based XSP for
+the obvious performance benefits, but that hasn't been realised yet),
+and as such for each non-xsp entity in the XML resource, the XSP parser
+generates code that will create a DOM node. When it sees a tag it
+generates code to make an element node, when it sees text it generates
+code to make a text node, and so on. The idea though is not to worry
+about the code that the XSP parser is generating, and focus on the
+output that you want.
+</para>
+<para>
+Since the content section is where most of the work and most of the
+important parts of your code will occur, we've reserved a whole section
+of this document to talk about it.
+</para>
+</sect2>
+
+</sect1>
+
+<sect1>
+<title>XSP's XML building tags, or "the Content section"</title>
+
+<para>
+Everything in XSP works around namespaces, so be sure you understand
+them before trying to start working with XSP. A good place to learn
+about namespaces is <ulink url="http://www.xml.com/">XML.com</ulink>,
+where they have some excellent links to namespaces resources, and some
+good articles.
+</para>
+<para>
+As soon as XSP sees an element that does not belong to the XSP namespace
+it knows to
+start the "content section". This is the main part of the code that
+generates XML nodes for passing to the next processing stage. Every node
+prior to the user root node is special to XSP (because by definition,
+they are part of the XSP namespace). It is also worth noting
+here that an actual <literal>&lt;xsp:page></literal> root element is not
+a requirement of XSP, however without it there's no way to create logic
+or structure sections.
+</para>
+
+<sect2>
+<title>Generating Elements and Attributes</title>
+<para>
+Any non XSP tags are generally passed on to the next processing stage
+verbatim. However it is possible to use logic to determine whether or
+not certain tags appear:
+<informalexample>
+<programlisting><![CDATA[
+<xsp:logic>
+	if (somecondition()) {
+<xsp:content>
+		<true_tag/>
+</xsp:content>
+	} else {
+<xsp:content>
+		<false_tag/>
+</xsp:content>
+	}
+</xsp:logic>
+]]></programlisting>
+</informalexample>
+This example is based on the familiar concept that was brought to use by
+ASP and similar server side scripting languages, where we must break out
+of the code section in order to send tags to the browser. The
+<literal>&lt;xsp:content></literal> tag allows us to temporarily break
+out of the code section that is provided by
+<literal>&lt;xsp:logic></literal>. Note that <literal>&lt;xsp:logic></literal> is the same tag as we
+used outside of the user root element to provide class level logic.
+</para>
+<para>
+This is rather verbose, so there's another way to achieve the same
+effect, and this is using the XSP element generator tags:
+<informalexample>
+<programlisting><![CDATA[
+<xsp:logic>
+	if (somecondition()) {
+		<xsp:element name="true_tag"/>
+	} else {
+		<xsp:element name="false_tag"/>
+	}
+</xsp:logic>
+]]></programlisting>
+</informalexample>
+</para>
+<para>
+Finally we can get <emphasis>even</emphasis> easier. Because the XML
+parser knows the difference between tags and text, we can simply use the
+tag on its own:
+</para>
+<para>
+What's interesting about this is that we don't actually need to break
+out of the "code" mode (the <literal>&lt;xsp:content></literal> tag
+here) to generate the XML tag - the XML parser actually does the hard
+work for us of figuring out what is a tag and what is Perl. Provided
+that you are aware of the limitations of this, such as not being able to
+use a CDATA section when we want to do this, and being aware that
+<literal>&lt;</literal> and <literal>&amp;</literal> signs need to be
+escaped, it is a very powerful concept.
+</para>
+<para>
+Building attributes is equally simple:
+<informalexample>
+<programlisting><![CDATA[
+<xsp:content>
+	if (somecondition()) {
+		<xsp:element name="true_tag">
+			<xsp:attribute name="myattr">My Value</xsp:attribute>
+		</xsp:element>
+	} else {
+		<xsp:element name="false_tag">
+			<xsp:attribute name="myattr">Other Value</xsp:attribute>
+		</xsp:element>
+	}
+</xsp:content>
+]]></programlisting>
+</informalexample>
+Note how the tag to generate the attribute occurs as a child of the tag
+that creates the element.
+</para>
+<para>
+Putting this all together now, given that
+<literal>somecondition()</literal> returns true, the resulting output
+is:
+<informalexample>
+<programlisting><![CDATA[
+<true_tag myattr="My Value">
+</true_tag>
+]]></programlisting>
+</informalexample>
+Not particularly interesting, until we realise that this is just one
+stage in the processing pipeline, and the next stage is probably an XSLT
+stylesheet that transforms <literal>&lt;true_tag></literal> into
+something with meaning to the browser, such as a table or text of some
+sort.
+</para>
+</sect2>
+
+<sect2>
+<title>Generating comments, text and processing instructions</title>
+<para>
+Generation of nodes is not limited to elements (and attributes). We can
+use the same techniques to generate comments, text and processing
+instructions. The benefits of this seem dubious, until you realise that
+again we can generate these things without breaking out of the "code"
+section, and just use XML tags.
+</para>
+<para>
+The tags to generate these types of nodes follow the same pattern as
+generating elements, so I'll cover this with a single example:
+<informalexample>
+<programlisting><![CDATA[
+<xsp:content>
+	# some perl code ...
+	<xsp:text>Hello World</xsp:text>
+	<xsp:comment>Why am I here?</xsp:comment>
+	<xsp:pi target="process-me">With some data</xsp:pi>
+</xsp:content>
+]]></programlisting>
+</informalexample>
+The result from the above is:
+<informalexample>
+<programlisting><![CDATA[
+Hello World
+<!--Why am I here?-->
+<?process-me With some data?>
+]]></programlisting>
+</informalexample>
+</para>
+</sect2>
+
+</sect1>
+
+<sect1>
+<title>Real World Example</title>
+</sect1>
+
+<sect1>
+<title>Conclusion</title>
+<para>
+We've seen the capabilities of XML Server Pages, and we've seen a simple
+real world example, however we've only really touched upon the power of
+XSP. The real power actually comes in when we get into
+<emphasis>taglibs</emphasis>. Taglibs allow us to design custom tags
+that we can insert into our pages, that provide us with extended
+functionality. This allows us to finally reach towards the ubiquitous
+goal of having developers work on the taglibs, and designers work on
+XSP's by inserting your company's custom tags.
+</para>
+<para>
+Taglibs provide the real power of XSP, and yet their implementation is
+not rocket science, in fact anyone who has already been reading other
+AxKit documentation will be intimately familiar with the tools to
+generate taglibs: <emphasis>stylesheets</emphasis>. We use stylesheets
+to build taglibs by developing stylesheets that transform our custom
+tags, <emphasis>and just our custom tags</emphasis> into valid XSP code,
+we can leverage our current development tools to build dynamic XML
+applications. Please read the section on the SQL taglib to see how we
+can build XSP's that connect to relational databases.
+</para>
+
+</sect1>
+</article>

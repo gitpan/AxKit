@@ -1,0 +1,157 @@
+PerlModule AxKit
+
+# AxKit globals
+AxNoCache On
+AxDebugLevel 10
+AxStackTrace On
+
+# Language processors
+<Perl>
+my $has_libxslt = 0;
+
+eval { require XML::LibXSLT; };
+unless ($@) {
+    $AxAddStyleMap = "text/xsl Apache::AxKit::Language::LibXSLT";
+    $has_libxslt = 1;
+}
+
+unless ( $has_xslt == 1 ) {
+   eval { require XML::Sablot; };
+   unless ( $@ ) { 
+        $AxAddStyleMap = "text/xsl Apache::AxKit::Language::Sablot";
+   }
+}
+</Perl> 
+AxAddStyleMap application/x-xsp Apache::AxKit::Language::XSP;
+
+#######################################
+# Directives that control the individual configs
+#######################################
+
+<Location "/xslt-basic/01.xml">
+    SetHandler axkit
+    AxResetProcessors
+    AxAddProcessor text/xsl /style/xslt-basic/01.xsl
+</Location>
+
+<Location "/xslt-basic/02_include.xml">
+    SetHandler axkit
+    AxResetProcessors
+    AxAddProcessor text/xsl /style/xslt-basic/02_include.xsl
+</Location>
+
+<Location "/xslt-basic/03_document_1arg.xml">
+    SetHandler axkit
+    AxResetProcessors
+    AxAddProcessor text/xsl /style/xslt-basic/03_document_1arg.xsl
+</Location>
+
+
+<Location "/xslt-basic/04_document_2args.xml">
+    SetHandler axkit
+    AxResetProcessors
+    AxAddProcessor text/xsl /style/xslt-basic/04_document_2args.xsl
+</Location>
+
+<Location "/xslt-basic/05_params.xml">
+    SetHandler axkit
+    AxResetProcessors
+    AxAddProcessor text/xsl /style/xslt-basic/05_params.xsl
+</Location>
+
+###########################
+# 'directives' section
+###########################
+
+<Location "/directives/style/01_AxAddProcessor.xml">
+    SetHandler axkit
+    AxResetProcessors
+    AxAddProcessor text/xsl /style/directives/style/01_AxAddProcessor.xsl
+</Location>
+
+<Location "/directives/style/larry/">
+    SetHandler axkit
+    AxResetProcessors
+    AxAddProcessor text/xsl /style/directives/style/02_processor_inheritance_larry.xsl
+</Location>
+
+<Location "/directives/style/larry/moe/">
+    SetHandler axkit
+    AxAddProcessor text/xsl /style/directives/style/02_processor_inheritance_moe.xsl
+</Location>
+
+<Location "/directives/style/larry/moe/curly/02_processor_inheritance.xml">
+    SetHandler axkit
+    AxAddProcessor text/xsl /style/directives/style/02_processor_inheritance_curly.xsl
+</Location>
+
+<Location "/xpathscript-basic/01.xml">
+	SetHandler axkit
+	AxResetProcessors
+	AxAddProcessor application/x-xpathscript /style/xpathscript-basic/01.xps 
+</Location>
+
+<Location "/xpathscript-basic/02_document.xml">
+	SetHandler axkit
+	AxResetProcessors
+	AxAddProcessor application/x-xpathscript /style/xpathscript-basic/02_document.xps
+</Location>
+
+# Test for global styles bug.
+# only triggered when using a global style AND a media/style combination.
+# The styles within the AxStyle would leak into the #global array
+
+<Location "/component/configreader">
+        SetHandler axkit
+</Location>
+
+# I've had to add this Root processor here so it gets picked up in #global inside configreader.
+# If it's defined in a Location it doesn't trigger the bug.
+# If you can find a better way to trigger it, please do.
+
+AxAddRootProcessor application/x-xsp NULL               {http://www.apache.org/1999/XSP/Core}page
+<AxMediaType screen>
+        <AxStyleName "#default">
+        AxAddURIProcessor text/xsl /style/component/configreader/get_matching_processors_1.xsl "/component/configreader/get_matching_processors_1.xml"
+        AxAddURIProcessor text/xsl /style/component/configreader/get_matching_processors_2.xsl "/component/configreader/get_matching_processors_2.xml"
+        </AxStyleName>
+</AxMediaType>
+
+<Location "/encoding/">
+	SetHandler axkit
+	AxResetProcessors
+	AxAddProcessor text/xsl /style/xslt-basic/identity.xsl
+</Location>
+
+<Location "/uri/axkit/01.xml">
+	SetHandler axkit
+	AxResetProcessors
+	AxAddProcessor text/xsl /style/uri/axkit/01.xsl
+</Location>
+
+<Location "/uri/axkit/subrequest.xml">
+	SetHandler axkit
+	AxResetProcessors
+	AxAddProcessor text/xsl /style/uri/axkit/subrequest.xsl
+</Location>
+
+<Location "/provider/post">
+        SetHandler axkit
+        AxResetProcessors
+        AxContentProvider Apache::AxKit::Provider::POST
+        AxAddRootProcessor text/xsl /style/provider/01.xsl root
+</Location>
+
+<Location "/provider/dir">
+        Options +All
+        DirectoryIndex index.xml index.html
+        SetHandler axkit
+        AxHandleDirs On
+# NB: Some of this was used to find the cause of bug 4499.
+        #SetHandler perl-script
+        #PerlHandler AxKit
+        #AddHandler axkit .xml .xsp
+        AxAddRootProcessor text/xsl \
+            /style/provider/filelist2html.xsl \
+            {http://axkit.org/2002/filelist}filelist
+</Location>

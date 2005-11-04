@@ -1,0 +1,5 @@
+<%
+my $r = shift;
+%>
+<root><%= findnodes_as_string('document("base2.xml")') %>></root>
+
